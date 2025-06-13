@@ -1,0 +1,128 @@
+INFO     planner time limit: None
+INFO     planner memory limit: None
+
+INFO     Running translator.
+INFO     translator stdin: None
+INFO     translator time limit: None
+INFO     translator memory limit: None
+INFO     translator command line string: 'C:\Users\paulw\anaconda3\python.exe' 'C:\Users\paulw\OneDrive - Scientific Network South Tyrol\framed-interface\framedinterface\fast-downward-22.12.tar\builds\release\bin\translate\translate.py' 'C:\Users\paulw\OneDrive - Scientific Network South Tyrol\framed-interface\framedinterface/domain_with_reset.pddl' 'C:\Users\paulw\OneDrive - Scientific Network South Tyrol\framed-interface\framedinterface/problem.pddl' --sas-file output.sas
+Warning! SIGXCPU is not available on your platform. This means that the planner cannot be gracefully terminated when using a time limit, which, however, is probably supported on your platform anyway.
+Parsing...
+Parsing: [0.047s CPU, 0.037s wall-clock]
+Normalizing task... [0.000s CPU, 0.002s wall-clock]
+Instantiating...
+Generating Datalog program... [0.016s CPU, 0.011s wall-clock]
+Normalizing Datalog program...
+Trivial rules: Converted to facts.
+Normalizing Datalog program: [0.000s CPU, 0.007s wall-clock]
+Preparing model... [0.062s CPU, 0.055s wall-clock]
+Generated 74 rules.
+Computing model... [10.672s CPU, 10.699s wall-clock]
+19225 relevant atoms
+36832 auxiliary atoms
+56057 final queue length
+10024980 total queue pushes
+Completing instantiation... [66.969s CPU, 67.191s wall-clock]
+Instantiating: [77.750s CPU, 77.979s wall-clock]
+Computing fact groups...
+Finding invariants...
+8 initial candidates
+Finding invariants: [0.000s CPU, 0.002s wall-clock]
+Checking invariant weight... [0.000s CPU, 0.002s wall-clock]
+Instantiating groups... [0.000s CPU, 0.000s wall-clock]
+Collecting mutex groups... [0.000s CPU, 0.000s wall-clock]
+Choosing groups...
+352 uncovered facts
+Choosing groups: [0.000s CPU, 0.000s wall-clock]
+Building translation key... [0.000s CPU, 0.001s wall-clock]
+Computing fact groups: [0.000s CPU, 0.007s wall-clock]
+Building STRIPS to SAS dictionary... [0.000s CPU, 0.000s wall-clock]
+Building dictionary for full mutex groups... [0.000s CPU, 0.000s wall-clock]
+Building mutex information...
+Building mutex information: [0.000s CPU, 0.000s wall-clock]
+Translating task...
+Processing axioms...
+Simplifying axioms... [0.016s CPU, 0.012s wall-clock]
+Translator axioms removed by simplifying: 0
+Computing negative axioms... [0.031s CPU, 0.032s wall-clock]
+Processing axioms: [0.078s CPU, 0.080s wall-clock]
+Translating task: [0.594s CPU, 0.593s wall-clock]
+11001 effect conditions simplified
+0 implied preconditions added
+Detecting unreachable propositions...
+0 operators removed
+0 axioms removed
+46 propositions removed
+Detecting unreachable propositions: [0.188s CPU, 0.185s wall-clock]
+Reordering and filtering variables...
+329 of 329 variables necessary.
+0 of 0 mutex groups necessary.
+50 of 50 operators necessary.
+5816 of 5816 axiom rules necessary.
+Reordering and filtering variables: [0.109s CPU, 0.109s wall-clock]
+Translator variables: 329
+Translator derived variables: 24
+Translator facts: 658
+Translator goal facts: 1
+Translator mutex groups: 0
+Translator total mutex groups size: 0
+Translator operators: 50
+Translator axioms: 5816
+Translator task size: 61981
+warning: could not determine peak memory
+Writing output... [0.250s CPU, 0.253s wall-clock]
+Done! [78.953s CPU, 79.183s wall-clock]
+translate exit code: 0
+
+INFO     Running search (release).
+INFO     search stdin: output.sas
+INFO     search time limit: None
+INFO     search memory limit: None
+INFO     search command line string: 'C:\Users\paulw\OneDrive - Scientific Network South Tyrol\framed-interface\framedinterface\fast-downward-22.12.tar\builds\release\bin\downward.exe' --search 'astar(blind())' --internal-plan-file sas_plan < output.sas
+[t=0.0003008s, 3996 KB] reading input...
+[t=0.129695s, 4516 KB] done reading input!
+[t=0.131923s, 4692 KB] Initializing blind search heuristic...
+[t=0.132022s, 4704 KB] Building successor generator...done!
+[t=0.132137s, 4704 KB] peak memory difference for successor generator creation: 0 KB
+[t=0.132148s, 4704 KB] time for successor generation creation: 3.75e-005s
+[t=0.132171s, 4704 KB] Variables: 329
+[t=0.132184s, 4704 KB] FactPairs: 658
+[t=0.132193s, 4704 KB] Bytes per state: 44
+[t=0.132373s, 4704 KB] Conducting best first search with reopening closed nodes, (real) bound = 2147483647
+[t=0.132425s, 4704 KB] New best heuristic value for blind: 0
+[t=0.132443s, 4704 KB] g=0, 1 evaluated, 0 expanded
+[t=0.132455s, 4704 KB] f = 0, 1 evaluated, 0 expanded
+[t=0.132472s, 4704 KB] Initial heuristic value for blind: 0
+[t=0.132482s, 4704 KB] pruning method: none
+[t=0.133676s, 4704 KB] f = 3, 19 evaluated, 5 expanded
+[t=0.136506s, 4704 KB] Solution found!
+[t=0.13652s, 4704 KB] Actual search time: 0.0040232s
+sync activity_a (0)
+sync activity_c (0)
+sync activity_d (0)
+sync activity_e (0)
+violate_decl s13 s14 not_co-existence_activity_d_activity_e (3)
+reset s14 s10 not_co-existence_activity_d_activity_e (0)
+sync activity_f (0)
+sync activity_b (0)
+[t=0.136534s, 4704 KB] Plan length: 8 step(s).
+[t=0.136534s, 4704 KB] Plan cost: 3
+[t=0.136534s, 4704 KB] Expanded 32 state(s).
+[t=0.136534s, 4704 KB] Reopened 0 state(s).
+[t=0.136534s, 4704 KB] Evaluated 50 state(s).
+[t=0.136534s, 4704 KB] Evaluations: 50
+[t=0.136534s, 4704 KB] Generated 417 state(s).
+[t=0.136534s, 4704 KB] Dead ends: 0 state(s).
+[t=0.136534s, 4704 KB] Expanded until last jump: 5 state(s).
+[t=0.136534s, 4704 KB] Reopened until last jump: 0 state(s).
+[t=0.136534s, 4704 KB] Evaluated until last jump: 19 state(s).
+[t=0.136534s, 4704 KB] Generated until last jump: 119 state(s).
+[t=0.136534s, 4704 KB] Number of registered states: 50
+[t=0.136534s, 4704 KB] Int hash set load factor: 50/64 = 0.78125
+[t=0.136534s, 4704 KB] Int hash set resizes: 6
+[t=0.136534s, 4704 KB] Search time: 0.0041638s
+[t=0.136534s, 4704 KB] Total time: 0.136534s
+Solution found.
+Remove intermediate file output.sas
+search exit code: 0
+

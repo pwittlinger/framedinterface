@@ -1,0 +1,64 @@
+package org.framedinterface;
+
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.event.EventHandler;
+import javafx.fxml.FXMLLoader;
+//import javafx.fxml.FXML;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.stage.Stage;
+import javafx.stage.WindowEvent;
+
+import java.io.IOException;
+
+import org.framedinterface.controller.InitialController;
+//import org.framedinterface.main.MainGui;
+
+/**
+ * JavaFX App
+ */
+public class App extends Application {
+
+    private static Scene scene;
+
+    @Override
+    public void start(Stage stage) throws IOException {
+        //scene = new Scene(loadFXML("primary"), 640, 480);
+        //String fxmlPath = "maininterface.fxml";
+        // scene = new Scene(loadFXML("maininterface"), 640, 480);
+        //FXMLLoader fxmlLoader = new FXMLLoader(App.class.getClassLoader().getResource(fxmlPath));
+        FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/org/framedinterface/maininterface.fxml"));
+		Parent parent = fxmlLoader.load();
+        ((InitialController)fxmlLoader.getController()).setStage(stage);
+        scene = new Scene(parent);
+        stage.setScene(scene);
+        stage.setTitle("Framed-Autonomy Planner");
+        
+        stage.show();
+
+        stage.setOnCloseRequest(new EventHandler<WindowEvent>() {
+			@Override
+			public void handle(WindowEvent t) {
+				Platform.exit();
+				System.exit(0);
+			}
+		});
+
+        
+    }
+
+    static void setRoot(String fxml) throws IOException {
+        scene.setRoot(loadFXML(fxml));
+    }
+
+    private static Parent loadFXML(String fxml) throws IOException {
+        FXMLLoader fxmlLoader = new FXMLLoader(App.class.getResource(fxml + ".fxml"));
+        return fxmlLoader.load();
+    }
+
+    public static void main(String[] args) {
+        launch();
+    }
+
+}
