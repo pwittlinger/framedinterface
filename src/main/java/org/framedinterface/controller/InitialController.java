@@ -1,11 +1,14 @@
 package org.framedinterface.controller;
 
+import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.SpinnerValueFactory.IntegerSpinnerValueFactory;
 import javafx.scene.control.TableColumn;
@@ -14,6 +17,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
+import javafx.scene.web.WebView;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -47,6 +51,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Slider;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
@@ -135,7 +140,37 @@ public class InitialController {
 	
     @FXML
     private Label labelFinalMarking;
+
+		@FXML
+	private CheckBox initialStatesCheckBox;
+	@FXML
+	private Slider declZoomSlider;
+	@FXML
+	private TextField declZoomValueField;
+	@FXML
+	private ChoiceBox<AbstractModel> declModelChoice;
+	@FXML
+	private WebView declWebView;
+	@FXML
+	private Slider pnZoomSlider;
+	@FXML
+	private TextField pnZoomValueField;
+	@FXML
+	private ChoiceBox<AbstractModel> pnModelChoice;
+	@FXML
+	private WebView pnWebView;
+
+	private static String precentageFormat = "%.1f";
+	//Storing object references here
+	private ObjectProperty<Double> declZoomSliderValueObject;
+	private ObjectProperty<Double> pnZoomSliderValueObject;
+	private ObjectProperty<Double> declWebViewZoomObject;
+	private ObjectProperty<Double> pnWebViewZoomObject;
 	
+	private int modelCounter = 0; //For unique model identifiers, needed to reliably determine which model was clicked in the visualization (not an ideal solution)
+
+	private String initialDeclWebViewScript;
+	private String initialPnWebViewScript;
 
 	List<VBox> resultsList;
     private Stage stage;
