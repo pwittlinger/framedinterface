@@ -1,78 +1,23 @@
 package org.framedinterface.controller;
 
-import javafx.beans.property.ObjectProperty;
-import javafx.beans.property.ReadOnlyObjectWrapper;
-import javafx.beans.property.ReadOnlyStringWrapper;
-import javafx.event.ActionEvent;
-import javafx.event.EventHandler;
-import javafx.fxml.FXML;
-import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.ChoiceBox;
-import javafx.scene.control.Label;
-import javafx.scene.control.SpinnerValueFactory.IntegerSpinnerValueFactory;
-import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableView;
-import javafx.scene.control.TextField;
-import javafx.scene.control.cell.TextFieldTableCell;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
-import javafx.scene.web.WebView;
-
 import java.io.BufferedInputStream;
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.lang.ProcessBuilder.Redirect;
-import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.time.LocalDate;
-import java.time.Year;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 
-import javafx.beans.property.ReadOnlyObjectWrapper;
-import javafx.beans.property.ReadOnlyStringWrapper;
-import javafx.fxml.FXML;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.ListView;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.control.Slider;
-import javafx.scene.control.Spinner;
-import javafx.scene.control.TableCell;
-import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableView;
-import javafx.scene.control.TextField;
-import javafx.scene.control.SpinnerValueFactory.IntegerSpinnerValueFactory;
-import javafx.scene.control.cell.TextFieldTableCell;
-import javafx.scene.layout.VBox;
-import javafx.stage.Stage;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Alert.AlertType;
-
-import org.deckfour.xes.extension.std.XConceptExtension;
 import org.framedinterface.model.AbstractModel;
-import org.framedinterface.model.DpnModel;
-import org.framedinterface.utils.AutomatonUtils;
 import org.framedinterface.utils.FileUtils;
-import org.framedinterface.utils.LogUtils;
 import org.framedinterface.utils.ModelUtils;
 import org.framedinterface.utils.RunnerUtils;
-import org.processmining.datapetrinets.DataPetriNet;
+import org.kordamp.ikonli.javafx.FontIcon;
 import org.processmining.datapetrinets.DataPetriNetsWithMarkings;
 import org.processmining.datapetrinets.io.DPNIOException;
 import org.processmining.datapetrinets.io.DataPetriNetImporter;
@@ -80,6 +25,32 @@ import org.processmining.datapetrinets.io.DataPetriNetImporter;
 import org.processmining.models.graphbased.directed.petrinet.Petrinet;
 import org.processmining.models.semantics.petrinet.PetrinetSemantics;
 import org.processmining.models.semantics.petrinet.impl.PetrinetSemanticsFactory;
+
+import javafx.animation.Timeline;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.beans.property.SimpleIntegerProperty;
+import javafx.event.ActionEvent;
+import javafx.fxml.FXML;
+import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.Label;
+import javafx.scene.control.ListView;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Slider;
+import javafx.scene.control.TableCell;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.control.cell.TextFieldTableCell;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.scene.web.WebView;
+import javafx.stage.Stage;
 
 public class InitialController {
 
@@ -135,13 +106,13 @@ public class InitialController {
 
     @FXML
     private Color x4;
-	    @FXML
+	@FXML
     private TextField textFieldFinalMarking;
 	
     @FXML
     private Label labelFinalMarking;
 
-		@FXML
+	@FXML
 	private CheckBox initialStatesCheckBox;
 	@FXML
 	private Slider declZoomSlider;
@@ -159,18 +130,42 @@ public class InitialController {
 	private ChoiceBox<AbstractModel> pnModelChoice;
 	@FXML
 	private WebView pnWebView;
+		@FXML
+	private HBox timelineControls;
+	@FXML
+	private Button stepBackwardButton;
+	@FXML
+	private Button playPauseButton;
+	@FXML
+	private FontIcon playFonticon;
+	@FXML
+	private Button stepForwardButton;
+	@FXML
+	private Label currentEventNumber;
+	@FXML
+	private Label totalEventsNumber;
+	@FXML
+	private Slider eventSlider;
+
 
 	private static String precentageFormat = "%.1f";
+	private String initialDeclWebViewScript;
+	private String initialPnWebViewScript;
+
 	//Storing object references here
 	private ObjectProperty<Double> declZoomSliderValueObject;
 	private ObjectProperty<Double> pnZoomSliderValueObject;
 	private ObjectProperty<Double> declWebViewZoomObject;
 	private ObjectProperty<Double> pnWebViewZoomObject;
-	
-	private int modelCounter = 0; //For unique model identifiers, needed to reliably determine which model was clicked in the visualization (not an ideal solution)
 
-	private String initialDeclWebViewScript;
-	private String initialPnWebViewScript;
+	private int modelCounter = 0; //For unique model identifiers, needed to reliably determine which model was clicked in the visualization (not an ideal solution)
+	private List<String> tracePrefix = new ArrayList<String>(); //Trace prefix entered by the user, starting out with an empty trace
+
+	private Timeline animationTimeline; //Controls eventSlider movement during animation
+	private boolean animationInProgress; //Used to allow navigation of events during animation
+	private SimpleIntegerProperty currentEventIndex = new SimpleIntegerProperty(0); //Various ui elements listen to this value for updates, also used to determine the model state to visualize
+	private FontIcon pauseFontIcon = new FontIcon("fa-pause"); //Icon to be displayed when animation is paused
+
 
 	List<VBox> resultsList;
     private Stage stage;
