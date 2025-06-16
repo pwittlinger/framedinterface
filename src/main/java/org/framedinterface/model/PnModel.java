@@ -90,7 +90,9 @@ public class PnModel extends AbstractModel  {
 		    		for (Place p : allPlaces) {
 		    			//sb.append("p"+p.getLabel()+"; ");
 		    			if (p.getLabel() == initialPlaceLabel) {
-		    				sb.append(p.getLabel()+" [label=\""+p.getLabel()+"\"]; ");
+		    				//sb.append(p.getLabel()+" [label=\""+p.getLabel()+"\", fillcolor=green]; ");
+							sb.append(p.getLabel()+" [label=\"&#x2022;\", fontsize=\"40pt\", width=0.55, fixedsize=true, fillcolor=lightgray]; ");
+							
 		    			}
 		    			else if (p.getLabel() == finalMarkingLabel) {
 		    				// Do nothing
