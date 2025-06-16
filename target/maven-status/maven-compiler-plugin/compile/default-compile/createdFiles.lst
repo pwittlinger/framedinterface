@@ -6,6 +6,7 @@ org\framedinterface\controller\MonitoringViewController$IntegerEditingCell.class
 org\framedinterface\controller\ScopeSelection.class
 org\framedinterface\utils\ModelUtils.class
 org\framedinterface\controller\MonitoringViewController.class
+org\framedinterface\utils\RunnerUtils.class
 org\framedinterface\controller\MonitoringViewController$1.class
 org\framedinterface\proposition\Activity.class
 org\framedinterface\controller\InitialController$1.class

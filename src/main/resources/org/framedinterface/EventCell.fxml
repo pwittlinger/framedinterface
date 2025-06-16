@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox fx:id="rootRegion" alignment="TOP_CENTER" stylesheets="@../css/main.css" xmlns="http://javafx.com/javafx/16" xmlns:fx="http://javafx.com/fxml/1">
+   <children>
+      <Label fx:id="activityNameLabel" styleClass="event-title" text="Activity Name" />
+      <HBox alignment="TOP_CENTER" spacing="5.0">
+         <children>
+            <Label styleClass="event-statistics" text="Satisifed:" />
+            <Label fx:id="satisfiedLabel" styleClass="event-statistics" text="0 (1)" />
+         </children>
+      </HBox>
+      <HBox alignment="TOP_CENTER" spacing="5.0">
+         <children>
+            <Label styleClass="event-statistics" text="Violated:" />
+            <Label fx:id="violatedLabel" styleClass="event-statistics" text="2 (0)" />
+         </children>
+      </HBox>
+   </children>
+</VBox>

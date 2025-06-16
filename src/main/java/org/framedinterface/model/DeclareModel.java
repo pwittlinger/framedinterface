@@ -1,73 +1,93 @@
 package org.framedinterface.model;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-import org.processmining.ltl2automaton.plugins.automaton.DeterministicAutomaton;
-import org.processmining.ltl2automaton.plugins.ltl.SyntaxParserException;
-import org.processmining.plugins.declareminer.ExecutableAutomaton;
+import org.apache.commons.collections4.BidiMap;
 
-import org.framedinterface.model.constraint.DeclareConstraint;
-import org.framedinterface.proposition.PropositionData;
-import org.framedinterface.proposition.attribute.VariableType;
-import org.framedinterface.utils.AutomatonUtils;
+import org.framedinterface.utils.GraphGenerator;
+import org.framedinterface.utils.enums.MonitoringState;
 
-public class DeclareModel extends AbstractModel {
+
+public class DeclareModel extends AbstractModel  {
 	
-	private List<DeclareConstraint> declareConstraints = new ArrayList<DeclareConstraint>();
-	
-	public DeclareModel(String modelName, int violationCost, Set<String> activityNames, Map<String, VariableType> attributeTypeMap, List<DeclareConstraint> declareConstraints) {
-		super(modelName, ModelType.DECLARE, violationCost, activityNames, attributeTypeMap);
-		
+	private LinkedHashSet<DeclareConstraint> declareConstraints;
+	private Map<String, List<DeclareConstraint>> activityToUnaryMap;
+	private List<Map<DeclareConstraint, MonitoringState>> monitoringStates; //First index is the initial state and last index is the final state
+
+	public DeclareModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, LinkedHashSet<DeclareConstraint> declareConstraints, Map<String, List<DeclareConstraint>> activityToUnaryMap) {
+		super(modelId, modelName, activities, activityToEncodingMap, ModelType.DECLARE);
 		this.declareConstraints = declareConstraints;
+		this.activityToUnaryMap = activityToUnaryMap;
 	}
 	
-	public List<DeclareConstraint> getDeclareConstraints() {
-		return declareConstraints;
+	public Map<MonitoringState, Integer> getMonitoringStateCounts(int activityIndex) {
+		Map<MonitoringState, Integer> monitoringStateCounts = new HashMap<MonitoringState, Integer>();
+		monitoringStateCounts.put(MonitoringState.SAT, 0);
+		monitoringStateCounts.put(MonitoringState.POSS_SAT, 0);
+		monitoringStateCounts.put(MonitoringState.POSS_VIOL, 0);
+		monitoringStateCounts.put(MonitoringState.VIOL, 0);
+		
+		for (MonitoringState monitoringState : monitoringStates.get(activityIndex).values()) {
+			monitoringStateCounts.put(monitoringState, monitoringStateCounts.get(monitoringState) + 1);
+		}
+		
+		return monitoringStateCounts;
 	}
-	
+
 	@Override
-	public void initializeAutomaton(PropositionData propositionData) {
-		List<DeterministicAutomaton> automata = new ArrayList<DeterministicAutomaton>();
+	public void updateMonitoringStates(List<String> activities) {
+		//Resetting the automata and adding initial monitoring states (constraint states before any events occur)
+		Map<DeclareConstraint, MonitoringState> initialStates = new HashMap<DeclareConstraint, MonitoringState>();
+		declareConstraints.forEach(declareConstraint -> initialStates.put(declareConstraint, declareConstraint.resetAutomaton()));
+		monitoringStates = new ArrayList<Map<DeclareConstraint,MonitoringState>>();
+		monitoringStates.add(initialStates);
+		
+		for (String activity : activities) {
+			Map<DeclareConstraint, MonitoringState> monitoringState = new HashMap<DeclareConstraint, MonitoringState>();
+			declareConstraints.forEach(declareConstraint -> monitoringState.put(declareConstraint, declareConstraint.executeNextActivity(activity)));
+			monitoringStates.add(monitoringState);
+		}
+		
+		//Adding final monitoring states  (constraint states when the trace terminates)
+		Map<DeclareConstraint, MonitoringState> finalStates = new HashMap<DeclareConstraint, MonitoringState>();
+		declareConstraints.forEach(declareConstraint -> {
+			MonitoringState monitoringState = declareConstraint.getMonitoringState();
+			if (monitoringState == MonitoringState.POSS_SAT) { monitoringState = MonitoringState.SAT;}
+			else if (monitoringState == MonitoringState.POSS_VIOL) { monitoringState = MonitoringState.VIOL;}
+			finalStates.put(declareConstraint, monitoringState);
+		});
+		monitoringStates.add(finalStates);
+	}
+
+	@Override
+	public String getVisualisationString(int activityIndex) {
+		StringBuilder sb = new StringBuilder("digraph \"\" {");
+		sb.append("id = \"graphRoot_" + getModelId() + "\"");
+		sb.append("ranksep = \".6\"");
+		sb.append("nodesep = \".5\"");
+		sb.append("node [style=\"filled\", shape=box, fontsize=\"8\", fontname=\"Helvetica\"]");
+		sb.append("edge [fontsize=\"8\", fontname=\"Helvetica\" arrowsize=\".8\"]");
+		
+		for (String activity : this.getActivities()) {
+			sb.append(GraphGenerator.buildDeclNodeString(this.getActivityEncoding(activity), activity, monitoringStates.get(activityIndex), activityToUnaryMap.get(activity)));
+		}
 		
 		for (DeclareConstraint declareConstraint : declareConstraints) {
-			String ltlFormula = AutomatonUtils.getGenericLtlFormula(declareConstraint.getTemplate());
-			Set<String> activityPropositions;
-			
-			//Replacing activation activity with propositions
-			if (declareConstraint.getActivationCondition() != null) {
-				String dataCondition = declareConstraint.getActivationCondition().replace("A.", ""); //TODO: Works incorrectly if attribute name contains the string "A."
-				activityPropositions = propositionData.getMatchingActivityPropositions(declareConstraint.getActivationActivity(), dataCondition);
-			} else {
-				activityPropositions = propositionData.getAllActivityPropositions(declareConstraint.getActivationActivity());
-			}
-			ltlFormula = ltlFormula.replace("\"A\"", "( " + String.join(" \\/ ", activityPropositions) + " )");
-			
-			//Replacing target activity with propositions
 			if (declareConstraint.getTemplate().getIsBinary()) {
-				if (declareConstraint.getTargetCondition() != null) {
-					String dataCondition = declareConstraint.getTargetCondition().replace("T.", ""); //TODO: Works incorrectly if attribute name contains the string "T."
-					activityPropositions = propositionData.getMatchingActivityPropositions(declareConstraint.getTargetActivity(), dataCondition);
-				} else {
-					activityPropositions = propositionData.getAllActivityPropositions(declareConstraint.getTargetActivity());
-				}
-				ltlFormula = ltlFormula.replace("\"B\"", "( " + String.join(" \\/ ", activityPropositions) + " )");
-			}
-			
-			//Creating automata for the propositionalized formula
-			try {
-				automata.add(AutomatonUtils.createAutomatonForLtlFormula(ltlFormula));
-			} catch (SyntaxParserException e) {
-				System.err.println("Unable to create automaton for declare constraint: " + declareConstraint.toString());
-				e.printStackTrace();
+				sb.append(GraphGenerator.buildDeclEdgeString(declareConstraint, monitoringStates.get(activityIndex).get(declareConstraint), this.getActivityToEncodingMap()));
 			}
 		}
 		
-		automaton = AutomatonUtils.createMinimizedIntersecrtion(automata);
-		executableAutomaton = new ExecutableAutomaton(automaton);
-		System.out.println("\tAutomata created for model: " + getModelName());
+		sb.append("}");
+
+		System.out.println(sb.toString());
+		return sb.toString().replace("'", "\\'"); //A crude fix to allow ' characters in activity names
 	}
+	
+	
 
 }
