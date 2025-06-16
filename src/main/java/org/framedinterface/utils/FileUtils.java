@@ -28,7 +28,6 @@ public class FileUtils {
 		boolean addLineIntoPlan = false;
 		File file = new File(resultFilePath);
 		try (Scanner s = new Scanner(file)) {
-			int lengthIndex = -1;
 			while (s.hasNextLine()) {
 				String line = s.nextLine();
 				if (line.matches("^\\[t=\\d+\\.\\d+[smh],\\s\\d+\\s[KMG]B\\]\\sSolution\\sfound!$")){
@@ -48,6 +47,7 @@ public class FileUtils {
 		System.err.println("Could not parse entry file!");
 		e.printStackTrace();
 		}
+		// Removing the first two lines as they don't contain any information about the actual plan
 		plan.remove(0);
 		plan.remove(0);
 		return plan;

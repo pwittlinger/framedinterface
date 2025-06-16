@@ -11,7 +11,7 @@ import java.util.ArrayList;
 
 
 public class RunnerUtils {
-    private static String pythonPath = "C:/Users/paulw/anaconda3/python.exe";
+    //private static String pythonPath = "C:/Users/paulw/anaconda3/python.exe";
 
     public static int generatePDDL(ArrayList<String> commandStrings, String finMarking, boolean reset) throws IOException, InterruptedException{
         String domain = "n";
@@ -84,7 +84,8 @@ public class RunnerUtils {
                 domainPath = currentPath+"/domain_no_reset.pddl";
             }
 
-			commandFastDownward.add(pythonPath);
+			//commandFastDownward.add(pythonPath);
+			commandFastDownward.add("python.exe");
 			commandFastDownward.add(fastDownwardPath);
 			commandFastDownward.add(domainPath);
 			commandFastDownward.add(problemPath);

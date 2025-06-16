@@ -207,7 +207,6 @@ public class InitialController {
 	private boolean resetDomain;
 	//private static String framedAutonomyJar = "C:\\Users\\paulw\\Desktop\\framedAutonomy\\FramedAutonomyTool.jar"; 
 	private static String framedAutonomyJar = "FramedAutonomyTool.jar"; 
-	private static String pythonPath = "C:/Users/paulw/anaconda3/python.exe";
 
 	public void setStage(Stage stage) {
 		this.stage = stage;
@@ -244,19 +243,6 @@ public class InitialController {
 						);
 			}
 		});
-
-		/* 
-		planListView.getItems().clear();
-		
-		planListView.getSelectionModel().selectedIndexProperty().addListener((obs, oldIndex, newIndex) -> {
-			if (newIndex.intValue() >= 0) {
-				// Select the visualization that corresponds to the correct index
-				//resultsPane.setContent(resultsList.get(newIndex.intValue()));
-				resultsPane.setContent(null);
-			} else {
-				resultsPane.setContent(null);
-			}
-		});*/
 
 		//Switch visualized model by selecting it in modelTableView
 		modelTabelView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
@@ -359,6 +345,8 @@ public class InitialController {
 
     @FXML
     void onButtonClickedUploadModel(ActionEvent event) {
+		// When uploading a model I immediately save the path to the model.
+		// In this way I can later pass it to the Framed Autonomy Tool easier.
 		List<File> modelFiles = FileUtils.showModelOpenDialog(stage);
 		if (modelFiles != null) {
 			List<AbstractModel> abstractModels = new ArrayList<AbstractModel>();
@@ -372,7 +360,6 @@ public class InitialController {
 					} else if ("pnml".equalsIgnoreCase(modelExtension)) {
 						AbstractModel abstractModel = ModelUtils.loadDpnModel(modelFile.toPath(), "m"+modelCounter, modelName);
 						abstractModels.add(abstractModel);
-						//DataPetriNet dpn = 
 						petrinetPath = modelFile.toPath().toAbsolutePath().toString();
 
 

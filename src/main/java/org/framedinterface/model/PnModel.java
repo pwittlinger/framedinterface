@@ -101,27 +101,15 @@ public class PnModel extends AbstractModel  {
 		    			
 
 		    		}
-		    		//sb.append("\n");
 	    			
 	    			Set<PetrinetEdge<? extends PetrinetNode, ? extends PetrinetNode>> allEdges = dataPetriNet.getEdges();
 	    			
 	    			for (PetrinetEdge<? extends PetrinetNode, ? extends PetrinetNode> edge : allEdges) {
 	    				String source = edge.getSource().getLabel().toString();
 	    				String target = edge.getTarget().getLabel().toString();
-	    				/*
-	    				if(allPlaces.contains(source)) {
-	    					source = "p"+source;
-	    				}else {
-	    					target = "p"+target;
-	    				}
-	    				*/
+
 	    				NodeID sourceNodeID = edge.getSource().getId();
 	    				NodeID targetNodeID = edge.getTarget().getId();
-	    				//System.out.println("source: "+source + " target: "+ target);
-	    				//System.out.println(allPlaces.contains(edge.getSource())+"-"+allTransitions.contains(edge.getSource()));
-	    				//System.out.println(allPlaces.contains(edge.getTarget())+"-"+allTransitions.contains(edge.getTarget()));
-	    				
-	    				//System.out.println(source + " -> " + target + "; ");
 	    				
 	    				if ((allSilentTransitions.containsKey(sourceNodeID)) || (allSilentTransitions.containsKey(targetNodeID))) {
 	    					if (allSilentTransitions.containsKey(sourceNodeID)) {
@@ -130,9 +118,12 @@ public class PnModel extends AbstractModel  {
 	    					else {
 	    						sb.append(source + " -> " + allSilentTransitions.get(targetNodeID) + ";");
 	    					}
-	    				} else {
+	    				} else if ((allPlaces.contains(edge.getSource())) && (allTransitions.contains(edge.getTarget()))) {
+							//System.out.println(source + " -> " + target + ";");
 	    					sb.append(source + " -> " + target + ";");
-	    				}
+	    				} else if ((allTransitions.contains(edge.getSource())) && (allPlaces.contains(edge.getTarget()))) {
+							sb.append(source + " -> " + target + ";");
+						}
 	    				
 	    			}
 	    			sb.append("}");

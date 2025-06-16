@@ -24,10 +24,7 @@ public class App extends Application {
 
     @Override
     public void start(Stage stage) throws IOException {
-        //scene = new Scene(loadFXML("primary"), 640, 480);
-        //String fxmlPath = "maininterface.fxml";
-        // scene = new Scene(loadFXML("maininterface"), 640, 480);
-        //FXMLLoader fxmlLoader = new FXMLLoader(App.class.getClassLoader().getResource(fxmlPath));
+
         FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/org/framedinterface/maininterface.fxml"));
 		Parent parent = fxmlLoader.load();
         ((InitialController)fxmlLoader.getController()).setStage(stage);
