@@ -1,8 +1,5 @@
 package org.framedinterface.model;
 
-import java.io.BufferedInputStream;
-import java.io.FileInputStream;
-import java.io.InputStream;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -10,14 +7,11 @@ import java.util.Set;
 
 import org.processmining.datapetrinets.DataPetriNetsWithMarkings;
 import org.processmining.models.graphbased.NodeID;
-import org.processmining.models.graphbased.directed.petrinet.Petrinet;
 import org.processmining.models.graphbased.directed.petrinet.PetrinetEdge;
 import org.processmining.models.graphbased.directed.petrinet.PetrinetNode;
 import org.processmining.models.graphbased.directed.petrinet.elements.Place;
 import org.processmining.models.graphbased.directed.petrinet.elements.Transition;
 import org.processmining.models.semantics.petrinet.Marking;
-import org.processmining.models.semantics.petrinet.PetrinetSemantics;
-import org.processmining.models.semantics.petrinet.impl.PetrinetSemanticsFactory;
 
 public class PnModel extends AbstractModel  {
 

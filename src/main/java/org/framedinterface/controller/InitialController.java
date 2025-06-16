@@ -397,7 +397,8 @@ public class InitialController {
     void onClickPrefix(ActionEvent event) {
 		// Set the Prefix and Clear the text field
 		//System.out.println(textFieldPrefix.getText());
-		curPrefix.setText(textFieldPrefix.getText());
+		// The FramedAutonomy Tool casts everything to lowerCase, so I do the same here. Otherwise there could be an issue when running the planner
+		curPrefix.setText(textFieldPrefix.getText().toLowerCase());
 		textFieldPrefix.clear();
     }
 
