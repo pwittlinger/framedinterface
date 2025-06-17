@@ -21,6 +21,8 @@ public class EventCell extends ListCell<EventData> {
 	private Label satisfiedLabel;
 	@FXML
 	private Label violatedLabel;
+	@FXML
+	private Label actionLabel;
 	
 	private int eventNumber;
 	private Consumer<Integer> selectionCallback;
@@ -68,6 +70,8 @@ public class EventCell extends ListCell<EventData> {
 				satisfiedLabel.setText(item.getDeclMonitoringStateCounts().get(MonitoringState.SAT) + " (" + item.getDeclMonitoringStateCounts().get(MonitoringState.POSS_SAT) + ")");
 				violatedLabel.setText(item.getDeclMonitoringStateCounts().get(MonitoringState.VIOL) + " (" + item.getDeclMonitoringStateCounts().get(MonitoringState.POSS_VIOL) + ")");
 				
+				actionLabel.setText(item.getPlanAction());
+
 				setText(null);
 				setGraphic(rootRegion);
 			}

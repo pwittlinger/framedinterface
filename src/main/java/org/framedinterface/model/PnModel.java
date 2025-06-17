@@ -16,16 +16,30 @@ import org.processmining.models.semantics.petrinet.Marking;
 public class PnModel extends AbstractModel  {
 
 	public DataPetriNetsWithMarkings dataPetriNet;
+	public String finalMarking; 
 
 	public PnModel(String modelId, String modelName, Set<String> activityNames, DataPetriNetsWithMarkings dataPetriNet) {
 		super(modelId, modelName, null, null, ModelType.PN); //TODO
 		this.dataPetriNet = dataPetriNet;
+		this.setFinalMarking();
 	}
 
 	@Override
 	public void updateMonitoringStates(List<String> activities) {
 		// TODO Auto-generated method stub
 		
+	}
+
+	public void setFinalMarking() {
+
+		try {
+			Marking[] finalMarking = dataPetriNet.getFinalMarkings();
+			this.finalMarking = finalMarking[0].toString();
+		} catch (Exception e) {
+			// TODO: handle exception
+			this.finalMarking = "";
+		}
+
 	}
 
 	@Override
@@ -85,7 +99,7 @@ public class PnModel extends AbstractModel  {
 		    			//sb.append("p"+p.getLabel()+"; ");
 		    			if (p.getLabel() == initialPlaceLabel) {
 		    				//sb.append(p.getLabel()+" [label=\""+p.getLabel()+"\", fillcolor=green]; ");
-							sb.append(p.getLabel()+" [label=\"&#x2022;\", fontsize=\"40pt\", width=0.55, fixedsize=true, fillcolor=lightgray]; ");
+							sb.append(p.getLabel()+" [label=\"&#x2022;\", fontsize=\"40pt\", width=0.55, fixedsize=true, fillcolor=white]; ");
 							
 		    			}
 		    			else if (p.getLabel() == finalMarkingLabel) {
@@ -123,7 +137,7 @@ public class PnModel extends AbstractModel  {
 	    				
 	    			}
 	    			sb.append("}");
-	    			System.out.println(sb.toString());
+	    			//System.out.println(sb.toString());
 	    		} catch (Exception e) {
 	    			e.printStackTrace();
 	    		}

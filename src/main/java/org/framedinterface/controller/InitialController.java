@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 import org.framedinterface.model.AbstractModel;
 import org.framedinterface.model.DeclareModel;
 import org.framedinterface.model.ModelType;
+import org.framedinterface.model.PnModel;
 import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ModelUtils;
 import org.framedinterface.utils.RunnerUtils;
@@ -31,6 +32,7 @@ import org.processmining.datapetrinets.io.DataPetriNetImporter;
 import org.processmining.models.graphbased.directed.petrinet.Petrinet;
 import org.processmining.models.semantics.petrinet.PetrinetSemantics;
 import org.processmining.models.semantics.petrinet.impl.PetrinetSemanticsFactory;
+import org.processmining.plugins.pnml.elements.PnmlPage;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -101,7 +103,8 @@ public class InitialController {
 	private TableColumn<AbstractModel, AbstractModel> modelRemoveColumn;
 
 	@FXML
-    private ListView<String> planListView;
+    //private ListView<String> planListView;
+	private ListView<EventData> planListView;
 
 	@FXML
 	private ScrollPane resultsPane;
@@ -249,8 +252,13 @@ public class InitialController {
 			if (newValue != null) {
 				if (newValue.getModelType() == ModelType.DECLARE) {
 					declModelChoice.getSelectionModel().select(newValue);
+					declPath = newValue.getFilePath();
 				} else if (newValue.getModelType() == ModelType.PN) {
 					pnModelChoice.getSelectionModel().select(newValue);
+					petrinetPath = newValue.getFilePath();
+					PnModel p_ = (PnModel) newValue;
+					finMarking = p_.finalMarking;
+					labelFinalMarking.setText(finMarking);
 				}
 				//modelTableView.getSelectionModel().clearSelection(); //Causes a weird IndexOutOfBoundsException exception
 			}
@@ -312,10 +320,18 @@ public class InitialController {
 		
 		//Triggering visualization update when the model selection is changed
 		declModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+			declPath = newValue.getFilePath();
 			updateVisualization(declWebView, newValue, ModelType.DECLARE);
-			//updateplanListViewStatistics(newValue, planListView.getItems());
+			updateplanListViewStatistics(newValue, planListView.getItems());
+			
 		});
-		pnModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> updateVisualization(pnWebView, newValue, ModelType.PN));
+		pnModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+			petrinetPath = newValue.getFilePath();
+			PnModel p_ = (PnModel) newValue;
+			finMarking = p_.finalMarking;
+			labelFinalMarking.setText(finMarking);
+			updateVisualization(pnWebView, newValue, ModelType.PN);
+		});
 
 		//Timeline setup
 		setupTimelineControls();
@@ -336,7 +352,7 @@ public class InitialController {
 		});
 		
 		//All cells in planListView are handled by EventCell class
-		//planListView.setCellFactory(value -> new EventCell(selectionCallback));
+		planListView.setCellFactory(value -> new EventCell(selectionCallback));
 		//planListView.setCellFactory(value -> selectionCallback.toString());
 		
 	
@@ -398,7 +414,7 @@ public class InitialController {
 		// Set the Prefix and Clear the text field
 		//System.out.println(textFieldPrefix.getText());
 		// The FramedAutonomy Tool casts everything to lowerCase, so I do the same here. Otherwise there could be an issue when running the planner
-		curPrefix.setText(textFieldPrefix.getText().toLowerCase());
+		curPrefix.setText(textFieldPrefix.getText().toLowerCase().replace(",", ""));
 		textFieldPrefix.clear();
     }
 
@@ -425,7 +441,7 @@ public class InitialController {
 		commandStrings.add("-jar");
 		commandStrings.add(currentPath+"/"+framedAutonomyJar);
 		
-		if (modelTabelView.getItems().size() != 2){
+		if (modelTabelView.getItems().size() < 2){
 			System.out.println("Error: Number of input files not matching");
 			return;
 		}
@@ -453,11 +469,27 @@ public class InitialController {
 		if (plannerExit == 0){
 			ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
 
+			ArrayList<String> onlyActions = new ArrayList<>();
+			//updateplanListView(generatedPlan);
+			planListView.getItems().clear();
+
+			//int numSteps = generatedPlan.size();
+			//int numSteps = 0;
 			for (String action : generatedPlan) {
+
+				String[] steps = action.split(" ");
+				System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+				//System.out.println(steps + " " +steps.length);
+				onlyActions.add(steps[steps.length-2]);
+				
+				//planListView.getItems().add(new EventData(numSteps, steps[steps.length-2]));
 				//resultsList.add(monitoringTask.getValue());
-				planListView.getItems().add(action);
+				//planListView.getItems().add(action);
+				//numSteps++;
 
 			}
+			System.out.println(onlyActions);
+			updateplanListView(onlyActions);
 		}
 
 
@@ -677,7 +709,7 @@ public class InitialController {
 			}
 		});
 
-		currentEventIndex.addListener((observable, oldValue, newValue) -> {
+			currentEventIndex.addListener((observable, oldValue, newValue) -> {
 			updateSelectedModelVisualizations();
 			planListView.scrollTo(newValue.intValue());
 			planListView.getSelectionModel().clearAndSelect(newValue.intValue());
@@ -696,26 +728,29 @@ public class InitialController {
 		}
 		eventDataList.add(EventData.createEndEvent(activities.size()+1));
 		updateplanListViewStatistics(declModelChoice.getSelectionModel().getSelectedItem(), eventDataList);
+		updateplanListViewStatistics(pnModelChoice.getSelectionModel().getSelectedItem(), eventDataList);
 		
-		/*
+		
 		planListView.getItems().clear();
 		planListView.getItems().addAll(eventDataList);
 		planListView.getSelectionModel().selectFirst();
-		*/
-
+		
+		/* 
 		planListView.getItems().clear();
 		planListView.getItems().addAll(activities);
 		planListView.getSelectionModel().selectFirst();
+		*/
 	}
 
 	//Updates the statistics shown in the planListView
 	private void updateplanListViewStatistics(AbstractModel abstractModel, List<EventData> eventDataList) {
-		if (abstractModel != null) {
+		if ((abstractModel != null) && (abstractModel.getModelType() == ModelType.DECLARE) && false) {
 			DeclareModel declareModel = (DeclareModel) abstractModel;
 			for (int i = 0; i < eventDataList.size(); i++) {
 				eventDataList.get(i).setDeclMonitoringStateCounts(declareModel.getMonitoringStateCounts(i));
 			}
-		} else {
+		} 		
+		else {
 			for (EventData eventData : eventDataList) {
 				eventData.setDeclMonitoringStateCounts(Map.of(
 						MonitoringState.SAT, 0,
@@ -861,26 +896,5 @@ public class InitialController {
 			System.err.println("documentObject must be instance of Document class");
 		}
 	}
-
-	//Updates the statistics shown in the traceListView
-	private void updatePlanListViewStatistics(AbstractModel abstractModel, List<EventData> eventDataList) {
-		if (abstractModel != null) {
-			DeclareModel declareModel = (DeclareModel) abstractModel;
-			for (int i = 0; i < eventDataList.size(); i++) {
-				eventDataList.get(i).setDeclMonitoringStateCounts(declareModel.getMonitoringStateCounts(i));
-			}
-		} else {
-			for (EventData eventData : eventDataList) {
-				eventData.setDeclMonitoringStateCounts(Map.of(
-						MonitoringState.SAT, 0,
-						MonitoringState.POSS_SAT, 0,
-						MonitoringState.POSS_VIOL, 0,
-						MonitoringState.VIOL, 0
-						));
-			}
-		}
-		planListView.refresh();
-	}
-
 
 }

@@ -10,6 +10,7 @@ import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 
 import java.io.IOException;
+import java.util.Locale;
 
 import org.framedinterface.controller.InitialController;
 
@@ -26,6 +27,7 @@ public class App extends Application {
         FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/org/framedinterface/maininterface.fxml"));
 		Parent parent = fxmlLoader.load();
         ((InitialController)fxmlLoader.getController()).setStage(stage);
+        Locale.setDefault(Locale.UK);
         scene = new Scene(parent);
         stage.setScene(scene);
         stage.setTitle("Framed-Autonomy Planner");

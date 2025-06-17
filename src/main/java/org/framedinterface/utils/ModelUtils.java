@@ -42,6 +42,7 @@ public class ModelUtils {
 		Map<String, List<DeclareConstraint>> activityToUnaryMap = createActivityToUnaryMap(activities, declareConstrains); 
 
 		DeclareModel declareModel = new DeclareModel(modelId, modelName, activities, activityToEncodingMap, declareConstrains, activityToUnaryMap);
+		declareModel.setFilePath(modelPath.toAbsolutePath().toString());
 		return declareModel;
 	}
 
@@ -147,6 +148,7 @@ public class ModelUtils {
 		Set<String> activityNames = createActivityNamesSet(dataPetriNet); //It is probably not necessary to encode the activity names of the Petri net
 
 		PnModel dpnModel = new PnModel(modelId, modelName, activityNames, dataPetriNet);
+		dpnModel.setFilePath(modelPath.toAbsolutePath().toString());
 		return dpnModel;
 	}
 

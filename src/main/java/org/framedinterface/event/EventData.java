@@ -8,6 +8,7 @@ public class EventData {
 	private int eventNumber; //Event number in the trace
 	private String activityName;
 	private Map<MonitoringState, Integer> declMonitoringStateCounts;
+	private String plannerAction;
 	
 	private boolean isStart;
 	private boolean isEnd;
@@ -15,6 +16,12 @@ public class EventData {
 	public EventData(int eventNumber, String activityName) {
 		this.eventNumber = eventNumber;
 		this.activityName = activityName;
+	}
+
+	public EventData(int eventNumber, String activityName, String planAction) {
+		this.eventNumber = eventNumber;
+		this.activityName = activityName;
+		this.plannerAction = planAction;
 	}
 	
 	//This might be pad practice for instantiating a class
@@ -35,6 +42,10 @@ public class EventData {
 	
 	public String getActivityName() {
 		return activityName;
+	}
+
+	public String getPlanAction() {
+		return this.plannerAction;
 	}
 	
 	public void setDeclMonitoringStateCounts(Map<MonitoringState, Integer> declMonitoringStateCounts) {
