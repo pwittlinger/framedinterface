@@ -78,7 +78,7 @@ public class EventCell extends ListCell<EventData> {
 	private boolean loadFxml() {
 		if (loader == null) {
 			//Load ActionCell contents if not already loaded
-			loader = new FXMLLoader(getClass().getClassLoader().getResource("fxml/EventCell.fxml"));
+			loader = new FXMLLoader(getClass().getClassLoader().getResource("EventCell.fxml"));
 			loader.setController(this);
 			try {
 				loader.load();
