@@ -744,7 +744,7 @@ public class InitialController {
 
 	//Updates the statistics shown in the planListView
 	private void updateplanListViewStatistics(AbstractModel abstractModel, List<EventData> eventDataList) {
-		if ((abstractModel != null) && (abstractModel.getModelType() == ModelType.DECLARE) && false) {
+		if ((abstractModel != null) && (abstractModel.getModelType() == ModelType.DECLARE) && false ) {
 			DeclareModel declareModel = (DeclareModel) abstractModel;
 			for (int i = 0; i < eventDataList.size(); i++) {
 				eventDataList.get(i).setDeclMonitoringStateCounts(declareModel.getMonitoringStateCounts(i));

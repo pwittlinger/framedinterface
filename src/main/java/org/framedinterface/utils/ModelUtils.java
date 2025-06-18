@@ -54,7 +54,8 @@ public class ModelUtils {
 		while(sc.hasNextLine()) {
 			String line = sc.nextLine();
 			if(line.startsWith("activity ") && line.length() > 9) {
-				activityNames.add(line.substring(9));
+				//activityNames.add(line.substring(9));
+				activityNames.add(line.substring(9).toLowerCase());
 			}
 		}
 		sc.close();
@@ -66,7 +67,8 @@ public class ModelUtils {
 	private static BidiMap<String, String> createActivityToEncodingMap(LinkedHashSet<String> activities) {
 		BidiMap<String, String> activityToEncodingMap =  new DualHashBidiMap<String, String>(); //I am not sure if this provides predictable iteration order; if yes, then activities set could be removed
 		for (String activity : activities) {
-			activityToEncodingMap.putIfAbsent(activity, "n"+activityToEncodingMap.size());
+			activityToEncodingMap.putIfAbsent(activity.toLowerCase(), "n"+activityToEncodingMap.size());
+			//activityToEncodingMap.putIfAbsent(activity, "n"+activityToEncodingMap.size());
 		}
 		return activityToEncodingMap;
 	}
@@ -135,7 +137,8 @@ public class ModelUtils {
 			activationActivity = mUnary.group(1);
 		}
 
-		return new DeclareConstraint(constraintString, template, activationActivity, targetActivity);
+		//return new DeclareConstraint(constraintString, template, activationActivity, targetActivity);
+		return new DeclareConstraint(constraintString, template, activationActivity.toLowerCase(), targetActivity.toLowerCase());
 	}
 
 
@@ -157,7 +160,7 @@ public class ModelUtils {
 		Set<String> activityNames = new LinkedHashSet<String>();
 		for (Transition transition : dataPetriNet.getTransitions()) {
 			if (!transition.isInvisible()) {
-				activityNames.add(transition.getLabel());
+				activityNames.add(transition.getLabel().toLowerCase());
 			}
 		}
 		return activityNames;
