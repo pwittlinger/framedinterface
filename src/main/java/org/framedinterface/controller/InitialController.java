@@ -416,13 +416,13 @@ public class InitialController {
 		// Set the Prefix and Clear the text field
 		//System.out.println(textFieldPrefix.getText());
 		// The FramedAutonomy Tool casts everything to lowerCase, so I do the same here. Otherwise there could be an issue when running the planner
+    	modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
 		updatePrefix();
 		curPrefix.setText(textFieldPrefix.getText().toLowerCase().replace(",", ""));
 		textFieldPrefix.clear();
 		List prefixActions = Arrays.asList(curPrefix.getText().split(" "));
 		//updateVisualization(pnWebView, null, null);
-		modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
-		//updateSelectedModelVisualizations();
+		updateSelectedModelVisualizations();
 		
 
     }

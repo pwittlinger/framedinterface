@@ -1,13 +1,13 @@
 package org.framedinterface.model;
 
-import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.processmining.datapetrinets.DataPetriNet;
+import org.apache.commons.collections4.BidiMap;
 import org.processmining.datapetrinets.DataPetriNetsWithMarkings;
 import org.processmining.models.graphbased.NodeID;
 import org.processmining.models.graphbased.directed.petrinet.Petrinet;
@@ -29,8 +29,8 @@ public class PnModel extends AbstractModel  {
 	private ArrayList<String> firedTransitions;
 	private ArrayList<String> violatedFirings;
 
-	public PnModel(String modelId, String modelName, Set<String> activityNames, DataPetriNetsWithMarkings dataPetriNet) {
-		super(modelId, modelName, null, null, ModelType.PN); //TODO
+	public PnModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, DataPetriNetsWithMarkings dataPetriNet) {
+		super(modelId, modelName, activities, activityToEncodingMap, ModelType.PN); //TODO
 		this.dataPetriNet = dataPetriNet;
 		this.setFinalMarking();
 		this.visStrings = new ArrayList<>();
@@ -60,15 +60,9 @@ public class PnModel extends AbstractModel  {
 
 		for (String act : activities) {
 
-			String[] planAction = act.split(";");
-			
-			if (planAction.length == 2) {
-				act = planAction[1];
-			}
-
 			if (getTransitionViaLabel(this.dataPetriNet.getTransitions(), act) == null) {
 				// Transition is not in PetriNet, cannot be fired.
-				if (act.startsWith("reset-petrinet")){
+				if (act.startsWith("reset")){
 					
 					this.petrinetSemantics.setCurrentState(this.dataPetriNet.getInitialMarking());
 					visStrings.add(createVisualisationString());
@@ -137,28 +131,37 @@ public class PnModel extends AbstractModel  {
 	    			Collection<Place> allPlaces = this.dataPetriNet.getPlaces();
 	    			Collection<Transition> allTransitions = this.dataPetriNet.getTransitions();
 					Collection<Transition> allEnabledTransitions = this.petrinetSemantics.getExecutableTransitions();
-	    			
 		    		
 		    		sb.append("node [shape=box];");
 	    			for(Transition t : allTransitions) {
-						// Setting all regular transitions
-						if ((!t.getLabel().isBlank())&& (this.firedTransitions.contains(t.getLabel().toLowerCase())) && (!this.violatedFirings.contains(t.getLabel().toLowerCase()))){
-							sb.append(t.getLabel()+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=black]; ");
-	    				//if ((!t.getLabel().isBlank())&& !(allEnabledTransitions.contains(t))) {
-	    					sb.append(t.getLabel()+"; ");
-	    				}
-						else if((!t.getLabel().isBlank())&& (this.firedTransitions.contains(t.getLabel().toLowerCase())) && (this.violatedFirings.contains(t.getLabel().toLowerCase()))) {
-							sb.append(t.getLabel()+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=red]; ");
-	    					sb.append(t.getLabel()+"; ");
+	    				if (!t.getLabel().isBlank()) {
+	    					String activityEncoding = this.getActivityEncoding(t.getLabel());
+	    					
+	    					
+	    					
+	    					
+	    					// Setting all regular transitions
+	    					if ((this.firedTransitions.contains(t.getLabel().toLowerCase())) && (!this.violatedFirings.contains(t.getLabel().toLowerCase()))){
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=black]; ");
+	    						//if ((!t.getLabel().isBlank())&& !(allEnabledTransitions.contains(t))) {
+	    						//sb.append(t.getLabel()+"; ");
+	    					}
+	    					else if((this.firedTransitions.contains(t.getLabel().toLowerCase())) && (this.violatedFirings.contains(t.getLabel().toLowerCase()))) {
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=red]; ");
+	    						//sb.append(t.getLabel()+"; ");
+	    					}
+	    					// Regular Transitions that are enabled
+	    					else if ((allEnabledTransitions.contains(t))) {
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=green]; ");
+	    					}
+	    					else if (!(allEnabledTransitions.contains(t))) {
+	    						//sb.append(t.getLabel()+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=blue]; ");
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\"]; ");
+	    					}
+							
 						}
-						// Regular Transitions that are enabled
-						else if ((!t.getLabel().isBlank())&& (allEnabledTransitions.contains(t))) {
-							sb.append(t.getLabel()+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=green]; ");
-	    				}
-						else if ((!t.getLabel().isBlank())&& !(allEnabledTransitions.contains(t))) {
-							//sb.append(t.getLabel()+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=blue]; ");
-							sb.append(t.getLabel()+"; ");
-						}
+	    				
+	    				
 	    			}
 
 	    			
@@ -232,9 +235,9 @@ public class PnModel extends AbstractModel  {
 	    					}
 	    				} else if ((allPlaces.contains(edge.getSource())) && (allTransitions.contains(edge.getTarget()))) {
 							//System.out.println(source + " -> " + target + ";");
-	    					sb.append(source + " -> " + target + ";");
+		    				sb.append(source + " -> " + this.getActivityEncoding(target) + ";");
 	    				} else if ((allTransitions.contains(edge.getSource())) && (allPlaces.contains(edge.getTarget()))) {
-							sb.append(source + " -> " + target + ";");
+							sb.append(this.getActivityEncoding(source) + " -> " + target + ";");
 						}
 	    				
 	    			}
