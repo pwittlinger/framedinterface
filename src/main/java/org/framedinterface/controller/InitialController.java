@@ -399,6 +399,7 @@ public class InitialController {
 					} else {
 						System.err.println("Skipping model of unknown type: " + modelExtension);
 					}
+					modelCounter++;
 				} catch (DPNIOException | IOException | IndexOutOfBoundsException e) {
 					System.err.println("Unable to load model: " + modelFile.getAbsolutePath());
 					e.printStackTrace();
@@ -489,6 +490,12 @@ public class InitialController {
 				//if ((steps[0].contains("violate")) ||(steps[0].contains("reset")))
 				if (steps[0].contains("sync")) {
 					onlyActions.add(steps[steps.length-2]);
+				}
+				if (steps[0].contains("prefix_violate")) {
+					onlyActions.add(steps[steps.length-2]);
+				}
+				if (steps[0].contains("reset")) {
+					onlyActions.add(steps[0]+"-"+steps[steps.length-2]);
 				}
 				
 				
@@ -740,7 +747,8 @@ public class InitialController {
 		List<EventData> eventDataList = new ArrayList<EventData>();
 		eventDataList.add(EventData.createStartEvent());
 		for (int i = 0; i < activities.size(); i++) {
-			eventDataList.add(new EventData(i+1, activities.get(i)));
+			//eventDataList.add(new EventData(i+1, activities.get(i)));
+			eventDataList.add(new EventData(i+1, activities.get(i), activities.get(i)));
 		}
 		eventDataList.add(EventData.createEndEvent(activities.size()+1));
 		updateplanListViewStatistics(declModelChoice.getSelectionModel().getSelectedItem(), eventDataList);

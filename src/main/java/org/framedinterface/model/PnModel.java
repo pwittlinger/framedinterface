@@ -1,5 +1,6 @@
 package org.framedinterface.model;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -26,6 +27,7 @@ public class PnModel extends AbstractModel  {
 	public PetrinetSemantics petrinetSemantics;
 	public ArrayList<String> visStrings;
 	private ArrayList<String> firedTransitions;
+	private ArrayList<String> violatedFirings;
 
 	public PnModel(String modelId, String modelName, Set<String> activityNames, DataPetriNetsWithMarkings dataPetriNet) {
 		super(modelId, modelName, null, null, ModelType.PN); //TODO
@@ -33,6 +35,7 @@ public class PnModel extends AbstractModel  {
 		this.setFinalMarking();
 		this.visStrings = new ArrayList<>();
 		this.firedTransitions = new ArrayList<>();
+		this.violatedFirings = new ArrayList<>();
 
 		this.petrinetSemantics = PetrinetSemanticsFactory.regularPetrinetSemantics(Petrinet.class);
 		this.petrinetSemantics.initialize(dataPetriNet.getTransitions(), dataPetriNet.getInitialMarking());
@@ -59,6 +62,11 @@ public class PnModel extends AbstractModel  {
 
 			if (getTransitionViaLabel(this.dataPetriNet.getTransitions(), act) == null) {
 				// Transition is not in PetriNet, cannot be fired.
+				if (act.startsWith("reset")){
+					
+					this.petrinetSemantics.setCurrentState(this.dataPetriNet.getInitialMarking());
+					visStrings.add(createVisualisationString());
+				}
 				continue;
 			}
 			
@@ -72,6 +80,14 @@ public class PnModel extends AbstractModel  {
 				Marking newMarking = this.getAllIncomingMarkings(act);
 				this.petrinetSemantics.setCurrentState(newMarking);
 				System.out.println(currentlyEnabledTransitions.toString() + " does not contain " + act);
+				this.violatedFirings.add(act);
+
+				//Marking curState = this.petrinetSemantics.getCurrentState();
+				//ArrayList<Place> p_ = this.getAllIncomingPlaces(act);
+				//for (Place tP : p_){
+				//	curState.add(tP);
+				//}
+				
 			} 
 			try {
 				// Always fire the transition
@@ -120,11 +136,15 @@ public class PnModel extends AbstractModel  {
 		    		sb.append("node [shape=box];");
 	    			for(Transition t : allTransitions) {
 						// Setting all regular transitions
-						if ((!t.getLabel().isBlank())&& (this.firedTransitions.contains(t.getLabel().toLowerCase()))){
+						if ((!t.getLabel().isBlank())&& (this.firedTransitions.contains(t.getLabel().toLowerCase())) && (!this.violatedFirings.contains(t.getLabel().toLowerCase()))){
 							sb.append(t.getLabel()+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=black]; ");
 	    				//if ((!t.getLabel().isBlank())&& !(allEnabledTransitions.contains(t))) {
 	    					sb.append(t.getLabel()+"; ");
 	    				}
+						else if((!t.getLabel().isBlank())&& (this.firedTransitions.contains(t.getLabel().toLowerCase())) && (this.violatedFirings.contains(t.getLabel().toLowerCase()))) {
+							sb.append(t.getLabel()+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=red]; ");
+	    					sb.append(t.getLabel()+"; ");
+						}
 						// Regular Transitions that are enabled
 						else if ((!t.getLabel().isBlank())&& (allEnabledTransitions.contains(t))) {
 							sb.append(t.getLabel()+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=green]; ");
@@ -148,7 +168,6 @@ public class PnModel extends AbstractModel  {
 	    				}
 	    			}
 	    			
-	    			//sb.append("\n");
 		    		
 		    		//Marking initialMarking = dataPetriNet.getInitialMarking();
 
@@ -179,13 +198,6 @@ public class PnModel extends AbstractModel  {
 							
 						}
 
-						/*
-		    			if (p.getLabel() == initialPlaceLabel) {
-		    				//sb.append(p.getLabel()+" [label=\""+p.getLabel()+"\", fillcolor=green]; ");
-							sb.append(p.getLabel()+" [label=\"&#x2022;\", fontsize=\"40pt\", width=0.55, fixedsize=true, fillcolor=white]; ");
-							
-		    			}
-						*/
 		    			else if (p.getLabel() == finalMarkingLabel) {
 		    				// Do nothing because handled above
 		    			}
@@ -301,6 +313,7 @@ public class PnModel extends AbstractModel  {
 	public void resetModel(){
 		this.visStrings = new ArrayList<>();
 		this.firedTransitions = new ArrayList<>();
+		this.violatedFirings = new ArrayList<>();
 
 		this.petrinetSemantics = PetrinetSemanticsFactory.regularPetrinetSemantics(Petrinet.class);
 		this.petrinetSemantics.initialize(dataPetriNet.getTransitions(), dataPetriNet.getInitialMarking());
