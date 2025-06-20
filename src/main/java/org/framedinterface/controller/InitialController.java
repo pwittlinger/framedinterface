@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -414,14 +415,19 @@ public class InitialController {
 		// Set the Prefix and Clear the text field
 		//System.out.println(textFieldPrefix.getText());
 		// The FramedAutonomy Tool casts everything to lowerCase, so I do the same here. Otherwise there could be an issue when running the planner
+		updatePrefix();
 		curPrefix.setText(textFieldPrefix.getText().toLowerCase().replace(",", ""));
 		textFieldPrefix.clear();
+		List prefixActions = Arrays.asList(curPrefix.getText().split(" "));
+
     }
 
 	@FXML
     void onClickPlanner(ActionEvent event) throws IOException, InterruptedException {
 
 		planListView.getItems().clear();
+
+		modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
 
 		//Write prefix to file and then pass it
 
@@ -479,8 +485,12 @@ public class InitialController {
 
 				String[] steps = action.split(" ");
 				System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
-				//System.out.println(steps + " " +steps.length);
-				onlyActions.add(steps[steps.length-2]);
+
+				//if ((steps[0].contains("violate")) ||(steps[0].contains("reset")))
+				if (steps[0].contains("sync")) {
+					onlyActions.add(steps[steps.length-2]);
+				}
+				
 				
 				//planListView.getItems().add(new EventData(numSteps, steps[steps.length-2]));
 				//resultsList.add(monitoringTask.getValue());
@@ -489,7 +499,9 @@ public class InitialController {
 
 			}
 			System.out.println(onlyActions);
+			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions));
 			updateplanListView(onlyActions);
+			updateTimelineControls(onlyActions);
 		}
 
 
@@ -531,12 +543,16 @@ public class InitialController {
 	@FXML
 	private void updatePrefix() {
 		tracePrefix = new ArrayList<String>(); //Resetting to empty trace
+
 		if (textFieldPrefix.getText() != null && !textFieldPrefix.getText().equals("")) {
-			String[] activityArray = textFieldPrefix.getText().split(",");
+			String prefixText = textFieldPrefix.getText();
+			prefixText.replace(" ", ",");
+			//String[] activityArray = textFieldPrefix.getText().split(",");
+			String[] activityArray =prefixText.split(",");
 			for (int i = 0; i < activityArray.length; i++) {
 				String activity = activityArray[i].strip();
 				if (!activity.isBlank()) {
-					tracePrefix.add(activity);
+					tracePrefix.add(activity.toLowerCase());
 				}
 			}
 		}
@@ -744,13 +760,13 @@ public class InitialController {
 
 	//Updates the statistics shown in the planListView
 	private void updateplanListViewStatistics(AbstractModel abstractModel, List<EventData> eventDataList) {
-		if ((abstractModel != null) && (abstractModel.getModelType() == ModelType.DECLARE) && false ) {
+		if ((abstractModel != null) && (abstractModel.getModelType() == ModelType.DECLARE) ) {
 			DeclareModel declareModel = (DeclareModel) abstractModel;
 			for (int i = 0; i < eventDataList.size(); i++) {
 				eventDataList.get(i).setDeclMonitoringStateCounts(declareModel.getMonitoringStateCounts(i));
 			}
 		} 		
-		else {
+		else if (abstractModel == null) {
 			for (EventData eventData : eventDataList) {
 				eventData.setDeclMonitoringStateCounts(Map.of(
 						MonitoringState.SAT, 0,

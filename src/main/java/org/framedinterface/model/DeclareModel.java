@@ -87,6 +87,11 @@ public class DeclareModel extends AbstractModel  {
 		//System.out.println(sb.toString());
 		return sb.toString().replace("'", "\\'"); //A crude fix to allow ' characters in activity names
 	}
+
+	@Override
+	public void resetModel(){
+
+	}
 	
 	
 

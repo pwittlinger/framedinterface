@@ -65,5 +65,7 @@ public abstract class AbstractModel {
 	public String toString() {
 		return "AbstractModel [modelName=" + modelName + ", modelType=" + modelType + "]";
 	}
+
+	public abstract void resetModel();
 	
 }
