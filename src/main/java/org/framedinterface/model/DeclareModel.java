@@ -46,7 +46,17 @@ public class DeclareModel extends AbstractModel  {
 		monitoringStates = new ArrayList<Map<DeclareConstraint,MonitoringState>>();
 		monitoringStates.add(initialStates);
 		
-		for (String activity : activities) {
+		for (String act : activities) {
+			String[] planAction = act.split(";");
+			String activity;
+			
+			
+			if (planAction.length == 2) {
+				activity = planAction[1];
+			}
+			else{
+				activity = planAction[0];
+			}
 			Map<DeclareConstraint, MonitoringState> monitoringState = new HashMap<DeclareConstraint, MonitoringState>();
 			declareConstraints.forEach(declareConstraint -> monitoringState.put(declareConstraint, declareConstraint.executeNextActivity(activity.toLowerCase())));
 			monitoringStates.add(monitoringState);

@@ -420,6 +420,10 @@ public class InitialController {
 		curPrefix.setText(textFieldPrefix.getText().toLowerCase().replace(",", ""));
 		textFieldPrefix.clear();
 		List prefixActions = Arrays.asList(curPrefix.getText().split(" "));
+		//updateVisualization(pnWebView, null, null);
+		modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
+		//updateSelectedModelVisualizations();
+		
 
     }
 
@@ -488,16 +492,21 @@ public class InitialController {
 				System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
 
 				//if ((steps[0].contains("violate")) ||(steps[0].contains("reset")))
+				int actInd = steps.length-2;
 				if (steps[0].contains("sync")) {
-					onlyActions.add(steps[steps.length-2]);
+					//onlyActions.add(steps[actInd]);
+					onlyActions.add(steps[0]+";"+steps[actInd]);
 				}
 				if (steps[0].contains("prefix_violate")) {
-					onlyActions.add(steps[steps.length-2]);
+					//onlyActions.add(steps[actInd]);
+					onlyActions.add(steps[0]+";"+steps[actInd]);
 				}
 				if (steps[0].contains("reset")) {
-					onlyActions.add(steps[0]+"-"+steps[steps.length-2]);
+					//onlyActions.add(steps[0]+"-"+steps[actInd]);
+					onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
 				}
 				
+
 				
 				//planListView.getItems().add(new EventData(numSteps, steps[steps.length-2]));
 				//resultsList.add(monitoringTask.getValue());
@@ -748,7 +757,14 @@ public class InitialController {
 		eventDataList.add(EventData.createStartEvent());
 		for (int i = 0; i < activities.size(); i++) {
 			//eventDataList.add(new EventData(i+1, activities.get(i)));
-			eventDataList.add(new EventData(i+1, activities.get(i), activities.get(i)));
+			String[] planAction = activities.get(i).split(";");
+			System.out.println("planAction"+activities.get(i));
+			if (planAction.length == 1) {
+				eventDataList.add(new EventData(i+1, activities.get(i)));
+			} else{
+				eventDataList.add(new EventData(i+1, planAction[1], planAction[0]));
+			}
+			
 		}
 		eventDataList.add(EventData.createEndEvent(activities.size()+1));
 		updateplanListViewStatistics(declModelChoice.getSelectionModel().getSelectedItem(), eventDataList);
@@ -842,6 +858,7 @@ public class InitialController {
 	private void updateSelectedModelVisualizations() {
 		updateVisualization(declWebView, declModelChoice.getSelectionModel().getSelectedItem(), ModelType.DECLARE);
 		updateVisualization(pnWebView, pnModelChoice.getSelectionModel().getSelectedItem(), ModelType.PN);
+
 	}
 
 

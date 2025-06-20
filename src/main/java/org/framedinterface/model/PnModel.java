@@ -60,9 +60,15 @@ public class PnModel extends AbstractModel  {
 
 		for (String act : activities) {
 
+			String[] planAction = act.split(";");
+			
+			if (planAction.length == 2) {
+				act = planAction[1];
+			}
+
 			if (getTransitionViaLabel(this.dataPetriNet.getTransitions(), act) == null) {
 				// Transition is not in PetriNet, cannot be fired.
-				if (act.startsWith("reset")){
+				if (act.startsWith("reset-petrinet")){
 					
 					this.petrinetSemantics.setCurrentState(this.dataPetriNet.getInitialMarking());
 					visStrings.add(createVisualisationString());
