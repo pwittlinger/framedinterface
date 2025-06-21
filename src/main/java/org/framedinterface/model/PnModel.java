@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.commons.collections4.BidiMap;
@@ -28,6 +29,7 @@ public class PnModel extends AbstractModel  {
 	public ArrayList<String> visStrings;
 	private ArrayList<String> firedTransitions;
 	private ArrayList<String> violatedFirings;
+	private Map<String, Integer> violationCount;
 
 	public PnModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, DataPetriNetsWithMarkings dataPetriNet) {
 		super(modelId, modelName, activities, activityToEncodingMap, ModelType.PN); //TODO
@@ -36,6 +38,9 @@ public class PnModel extends AbstractModel  {
 		this.visStrings = new ArrayList<>();
 		this.firedTransitions = new ArrayList<>();
 		this.violatedFirings = new ArrayList<>();
+		this.violationCount = new HashMap<String, Integer>();
+
+		initializeViolationCounts();
 
 		this.petrinetSemantics = PetrinetSemanticsFactory.regularPetrinetSemantics(Petrinet.class);
 		this.petrinetSemantics.initialize(dataPetriNet.getTransitions(), dataPetriNet.getInitialMarking());
@@ -60,13 +65,23 @@ public class PnModel extends AbstractModel  {
 
 		for (String act : activities) {
 
+			
+			String[] planAction = act.split(";");
+			
+			if (planAction.length == 2) {
+				act = planAction[1];
+			}
+
 			if (getTransitionViaLabel(this.dataPetriNet.getTransitions(), act) == null) {
 				// Transition is not in PetriNet, cannot be fired.
-				if (act.startsWith("reset")){
+				if (act.startsWith("reset-petrinet")){
 					
 					this.petrinetSemantics.setCurrentState(this.dataPetriNet.getInitialMarking());
-					visStrings.add(createVisualisationString());
+					this.violatedFirings.clear();
+					this.firedTransitions.clear();
+					//visStrings.add(createVisualisationString());
 				}
+				visStrings.add(createVisualisationString());
 				continue;
 			}
 			
@@ -77,10 +92,11 @@ public class PnModel extends AbstractModel  {
 				// Update the colour of the previously enabled transition
 				// Note the colour of the new transition + place
 				// Update Violation somewhere
-				Marking newMarking = this.getAllIncomingMarkings(act);
-				this.petrinetSemantics.setCurrentState(newMarking);
+				//Marking newMarking = this.getAllIncomingMarkings(act);
+				//this.petrinetSemantics.setCurrentState(newMarking);
 				System.out.println(currentlyEnabledTransitions.toString() + " does not contain " + act);
 				this.violatedFirings.add(act);
+				this.violationCount.put(act, this.violationCount.get(act)+1);
 
 				//Marking curState = this.petrinetSemantics.getCurrentState();
 				//ArrayList<Place> p_ = this.getAllIncomingPlaces(act);
@@ -88,8 +104,8 @@ public class PnModel extends AbstractModel  {
 				//	curState.add(tP);
 				//}
 				
-			} 
-			try {
+			}
+			else {			try {
 				// Always fire the transition
 				this.petrinetSemantics.executeExecutableTransition(getTransitionViaLabel(this.dataPetriNet.getTransitions(), act));
 				this.firedTransitions.add(act);
@@ -97,6 +113,8 @@ public class PnModel extends AbstractModel  {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
+			}
+
 			visStrings.add(createVisualisationString());
 
 		}
@@ -142,21 +160,21 @@ public class PnModel extends AbstractModel  {
 	    					
 	    					// Setting all regular transitions
 	    					if ((this.firedTransitions.contains(t.getLabel().toLowerCase())) && (!this.violatedFirings.contains(t.getLabel().toLowerCase()))){
-	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=black]; ");
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=black, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
 	    						//if ((!t.getLabel().isBlank())&& !(allEnabledTransitions.contains(t))) {
 	    						//sb.append(t.getLabel()+"; ");
 	    					}
-	    					else if((this.firedTransitions.contains(t.getLabel().toLowerCase())) && (this.violatedFirings.contains(t.getLabel().toLowerCase()))) {
-	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=red]; ");
+	    					else if((this.violatedFirings.contains(t.getLabel().toLowerCase()))) {
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=red, color=red, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
 	    						//sb.append(t.getLabel()+"; ");
 	    					}
 	    					// Regular Transitions that are enabled
 	    					else if ((allEnabledTransitions.contains(t))) {
-	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=green]; ");
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=green, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
 	    					}
 	    					else if (!(allEnabledTransitions.contains(t))) {
 	    						//sb.append(t.getLabel()+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=blue]; ");
-	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\"]; ");
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\" tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
 	    					}
 							
 						}
@@ -320,11 +338,18 @@ public class PnModel extends AbstractModel  {
 
 	@Override
 	public void resetModel(){
-		this.visStrings = new ArrayList<>();
-		this.firedTransitions = new ArrayList<>();
-		this.violatedFirings = new ArrayList<>();
+		this.visStrings.clear();
+		this.firedTransitions.clear();
+		this.violatedFirings.clear();
+		initializeViolationCounts();
 
 		this.petrinetSemantics = PetrinetSemanticsFactory.regularPetrinetSemantics(Petrinet.class);
 		this.petrinetSemantics.initialize(dataPetriNet.getTransitions(), dataPetriNet.getInitialMarking());
+	}
+
+	private void initializeViolationCounts(){
+		for (Transition t : this.dataPetriNet.getTransitions()) {
+			this.violationCount.put(t.getLabel().toLowerCase(), 0);
+		}
 	}
 }

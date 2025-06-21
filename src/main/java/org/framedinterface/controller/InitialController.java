@@ -210,7 +210,8 @@ public class InitialController {
 	private String finMarking;
 	private boolean resetDomain;
 	//private static String framedAutonomyJar = "C:\\Users\\paulw\\Desktop\\framedAutonomy\\FramedAutonomyTool.jar"; 
-	private static String framedAutonomyJar = "FramedAutonomyTool.jar"; 
+	private static String framedAutonomyJar = "FramedAutonomyTool.jar";
+	private ArrayList<String> currentPlan;
 
 	public void setStage(Stage stage) {
 		this.stage = stage;
@@ -322,6 +323,10 @@ public class InitialController {
 		//Triggering visualization update when the model selection is changed
 		declModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
 			declPath = newValue.getFilePath();
+
+			if (!currentPlan.isEmpty()){
+				newValue.updateMonitoringStates(currentPlan);
+			}
 			updateVisualization(declWebView, newValue, ModelType.DECLARE);
 			updateplanListViewStatistics(newValue, planListView.getItems());
 			
@@ -331,7 +336,15 @@ public class InitialController {
 			PnModel p_ = (PnModel) newValue;
 			finMarking = p_.finalMarking;
 			labelFinalMarking.setText(finMarking);
+			
+			if (!currentPlan.isEmpty()){
+				p_.updateMonitoringStates(currentPlan);
+			}
 			updateVisualization(pnWebView, newValue, ModelType.PN);
+
+
+			
+			
 		});
 
 		//Timeline setup
@@ -518,6 +531,7 @@ public class InitialController {
 			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions));
 			updateplanListView(onlyActions);
 			updateTimelineControls(onlyActions);
+			this.currentPlan = onlyActions;
 		}
 
 
