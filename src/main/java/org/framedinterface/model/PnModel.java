@@ -170,11 +170,12 @@ public class PnModel extends AbstractModel  {
 	    					}
 	    					// Regular Transitions that are enabled
 	    					else if ((allEnabledTransitions.contains(t))) {
-	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=green, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
 	    					}
-	    					else if (!(allEnabledTransitions.contains(t))) {
+							// Grey out the transition if it is not enabled
+	    					else if (!((allEnabledTransitions.contains(t)) || this.firedTransitions.contains(t.getLabel().toLowerCase()))) {
 	    						//sb.append(t.getLabel()+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=blue]; ");
-	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\" tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\" , style=filled, fillcolour=lightgrey, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
 	    					}
 							
 						}

@@ -37,6 +37,7 @@
 <?import javafx.scene.control.ChoiceBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.RadioButton?>
 <?import javafx.scene.control.Separator?>
 <?import javafx.scene.control.Slider?>
 <?import javafx.scene.control.SplitPane?>
@@ -157,6 +158,7 @@
                                  </children>
                               </HBox>
                               <ChoiceBox fx:id="declModelChoice" prefWidth="150.0" />
+                              <Label fx:id="selectedDecl" />
                            </children>
                            <opaqueInsets>
                               <Insets />
@@ -190,6 +192,8 @@
                                  </children>
                               </HBox>
                               <ChoiceBox fx:id="pnModelChoice" prefWidth="150.0" />
+                              <Label fx:id="selectedPN" />
+                              <RadioButton fx:id="bttnDisplayViolations" mnemonicParsing="false" onAction="#switchViolationStrings" text="Display Violations" />
                            </children>
                            <opaqueInsets>
                               <Insets />

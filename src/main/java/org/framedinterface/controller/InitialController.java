@@ -59,6 +59,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
+import javafx.scene.control.RadioButton;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
@@ -179,6 +180,13 @@ public class InitialController {
 	private Label totalEventsNumber;
 	@FXML
 	private Slider eventSlider;
+	    @FXML
+    private RadioButton bttnDisplayViolations;
+	    @FXML
+    private Label selectedDecl;
+
+    @FXML
+    private Label selectedPN;
 
 
 	private static String precentageFormat = "%.1f";
@@ -221,6 +229,7 @@ public class InitialController {
 	private void initialize() {
 		resetDomain = true;
 		currentPath = Paths.get(".").toAbsolutePath().normalize().toString();
+		currentPlan = new ArrayList<>();
 		
 		modelTabelView.setPlaceholder(new Label("No input models selected"));
 		modelNameColumn.setCellFactory(TextFieldTableCell.forTableColumn());
