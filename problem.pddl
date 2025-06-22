@@ -1,7 +1,6 @@
 (define (problem prob) (:domain alignment)
 	(:objects
 		
-		t0 t1 t2 - trace_state
 
 		s0_17 s0_34 s0_32 s0_23 s0_40 s0_12 s0_37 s0_10 s0_29 s0_16 
 		s0_7 s0_8 s0_3 s0_30 s0_11 s0_18 s0_15 s0_28 s0_24 s0_13 
@@ -11,22 +10,17 @@
 
 		s10 s11 s12 s20 s21 s22 s23 - automaton_state
 
-		activitya activityb activitye activityf activityc activityd activityi activityj activityn activityk 
-		activityl activityae n61 activityad n41 activityac activityab n64 n67 n45 
-		n66 activityaf activityq activityr activityo activityp activityaa activityu activityv activitys 
-		activityt activityy activityz activityw activityx - activity
+		activitya activityb activitye activityf activityc activityd activityi activityj activityg activityn 
+		activityk activityl activityap activityae n61 activityad n41 activityac activityab n64 
+		n67 n45 n66 activityaf activityq activityr activityo activityp activityaa activityu 
+		activityv activitys activityt activityy activityz activityw activityx - activity
 
-		precedence_activityf_activityo not_response_activityl_activityl petrinet 
-		response_activityj_activityp - constraint
+		not_response_activityl_activityl petrinet precedence_activityf_activityv 
+		response_activityg_activityap - constraint
 )
 	(:init 
 		(= (total-cost) 0)
-
-		;TRACE automaton:
-		(cur_trace_state t0)
-		(final_state t2)
-		(trace t0 activitya t1)
-		(trace t1 activityz t2)
+		(recovery_finished)
 
 		;Petri Net automaton:
 		(cur_state s0_0)
@@ -1507,18 +1501,18 @@
 
 
 		;DECLARE automata:
-		;response(activityj,activityp)
+		;response(activityg,activityap)
 		(cur_state s10)
 		(init_state s10)
 		(dummy_state s12)
 		(final_state s10)
-		(automaton s10 activityj s11)
-		(automaton s11 activityp s10)
-		(automaton s10 response_activityj_activityp s12)
-		(automaton s11 response_activityj_activityp s12)
-		(automaton s12 response_activityj_activityp s10)
+		(automaton s10 activityg s11)
+		(automaton s11 activityap s10)
+		(automaton s10 response_activityg_activityap s12)
+		(automaton s11 response_activityg_activityap s12)
+		(automaton s12 response_activityg_activityap s10)
 
-		;precedence(activityf,activityo)
+		;precedence(activityf,activityv)
 		(cur_state s20)
 		(init_state s20)
 		(dummy_state s23)
@@ -1526,11 +1520,11 @@
 		(final_state s21)
 		(is_sink s22)
 		(automaton s20 activityf s21)
-		(automaton s20 activityo s22)
-		(automaton s20 precedence_activityf_activityo s23)
-		(automaton s21 precedence_activityf_activityo s23)
-		(automaton s22 precedence_activityf_activityo s23)
-		(automaton s23 precedence_activityf_activityo s20)
+		(automaton s20 activityv s22)
+		(automaton s20 precedence_activityf_activityv s23)
+		(automaton s21 precedence_activityf_activityv s23)
+		(automaton s22 precedence_activityf_activityv s23)
+		(automaton s23 precedence_activityf_activityv s20)
 
 	)
 	(:goal (forall (?s - state) (imply (cur_state ?s) (final_state ?s))))

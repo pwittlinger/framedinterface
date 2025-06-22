@@ -158,7 +158,6 @@
                                  </children>
                               </HBox>
                               <ChoiceBox fx:id="declModelChoice" prefWidth="150.0" />
-                              <Label fx:id="selectedDecl" />
                            </children>
                            <opaqueInsets>
                               <Insets />
@@ -192,7 +191,6 @@
                                  </children>
                               </HBox>
                               <ChoiceBox fx:id="pnModelChoice" prefWidth="150.0" />
-                              <Label fx:id="selectedPN" />
                               <RadioButton fx:id="bttnDisplayViolations" mnemonicParsing="false" onAction="#switchViolationStrings" text="Display Violations" />
                            </children>
                            <opaqueInsets>
@@ -207,6 +205,24 @@
             <VBox>
                <children>
             <Label alignment="CENTER" font="$x1" style="&#10;" text="Prefix+Continuation" textAlignment="CENTER" textFill="$x2" wrapText="false" VBox.vgrow="ALWAYS" />
+                  <HBox>
+                     <children>
+                        <Label fx:id="selectedDecl" text="DECLARE MODEL" textAlignment="CENTER">
+                           <HBox.margin>
+                              <Insets left="5.0" right="15.0" />
+                           </HBox.margin></Label>
+                        <Label fx:id="selectedPN" text="PN MODEL" textAlignment="CENTER">
+                           <HBox.margin>
+                              <Insets left="15.0" right="5.0" />
+                           </HBox.margin></Label>
+                     </children>
+                     <padding>
+                        <Insets left="5.0" right="5.0" />
+                     </padding>
+                     <VBox.margin>
+                        <Insets />
+                     </VBox.margin>
+                  </HBox>
                   <ListView fx:id="planListView" snapToPixel="false" VBox.vgrow="ALWAYS" />
                </children>
             </VBox>

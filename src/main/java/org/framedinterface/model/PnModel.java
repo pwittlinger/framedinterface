@@ -27,6 +27,7 @@ public class PnModel extends AbstractModel  {
 	public String finalMarking; 
 	public PetrinetSemantics petrinetSemantics;
 	public ArrayList<String> visStrings;
+	public ArrayList<String> visStringsViolation;
 	private ArrayList<String> firedTransitions;
 	private ArrayList<String> violatedFirings;
 	private Map<String, Integer> violationCount;
@@ -92,17 +93,10 @@ public class PnModel extends AbstractModel  {
 				// Update the colour of the previously enabled transition
 				// Note the colour of the new transition + place
 				// Update Violation somewhere
-				//Marking newMarking = this.getAllIncomingMarkings(act);
-				//this.petrinetSemantics.setCurrentState(newMarking);
 				System.out.println(currentlyEnabledTransitions.toString() + " does not contain " + act);
 				this.violatedFirings.add(act);
 				this.violationCount.put(act, this.violationCount.get(act)+1);
 
-				//Marking curState = this.petrinetSemantics.getCurrentState();
-				//ArrayList<Place> p_ = this.getAllIncomingPlaces(act);
-				//for (Place tP : p_){
-				//	curState.add(tP);
-				//}
 				
 			}
 			else {			try {
@@ -137,12 +131,10 @@ public class PnModel extends AbstractModel  {
 
 	public String createVisualisationString() {
 		StringBuilder sb = new StringBuilder();
+		//Initialize Graph Root
 	    		sb.append("digraph \"\" {");
 	    		sb.append("rankdir=LR ");
 				sb.append("id = \"graphRoot_" + getModelId() + "\" ");
-
-				
-
 
 	    		try {
 	    			
@@ -155,18 +147,12 @@ public class PnModel extends AbstractModel  {
 	    				if (!t.getLabel().isBlank()) {
 	    					String activityEncoding = this.getActivityEncoding(t.getLabel());
 	    					
-	    					
-	    					
-	    					
 	    					// Setting all regular transitions
 	    					if ((this.firedTransitions.contains(t.getLabel().toLowerCase())) && (!this.violatedFirings.contains(t.getLabel().toLowerCase()))){
 	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=black, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
-	    						//if ((!t.getLabel().isBlank())&& !(allEnabledTransitions.contains(t))) {
-	    						//sb.append(t.getLabel()+"; ");
 	    					}
 	    					else if((this.violatedFirings.contains(t.getLabel().toLowerCase()))) {
-	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=red, color=red, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
-	    						//sb.append(t.getLabel()+"; ");
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=red, color=black, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
 	    					}
 	    					// Regular Transitions that are enabled
 	    					else if ((allEnabledTransitions.contains(t))) {

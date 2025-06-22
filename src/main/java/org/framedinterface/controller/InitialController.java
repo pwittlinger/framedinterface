@@ -217,6 +217,7 @@ public class InitialController {
 	private String currentPath;
 	private String finMarking;
 	private boolean resetDomain;
+	private boolean displayViolations;
 	//private static String framedAutonomyJar = "C:\\Users\\paulw\\Desktop\\framedAutonomy\\FramedAutonomyTool.jar"; 
 	private static String framedAutonomyJar = "FramedAutonomyTool.jar";
 	private ArrayList<String> currentPlan;
@@ -228,6 +229,7 @@ public class InitialController {
 	@FXML
 	private void initialize() {
 		resetDomain = true;
+		displayViolations = false;
 		currentPath = Paths.get(".").toAbsolutePath().normalize().toString();
 		currentPlan = new ArrayList<>();
 		
@@ -456,6 +458,9 @@ public class InitialController {
 
 		modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
 
+		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+		selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+
 		//Write prefix to file and then pass it
 
 		BufferedWriter writer = new BufferedWriter(new FileWriter(currentPath + "/prefix.txt"));
@@ -668,11 +673,10 @@ public class InitialController {
 		
 		visualizationWebView.getEngine().getLoadWorker().stateProperty().addListener(initialLoadListener);
 		
-		//visualizationWebView.getEngine().load((getClass().getClassLoader().getResource("visPage.html")).toString());
 		
 		visualizationWebView.getEngine().load((getClass().getClassLoader().getResource("visPage.html")).toString());
 		visualizationWebView.setContextMenuEnabled(false); //Setting it in FXML causes an IllegalArgumentException
-		//((JSObject)visualizationWebView.getEngine().executeScript("window")).setMember("app", this);
+		
 
 		if (modelType == ModelType.DECLARE) { //This part is a bit annoying, but there is no true "pass by reference" in Java 
 			visualizationWebView.getEngine().getLoadWorker().stateProperty().addListener((observable, oldValue, newValue) -> {
@@ -798,11 +802,6 @@ public class InitialController {
 		planListView.getItems().addAll(eventDataList);
 		planListView.getSelectionModel().selectFirst();
 		
-		/* 
-		planListView.getItems().clear();
-		planListView.getItems().addAll(activities);
-		planListView.getSelectionModel().selectFirst();
-		*/
 	}
 
 	//Updates the statistics shown in the planListView
@@ -959,6 +958,15 @@ public class InitialController {
 		} else {
 			System.err.println("documentObject must be instance of Document class");
 		}
+	}
+
+	@FXML
+	private void switchViolationStrings() {
+
+		displayViolations = !displayViolations;
+
+		updateSelectedModelVisualizations();
+		
 	}
 
 }
