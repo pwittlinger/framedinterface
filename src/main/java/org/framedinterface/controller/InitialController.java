@@ -92,8 +92,8 @@ public class InitialController {
 	@FXML
     private Button buttonResetNo;
 
-    @FXML
-    private Button buttonResetYes;
+    //@FXML
+    //private Button buttonResetYes;
 
 	@FXML
 	private TableView<AbstractModel> modelTabelView;
@@ -187,6 +187,8 @@ public class InitialController {
 
     @FXML
     private Label selectedPN;
+    @FXML
+    private RadioButton buttonResetYes;
 
 
 	private static String precentageFormat = "%.1f";
@@ -336,6 +338,7 @@ public class InitialController {
 			declPath = newValue.getFilePath();
 
 			if (!currentPlan.isEmpty()){
+				newValue.resetModel();
 				newValue.updateMonitoringStates(currentPlan, displayViolations);
 			}
 			updateVisualization(declWebView, newValue, ModelType.DECLARE);
@@ -348,9 +351,10 @@ public class InitialController {
 			finMarking = p_.finalMarking;
 			labelFinalMarking.setText(finMarking);
 			
-			if (!currentPlan.isEmpty()){
-				p_.updateMonitoringStates(currentPlan, displayViolations);
-			}
+			//if (!currentPlan.isEmpty()){
+			//	p_.resetModel();
+			//	p_.updateMonitoringStates(currentPlan, displayViolations);
+			//}
 			updateVisualization(pnWebView, newValue, ModelType.PN);
 
 
@@ -551,16 +555,25 @@ public class InitialController {
 
 	}
 
+	/*
     @FXML
     void onClickResetNo(ActionEvent event) {
 		resetDomain = false;
 		labelCurrentDomain.setText("Domain_no_reset.pddl");
     }
+	*/
 
     @FXML
     void onClickResetYes(ActionEvent event) {
-		resetDomain = true;
-		labelCurrentDomain.setText("Domain_with_reset.pddl");
+		//resetDomain = true;
+		resetDomain = !resetDomain;
+		if (resetDomain) {
+			labelCurrentDomain.setText("Domain_with_reset.pddl");
+		}
+		else{
+			labelCurrentDomain.setText("Domain_no_reset.pddl");
+		}
+		
     }
 
 	@FXML

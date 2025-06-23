@@ -101,6 +101,10 @@ public class DeclareModel extends AbstractModel  {
 	@Override
 	public void resetModel(){
 
+		for (DeclareConstraint dc : declareConstraints) {
+			dc.resetAutomaton();
+		}
+
 	}
 	
 	

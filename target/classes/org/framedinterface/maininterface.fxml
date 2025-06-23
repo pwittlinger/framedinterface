@@ -111,9 +111,11 @@
                   </HBox>
                   <HBox alignment="CENTER">
                      <children>
-                        <Button fx:id="buttonPrefix" mnemonicParsing="false" onAction="#onClickPrefix" text="Confirm Prefix" />
-                        <Button fx:id="buttonResetYes" mnemonicParsing="false" onAction="#onClickResetYes" text="Domain Reset" />
-                        <Button fx:id="buttonResetNo" mnemonicParsing="false" onAction="#onClickResetNo" text="Domain No" />
+                        <Button fx:id="buttonPrefix" mnemonicParsing="false" onAction="#onClickPrefix" text="Confirm Prefix">
+                           <HBox.margin>
+                              <Insets right="20.0" />
+                           </HBox.margin></Button>
+                        <RadioButton fx:id="buttonResetYes" mnemonicParsing="false" onAction="#onClickResetYes" text="No Model Reset" />
                      </children>
                      <VBox.margin>
                         <Insets />

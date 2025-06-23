@@ -56,13 +56,13 @@ public class PnModel extends AbstractModel  {
 
 		//Marking curState = this.petrinetSemantics.getCurrentState();
 		if (this.visStrings.isEmpty()){
-			visStrings.add(createVisualisationString());
-			visStringsViolation.add(createVisualisationStringViolation());
+			this.visStrings.add(createVisualisationString());
+			this.visStringsViolation.add(createVisualisationStringViolation());
 		} else {
 			// The prefix sync is part of the plan, so in order to keep indexing correct I don't want to recompute the prefix
 			resetVisualizationStrings();
 			this.visStrings.add(createVisualisationString());
-			visStringsViolation.add(createVisualisationStringViolation());
+			this.visStringsViolation.add(createVisualisationStringViolation());
 		}
 
 
@@ -87,8 +87,8 @@ public class PnModel extends AbstractModel  {
 					this.firedTransitions.clear();
 					//visStrings.add(createVisualisationString());
 				}
-				visStrings.add(createVisualisationString());
-				visStringsViolation.add(createVisualisationStringViolation());
+				this.visStrings.add(createVisualisationString());
+				this.visStringsViolation.add(createVisualisationStringViolation());
 				continue;
 			}
 			
@@ -116,13 +116,13 @@ public class PnModel extends AbstractModel  {
 			}
 			}
 
-			visStrings.add(createVisualisationString());
-			visStringsViolation.add(createVisualisationStringViolation());
+			this.visStrings.add(createVisualisationString());
+			this.visStringsViolation.add(createVisualisationStringViolation());
 
 		}
 		// Duplicate final marking to not run into an index out of bounds exception
-		visStrings.add(createVisualisationString());
-		visStringsViolation.add(createVisualisationStringViolation());
+		this.visStrings.add(createVisualisationString());
+		this.visStringsViolation.add(createVisualisationStringViolation());
 		
 	}
 
