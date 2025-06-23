@@ -57,9 +57,38 @@ public class DeclareModel extends AbstractModel  {
 			else{
 				activity = planAction[0];
 			}
+
 			Map<DeclareConstraint, MonitoringState> monitoringState = new HashMap<DeclareConstraint, MonitoringState>();
 			declareConstraints.forEach(declareConstraint -> monitoringState.put(declareConstraint, declareConstraint.executeNextActivity(activity.toLowerCase())));
 			monitoringStates.add(monitoringState);
+			
+			//Check if the action is reset-petrinet
+			if (activity.startsWith("reset") && !activity.equals("reset-petrinet")) {
+				// Format for Plan output us absence_activitym
+				String[] resetAct = activity.split("_");
+				
+				for (DeclareConstraint dc : declareConstraints) {
+
+					String templateName_ = dc.getTemplate().getTemplateName().toLowerCase();
+					String activ_;
+					if (dc.getTemplate().getReverseActivationTarget()) {
+						activ_ = dc.getTargetActivity();
+					} else {activ_ = dc.getActivationActivity();}
+					
+					if ((templateName_.equals(resetAct[0].split("-")[1])) && (activ_.toLowerCase().equals(resetAct[1]))) {
+						if (resetAct.length>2) {
+							String target_;
+							if (dc.getTemplate().getReverseActivationTarget()) {
+									target_ = dc.getActivationActivity();
+							} else {target_ = dc.getTargetActivity();}
+							if (!target_.toLowerCase().equals(resetAct[2])) {
+								continue;
+							}
+						}
+						dc.resetAutomaton();
+					}
+				}
+			}
 		}
 		
 		//Adding final monitoring states  (constraint states when the trace terminates)
