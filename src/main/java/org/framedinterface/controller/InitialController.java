@@ -481,6 +481,7 @@ public class InitialController {
 		ArrayList<String> commandStrings = new ArrayList<String>();
 		commandStrings.add("java");
 		commandStrings.add("-jar");
+		//commandStrings.add(currentPath+"/"+framedAutonomyJar);
 		commandStrings.add(currentPath+"/"+framedAutonomyJar);
 		
 		if (modelTabelView.getItems().size() < 2){

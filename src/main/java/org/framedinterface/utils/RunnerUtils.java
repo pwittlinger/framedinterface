@@ -74,7 +74,7 @@ public class RunnerUtils {
     public static int runPlanner(String currentPath, boolean domainReset) throws InterruptedException, IOException{
         ArrayList<String> commandFastDownward = new ArrayList<String>();
             String domainPath;
-			String fastDownwardPath = currentPath+"/fast-downward-22.12.tar/fast-downward.py";
+			String fastDownwardPath = currentPath+"/fast-downward/fast-downward.py";
 			
 			String problemPath = currentPath+"/problem.pddl";
             if (domainReset){
