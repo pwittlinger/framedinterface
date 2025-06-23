@@ -57,9 +57,9 @@ public abstract class AbstractModel {
 		return this.fullFilePath;
 	}
 	
-	public abstract void updateMonitoringStates(List<String> activities);
+	public abstract void updateMonitoringStates(List<String> activities, boolean displayViolations);
 	
-	public abstract String getVisualisationString(int activityIndex);
+	public abstract String getVisualisationString(int activityIndex, boolean displayViolations);
 
 	@Override
 	public String toString() {

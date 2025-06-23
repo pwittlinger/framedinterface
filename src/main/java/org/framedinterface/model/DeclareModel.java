@@ -39,7 +39,7 @@ public class DeclareModel extends AbstractModel  {
 	}
 
 	@Override
-	public void updateMonitoringStates(List<String> activities) {
+	public void updateMonitoringStates(List<String> activities, boolean displayViolations) {
 		//Resetting the automata and adding initial monitoring states (constraint states before any events occur)
 		Map<DeclareConstraint, MonitoringState> initialStates = new HashMap<DeclareConstraint, MonitoringState>();
 		declareConstraints.forEach(declareConstraint -> initialStates.put(declareConstraint, declareConstraint.resetAutomaton()));
@@ -74,7 +74,7 @@ public class DeclareModel extends AbstractModel  {
 	}
 
 	@Override
-	public String getVisualisationString(int activityIndex) {
+	public String getVisualisationString(int activityIndex, boolean displayViolations) {
 		StringBuilder sb = new StringBuilder("digraph \"\" {");
 		sb.append("id = \"graphRoot_" + getModelId() + "\"");
 		sb.append("ranksep = \".6\"");

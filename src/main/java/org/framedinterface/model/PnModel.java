@@ -30,6 +30,7 @@ public class PnModel extends AbstractModel  {
 	public ArrayList<String> visStringsViolation;
 	private ArrayList<String> firedTransitions;
 	private ArrayList<String> violatedFirings;
+	private ArrayList<String> violatedFiringsKeep;
 	private Map<String, Integer> violationCount;
 
 	public PnModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, DataPetriNetsWithMarkings dataPetriNet) {
@@ -37,8 +38,10 @@ public class PnModel extends AbstractModel  {
 		this.dataPetriNet = dataPetriNet;
 		this.setFinalMarking();
 		this.visStrings = new ArrayList<>();
+		this.visStringsViolation = new ArrayList<>();
 		this.firedTransitions = new ArrayList<>();
 		this.violatedFirings = new ArrayList<>();
+		this.violatedFiringsKeep = new ArrayList<>();
 		this.violationCount = new HashMap<String, Integer>();
 
 		initializeViolationCounts();
@@ -48,16 +51,18 @@ public class PnModel extends AbstractModel  {
 	}
 
 	@Override
-	public void updateMonitoringStates(List<String> activities) {
+	public void updateMonitoringStates(List<String> activities, boolean displayViolations) {
 		// TODO Auto-generated method stub
 
 		//Marking curState = this.petrinetSemantics.getCurrentState();
 		if (this.visStrings.isEmpty()){
 			visStrings.add(createVisualisationString());
+			visStringsViolation.add(createVisualisationStringViolation());
 		} else {
 			// The prefix sync is part of the plan, so in order to keep indexing correct I don't want to recompute the prefix
 			resetVisualizationStrings();
 			this.visStrings.add(createVisualisationString());
+			visStringsViolation.add(createVisualisationStringViolation());
 		}
 
 
@@ -83,6 +88,7 @@ public class PnModel extends AbstractModel  {
 					//visStrings.add(createVisualisationString());
 				}
 				visStrings.add(createVisualisationString());
+				visStringsViolation.add(createVisualisationStringViolation());
 				continue;
 			}
 			
@@ -95,6 +101,7 @@ public class PnModel extends AbstractModel  {
 				// Update Violation somewhere
 				System.out.println(currentlyEnabledTransitions.toString() + " does not contain " + act);
 				this.violatedFirings.add(act);
+				this.violatedFiringsKeep.add(act);
 				this.violationCount.put(act, this.violationCount.get(act)+1);
 
 				
@@ -110,10 +117,12 @@ public class PnModel extends AbstractModel  {
 			}
 
 			visStrings.add(createVisualisationString());
+			visStringsViolation.add(createVisualisationStringViolation());
 
 		}
 		// Duplicate final marking to not run into an index out of bounds exception
 		visStrings.add(createVisualisationString());
+		visStringsViolation.add(createVisualisationStringViolation());
 		
 	}
 
@@ -257,8 +266,9 @@ public class PnModel extends AbstractModel  {
 	}
 
 	@Override
-	public String getVisualisationString(int activityIndex) {
+	public String getVisualisationString(int activityIndex, boolean displayViolations) {
 				if (this.visStrings.isEmpty()) return createVisualisationString();
+				if (displayViolations) return this.visStringsViolation.get(activityIndex);
 	    		return this.visStrings.get(activityIndex);
 	}
 
@@ -301,6 +311,7 @@ public class PnModel extends AbstractModel  {
 
 	public void resetVisualizationStrings(){
 		this.visStrings.clear();
+		this.visStringsViolation.clear();
 	}
 
 	public ArrayList<Place> getAllIncomingPlaces(String tLabel) {
@@ -325,7 +336,7 @@ public class PnModel extends AbstractModel  {
 
 	@Override
 	public void resetModel(){
-		this.visStrings.clear();
+		resetVisualizationStrings();
 		this.firedTransitions.clear();
 		this.violatedFirings.clear();
 		initializeViolationCounts();
@@ -338,5 +349,133 @@ public class PnModel extends AbstractModel  {
 		for (Transition t : this.dataPetriNet.getTransitions()) {
 			this.violationCount.put(t.getLabel().toLowerCase(), 0);
 		}
+	}
+
+
+	public String createVisualisationStringViolation() {
+		StringBuilder sb = new StringBuilder();
+		//Initialize Graph Root
+	    		sb.append("digraph \"\" {");
+	    		sb.append("rankdir=LR ");
+				sb.append("id = \"graphRoot_" + getModelId() + "\" ");
+
+	    		try {
+	    			
+	    			Collection<Place> allPlaces = this.dataPetriNet.getPlaces();
+	    			Collection<Transition> allTransitions = this.dataPetriNet.getTransitions();
+					Collection<Transition> allEnabledTransitions = this.petrinetSemantics.getExecutableTransitions();
+		    		
+		    		sb.append("node [shape=box];");
+	    			for(Transition t : allTransitions) {
+	    				if (!t.getLabel().isBlank()) {
+	    					String activityEncoding = this.getActivityEncoding(t.getLabel());
+	    					
+	    					// Setting all regular transitions
+	    					if ((this.firedTransitions.contains(t.getLabel().toLowerCase())) && (!this.violatedFirings.contains(t.getLabel().toLowerCase()))){
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=black, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
+	    					}
+	    					else if((this.violatedFiringsKeep.contains(t.getLabel().toLowerCase()))) {
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=red, color=black, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
+	    					}
+	    					// Regular Transitions that are enabled
+	    					else if ((allEnabledTransitions.contains(t))) {
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
+	    					}
+							// Grey out the transition if it is not enabled
+	    					else if (!((allEnabledTransitions.contains(t)) || this.firedTransitions.contains(t.getLabel().toLowerCase()))) {
+	    						//sb.append(t.getLabel()+" [label=\""+t.getLabel()+"\", style=filled, fillcolor=blue]; ");
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\" , style=filled, fillcolour=lightgrey, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
+	    					}
+							
+						}
+	    				
+	    				
+	    			}
+
+	    			
+		    		sb.append("node [shape=rect, style=filled, fillcolor=black; width=0.15, label=\"\"]; ");
+	    			HashMap<NodeID, String> allSilentTransitions = new HashMap<NodeID, String>();
+	    			int invCount = 0;
+	    			for(Transition t :allTransitions) {
+	    				if(t.isInvisible()) {
+	    					String s_ = "t"+String.valueOf(invCount);
+	    					allSilentTransitions.put(t.getId(),  s_);
+	    					sb.append(s_+"; ");
+	    					invCount++;
+	    				}
+	    			}
+	    			
+		    		
+		    		//Marking initialMarking = dataPetriNet.getInitialMarking();
+
+					// Potentially an issue if multiple places have a marking
+					Marking currentMarking = petrinetSemantics.getCurrentState();
+					List<Place> markingList = currentMarking.toList();
+					
+
+		    		//String initialPlaceLabel = initialMarking.toArray()[0].toString();
+		    		Marking[] finalMarking = dataPetriNet.getFinalMarkings();
+		    		String finalMarkingLabel = finalMarking[0].toArray()[0].toString();
+		    		//System.out.println(initialMarking.toArray()[0].toString());
+		    		
+		    		//System.out.println("Initial Marking: " + initialPlaceLabel);
+		    		System.out.println("Final Marking: " + finalMarkingLabel);
+		    		
+		    		sb.append("node [shape=doublecircle, fillcolor=white]; ");
+		    		sb.append(finalMarkingLabel+" [label=\""+finalMarkingLabel+"\"]; ");
+		    		
+		    		
+		    		//sb.append("# Define places as small circles");
+		    		sb.append("node [shape=circle, fillcolor=white]; ");
+		    		
+		    		for (Place p : allPlaces) {
+						// Set a Token for each Place with a Token
+						if (markingList.contains(p)) {
+							sb.append(p.getLabel()+" [label=\"&#x2022;\", fontsize=\"40pt\", width=0.69, fixedsize=true, fillcolor=white]; ");
+							
+						}
+
+		    			else if (p.getLabel() == finalMarkingLabel) {
+		    				// Do nothing because handled above
+		    			}
+		    			else {
+			    			sb.append(p.getLabel()+" [label=\""+p.getLabel()+"\"]; ");
+		    			}
+		    			
+
+		    		}
+	    			
+	    			Set<PetrinetEdge<? extends PetrinetNode, ? extends PetrinetNode>> allEdges = dataPetriNet.getEdges();
+	    			
+	    			for (PetrinetEdge<? extends PetrinetNode, ? extends PetrinetNode> edge : allEdges) {
+	    				String source = edge.getSource().getLabel().toString();
+	    				String target = edge.getTarget().getLabel().toString();
+
+	    				NodeID sourceNodeID = edge.getSource().getId();
+	    				NodeID targetNodeID = edge.getTarget().getId();
+	    				
+	    				if ((allSilentTransitions.containsKey(sourceNodeID)) || (allSilentTransitions.containsKey(targetNodeID))) {
+	    					if (allSilentTransitions.containsKey(sourceNodeID)) {
+	    						sb.append(allSilentTransitions.get(sourceNodeID) + " -> " + target + ";");
+	    					}
+	    					else {
+	    						sb.append(source + " -> " + allSilentTransitions.get(targetNodeID) + ";");
+	    					}
+	    				} else if ((allPlaces.contains(edge.getSource())) && (allTransitions.contains(edge.getTarget()))) {
+							//System.out.println(source + " -> " + target + ";");
+		    				sb.append(source + " -> " + this.getActivityEncoding(target) + ";");
+	    				} else if ((allTransitions.contains(edge.getSource())) && (allPlaces.contains(edge.getTarget()))) {
+							sb.append(this.getActivityEncoding(source) + " -> " + target + ";");
+						}
+	    				
+	    			}
+	    			sb.append("}");
+	    			//System.out.println(sb.toString());
+	    		} catch (Exception e) {
+	    			e.printStackTrace();
+	    		}
+	        
+		
+		return sb.toString().replace("'", "\\'");
 	}
 }

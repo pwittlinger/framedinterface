@@ -336,7 +336,7 @@ public class InitialController {
 			declPath = newValue.getFilePath();
 
 			if (!currentPlan.isEmpty()){
-				newValue.updateMonitoringStates(currentPlan);
+				newValue.updateMonitoringStates(currentPlan, displayViolations);
 			}
 			updateVisualization(declWebView, newValue, ModelType.DECLARE);
 			updateplanListViewStatistics(newValue, planListView.getItems());
@@ -349,7 +349,7 @@ public class InitialController {
 			labelFinalMarking.setText(finMarking);
 			
 			if (!currentPlan.isEmpty()){
-				p_.updateMonitoringStates(currentPlan);
+				p_.updateMonitoringStates(currentPlan, displayViolations);
 			}
 			updateVisualization(pnWebView, newValue, ModelType.PN);
 
@@ -430,7 +430,7 @@ public class InitialController {
 				}
 			}
 			//modelTabelView.getItems().addAll(abstractModels);
-			abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix)); //Monitoring states for an empty prefix
+			abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations)); //Monitoring states for an empty prefix
 			modelTabelView.getItems().addAll(abstractModels);
 		}
     }
@@ -542,7 +542,7 @@ public class InitialController {
 
 			}
 			System.out.println(onlyActions);
-			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions));
+			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
 			updateplanListView(onlyActions);
 			updateTimelineControls(onlyActions);
 			this.currentPlan = onlyActions;
@@ -600,7 +600,7 @@ public class InitialController {
 				}
 			}
 		}
-		modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix));
+		modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
 		updateplanListView(tracePrefix);
 		updateTimelineControls(tracePrefix);
 
@@ -898,7 +898,7 @@ public class InitialController {
 			//((JSObject)visualizationWebView.getEngine().executeScript("window")).setMember("app", this); //Does not work after reload for some reason
 			visualizationWebView.getEngine().executeScript("clearModel()");
 		} else {
-			visualizationString = abstractModel.getVisualisationString(currentEventIndex.get());
+			visualizationString = abstractModel.getVisualisationString(currentEventIndex.get(), displayViolations);
 			if (visualizationString != null) {
 				script = "setModel('" + visualizationString + "')";
 				if (visualizationWebView.getEngine().getLoadWorker().stateProperty().get() == Worker.State.SUCCEEDED) { //If load worker is not busy then execute current script
