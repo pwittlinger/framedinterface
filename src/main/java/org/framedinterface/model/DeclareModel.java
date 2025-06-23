@@ -58,10 +58,6 @@ public class DeclareModel extends AbstractModel  {
 				activity = planAction[0];
 			}
 
-			Map<DeclareConstraint, MonitoringState> monitoringState = new HashMap<DeclareConstraint, MonitoringState>();
-			declareConstraints.forEach(declareConstraint -> monitoringState.put(declareConstraint, declareConstraint.executeNextActivity(activity.toLowerCase())));
-			monitoringStates.add(monitoringState);
-			
 			//Check if the action is reset-petrinet
 			if (activity.startsWith("reset") && !activity.equals("reset-petrinet")) {
 				// Format for Plan output us absence_activitym
@@ -89,6 +85,12 @@ public class DeclareModel extends AbstractModel  {
 					}
 				}
 			}
+
+			Map<DeclareConstraint, MonitoringState> monitoringState = new HashMap<DeclareConstraint, MonitoringState>();
+			declareConstraints.forEach(declareConstraint -> monitoringState.put(declareConstraint, declareConstraint.executeNextActivity(activity.toLowerCase())));
+			monitoringStates.add(monitoringState);
+			
+			
 		}
 		
 		//Adding final monitoring states  (constraint states when the trace terminates)
