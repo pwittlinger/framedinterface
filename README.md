@@ -8,4 +8,8 @@ It takes process models in ".pnml" and ".decl" format, as well as a Prefix, and 
 ## Preliminiaries
 The tool is known to work with Java 17.
 
-In order to run the Framed Autonomy tool, download the JAR file [here] (https://github.com/giacomo1096/FramedAutonomyTool/blob/79dcaaa88d8f51f28e64723c8650e8d166f6ff9e/tool/FramedAutonomyTool.jar) and put it into the root directory of the project.
+In order to run the Framed Autonomy tool, download the JAR file [here] (https://github.com/giacomo1096/FramedAutonomyTool/blob/79dcaaa88d8f51f28e64723c8650e8d166f6ff9e/tool/FramedAutonomyTool.jar) and put it into the same directory as the launcher project.
+
+Additionally copy the two PDDL Domain files [domain_no_reset.pddl](https://github.com/giacomo1096/FramedAutonomyTool/blob/79dcaaa88d8f51f28e64723c8650e8d166f6ff9e/tool/domain_no_reset.pddl) and [domain_with_reset.pddl](https://github.com/giacomo1096/FramedAutonomyTool/blob/79dcaaa88d8f51f28e64723c8650e8d166f6ff9e/tool/domain_with_reset.pddl) into the same directory as the launcher.
+
+Additionally, download the Fast Downward Planner ([here](https://www.fast-downward.org/latest/)), and compile it into a directory called "fast-downward".
