@@ -1,7 +1,7 @@
 (define (problem prob) (:domain alignment)
 	(:objects
 		
-		t0 t1 t2 - trace_state
+		t0 t1 t2 t3 - trace_state
 
 		s0_6 s0_25 s0_31 s0_32 s0_16 s0_29 s0_5 s0_2 s0_10 s0_27 
 		s0_24 s0_14 s0_17 s0_9 s0_1 s0_4 s0_21 s0_15 s0_23 s0_18 
@@ -25,9 +25,10 @@
 
 		;TRACE automaton:
 		(cur_trace_state t0)
-		(final_state t2)
-		(trace t0 activitya t1)
-		(trace t1 activityv t2)
+		(final_state t3)
+		(trace t0 activityar t1)
+		(trace t1 activityg t2)
+		(trace t2 activityv t3)
 
 		;Petri Net automaton:
 		(cur_state s0_0)
