@@ -61,18 +61,34 @@ public class DeclareModel extends AbstractModel  {
 			//Check if the action is reset-petrinet
 			if (activity.startsWith("reset") && !activity.equals("reset-petrinet")) {
 				// Format for Plan output us absence_activitym
-				String[] resetAct = activity.split("_");
+				
+				//String[] resetAct = activity.split("_");
+				String resetAct = activity.substring(6);
+				//first remove "reset-": this part is present on all of them
 				
 				for (DeclareConstraint dc : declareConstraints) {
 
-					String templateName_ = dc.getTemplate().getTemplateName().toLowerCase();
+					// This causes an issue for no coexistence constraints, as the planner appends another _ and -
+					// This turns it into not_co-existence_act1_act2
+					String templateName_ = dc.getTemplate().getTemplateName().toLowerCase(); // not co-existence
+					//
+					templateName_ = templateName_.replace(" ", "_");// Making sure the planner output and the template name match up
 					String activ_;
 					if (dc.getTemplate().getReverseActivationTarget()) {
 						activ_ = dc.getTargetActivity();
 					} else {activ_ = dc.getActivationActivity();}
 					
-					if ((templateName_.equals(resetAct[0].split("-")[1])) && (activ_.toLowerCase().equals(resetAct[1]))) {
-						if (resetAct.length>2) {
+					//if ((templateName_.equals(resetAct[0].split("-")[1])) && (activ_.toLowerCase().equals(resetAct[1]))) {
+					if (resetAct.contains(templateName_) && (resetAct.contains(activ_.toLowerCase()))) {
+						String target_;
+							if (dc.getTemplate().getReverseActivationTarget()) {
+									target_ = dc.getActivationActivity();
+							} else {target_ = dc.getTargetActivity();}
+
+						if (!(target_.isBlank())&&(!resetAct.contains(target_.toLowerCase()))){
+							continue;
+						}
+						/*if (resetAct.length>2) {
 							String target_;
 							if (dc.getTemplate().getReverseActivationTarget()) {
 									target_ = dc.getActivationActivity();
@@ -81,6 +97,7 @@ public class DeclareModel extends AbstractModel  {
 								continue;
 							}
 						}
+						*/
 						dc.resetAutomaton();
 					}
 				}

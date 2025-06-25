@@ -339,6 +339,7 @@ public class PnModel extends AbstractModel  {
 		resetVisualizationStrings();
 		this.firedTransitions.clear();
 		this.violatedFirings.clear();
+		this.violatedFiringsKeep.clear();
 		initializeViolationCounts();
 
 		this.petrinetSemantics = PetrinetSemanticsFactory.regularPetrinetSemantics(Petrinet.class);
@@ -371,7 +372,7 @@ public class PnModel extends AbstractModel  {
 	    					String activityEncoding = this.getActivityEncoding(t.getLabel());
 	    					
 	    					// Setting all regular transitions
-	    					if ((this.firedTransitions.contains(t.getLabel().toLowerCase())) && (!this.violatedFirings.contains(t.getLabel().toLowerCase()))){
+	    					if ((this.firedTransitions.contains(t.getLabel().toLowerCase())) && (!this.violatedFiringsKeep.contains(t.getLabel().toLowerCase()))){
 	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=black, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
 	    					}
 	    					else if((this.violatedFiringsKeep.contains(t.getLabel().toLowerCase()))) {

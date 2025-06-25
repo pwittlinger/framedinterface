@@ -25,6 +25,7 @@ public class FileUtils {
 
 	public static ArrayList<String> parsePlan(String resultFilePath){
 		ArrayList<String> plan = new ArrayList<String>();
+		String tCost;
 		boolean addLineIntoPlan = false;
 		File file = new File(resultFilePath);
 		try (Scanner s = new Scanner(file)) {
@@ -41,6 +42,11 @@ public class FileUtils {
 				if (addLineIntoPlan){
 					plan.add(line);
 				}
+
+				if(line.matches("^\\[t=\\d+\\.\\d+[smh],\\s\\d+\\s[KMG]B\\]\\sPlan\\scost:\\s\\d+$")){
+					tCost = line.split(":")[1].strip();
+					System.out.println("Current Plan Cost:\t"+tCost);
+				}
 			}
 		} catch (FileNotFoundException e) {
 		
@@ -52,6 +58,29 @@ public class FileUtils {
 		plan.remove(0);
 		return plan;
 	}
+
+	public static String parsePlanCost(String resultFilePath){
+		String tCost = "";
+		File file = new File(resultFilePath);
+		try (Scanner s = new Scanner(file)) {
+			while (s.hasNextLine()) {
+				String line = s.nextLine();
+
+
+				if(line.matches("^\\[t=\\d+\\.\\d+[smh],\\s\\d+\\s[KMG]B\\]\\sPlan\\scost:\\s\\d+$")){
+					tCost = line.split(":")[1].strip();
+					System.out.println("Current Plan Cost:\t"+tCost);
+				}
+			}
+		} catch (FileNotFoundException e) {
+					System.err.println("Could not parse entry file!");
+					e.printStackTrace();
+		}
+		
+		return tCost;
+	}
+
+
 
 	public static List<File> showModelOpenDialog(Stage stage) {
 		FileChooser fileChooser = new FileChooser();

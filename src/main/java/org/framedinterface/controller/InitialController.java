@@ -7,6 +7,7 @@ import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Array;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,6 +43,7 @@ import org.w3c.dom.events.EventTarget;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
+import javafx.application.Platform;
 import javafx.animation.Animation.Status;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
@@ -59,6 +61,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TableCell;
@@ -69,6 +72,7 @@ import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
 import javafx.scene.web.WebView;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -92,8 +96,8 @@ public class InitialController {
 	@FXML
     private Button buttonResetNo;
 
-    //@FXML
-    //private Button buttonResetYes;
+    @FXML
+    private Label labelCost;
 
 	@FXML
 	private TableView<AbstractModel> modelTabelView;
@@ -190,6 +194,11 @@ public class InitialController {
     @FXML
     private RadioButton buttonResetYes;
 
+    @FXML
+    private Pane paneStatus;
+	@FXML
+    private VBox rootElement;
+
 
 	private static String precentageFormat = "%.1f";
 	private String initialDeclWebViewScript;
@@ -223,6 +232,8 @@ public class InitialController {
 	//private static String framedAutonomyJar = "C:\\Users\\paulw\\Desktop\\framedAutonomy\\FramedAutonomyTool.jar"; 
 	private static String framedAutonomyJar = "FramedAutonomyTool.jar";
 	private ArrayList<String> currentPlan;
+	private ArrayList<String> currentPrefix;
+	private boolean planPresent;
 
 	public void setStage(Stage stage) {
 		this.stage = stage;
@@ -232,8 +243,10 @@ public class InitialController {
 	private void initialize() {
 		resetDomain = true;
 		displayViolations = false;
+		planPresent = false;
 		currentPath = Paths.get(".").toAbsolutePath().normalize().toString();
 		currentPlan = new ArrayList<>();
+		currentPrefix = new ArrayList<>();
 		
 		modelTabelView.setPlaceholder(new Label("No input models selected"));
 		modelNameColumn.setCellFactory(TextFieldTableCell.forTableColumn());
@@ -434,29 +447,41 @@ public class InitialController {
 				}
 			}
 			//modelTabelView.getItems().addAll(abstractModels);
-			abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations)); //Monitoring states for an empty prefix
-			modelTabelView.getItems().addAll(abstractModels);
+			if (!planPresent) {
+				abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations)); //Monitoring states for an empty prefix
+				modelTabelView.getItems().addAll(abstractModels);
+			} else {
+				abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(currentPlan, displayViolations)); //Monitoring states for an empty prefix
+				modelTabelView.getItems().addAll(abstractModels);
+			}
+
 		}
     }
 
     @FXML
     void onClickPrefix(ActionEvent event) {
-		// Set the Prefix and Clear the text field
-		//System.out.println(textFieldPrefix.getText());
+		//TODO: Rename function
+		// Now denotes the reset of the plan.
+
+		planPresent = false;
+	
 		// The FramedAutonomy Tool casts everything to lowerCase, so I do the same here. Otherwise there could be an issue when running the planner
     	modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
+		currentPrefix.clear();
+
 		updatePrefix();
-		curPrefix.setText(textFieldPrefix.getText().toLowerCase().replace(",", ""));
-		textFieldPrefix.clear();
-		List prefixActions = Arrays.asList(curPrefix.getText().split(" "));
-		//updateVisualization(pnWebView, null, null);
 		updateSelectedModelVisualizations();
+		labelCost.setText("");
 		
 
     }
 
 	@FXML
     void onClickPlanner(ActionEvent event) throws IOException, InterruptedException {
+
+		rootElement.setDisable(true);
+
+		planPresent = true;
 
 		planListView.getItems().clear();
 
@@ -469,12 +494,28 @@ public class InitialController {
 
 		BufferedWriter writer = new BufferedWriter(new FileWriter(currentPath + "/prefix.txt"));
 
+		/*
 		if (curPrefix.getText().contains("<None>")) {
 			writer.write("");
 		}	
 		else {
 			writer.write(curPrefix.getText());
 		}
+		*/
+
+		if (currentPrefix.isEmpty()) {
+			writer.write("");
+		}	
+		else {
+			
+			String prefixString = currentPrefix.toString();
+			prefixString = prefixString.replace(",", "");
+			prefixString = prefixString.replace("[", "");
+			prefixString = prefixString.replace("]", "");
+			System.out.println(prefixString);
+			writer.write(prefixString);
+		}
+
 				
 		writer.close();
 
@@ -551,29 +592,25 @@ public class InitialController {
 			updateplanListView(onlyActions);
 			updateTimelineControls(onlyActions);
 			this.currentPlan = onlyActions;
+			labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
 		}
 
+		rootElement.setDisable(false);
 
 	}
-
-	/*
-    @FXML
-    void onClickResetNo(ActionEvent event) {
-		resetDomain = false;
-		labelCurrentDomain.setText("Domain_no_reset.pddl");
-    }
-	*/
 
     @FXML
     void onClickResetYes(ActionEvent event) {
 		//resetDomain = true;
 		resetDomain = !resetDomain;
+		/*
 		if (resetDomain) {
 			labelCurrentDomain.setText("Domain_with_reset.pddl");
 		}
 		else{
 			labelCurrentDomain.setText("Domain_no_reset.pddl");
 		}
+		*/
 		
     }
 
@@ -602,6 +639,7 @@ public class InitialController {
 	private void updatePrefix() {
 		tracePrefix = new ArrayList<String>(); //Resetting to empty trace
 
+		/*
 		if (textFieldPrefix.getText() != null && !textFieldPrefix.getText().equals("")) {
 			String prefixText = textFieldPrefix.getText();
 			prefixText.replace(" ", ",");
@@ -614,9 +652,18 @@ public class InitialController {
 				}
 			}
 		}
-		modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
-		updateplanListView(tracePrefix);
-		updateTimelineControls(tracePrefix);
+		*/
+
+		if (!currentPrefix.isEmpty()) {
+			tracePrefix = currentPrefix;
+		}
+
+		if (!planPresent){
+			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
+			updateplanListView(tracePrefix);
+			updateTimelineControls(tracePrefix);
+		}
+
 
 
 	}
@@ -878,6 +925,11 @@ public class InitialController {
 			}
 		}
 		if (activityName != null) {
+			
+			currentPrefix.add(activityName);
+			updatePrefix();
+
+			/*
 			if (textFieldPrefix.getText().isEmpty()) {
 				textFieldPrefix.setText(activityName);
 			} else {
@@ -887,6 +939,7 @@ public class InitialController {
 					textFieldPrefix.setText(textFieldPrefix.getText() + ", " + activityName);
 				}
 			}
+			*/
 		}
 	}
 
