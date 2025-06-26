@@ -165,6 +165,8 @@ public class InitialController {
 	private ChoiceBox<AbstractModel> pnModelChoice;
 	@FXML
 	private WebView pnWebView;
+	@FXML
+	private Label prefixOnlyLabel;
 		@FXML
 	private HBox timelineControls;
 	@FXML
@@ -246,13 +248,16 @@ public class InitialController {
 		currentPlan = new ArrayList<>();
 		currentPrefix = new ArrayList<>();
 		
+		selectedDecl.setVisible(false);
+		selectedDecl.setManaged(false);
+		selectedPN.setVisible(false);
+		selectedPN.setManaged(false);
+		
 		modelTabelView.setPlaceholder(new Label("No process specifications selected"));
 		modelNameColumn.setCellFactory(TextFieldTableCell.forTableColumn());
 		modelNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelName()));
 		modelTypeColumn.setCellFactory(TextFieldTableCell.forTableColumn());
 		modelTypeColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelType().toString()));
-		
-		stepForwardButton.getStyleClass().add("standard-button");
 		
 		modelRemoveColumn.setCellValueFactory(
 				param -> new ReadOnlyObjectWrapper<AbstractModel>(param.getValue())
@@ -475,6 +480,13 @@ public class InitialController {
     	modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
 		currentPrefix.clear();
 
+		prefixOnlyLabel.setVisible(true);
+		prefixOnlyLabel.setManaged(true);
+		selectedDecl.setVisible(false);
+		selectedDecl.setManaged(false);
+		selectedPN.setVisible(false);
+		selectedPN.setManaged(false);
+
 		updatePrefix();
 		updateSelectedModelVisualizations();
 		labelCost.setText("");
@@ -504,9 +516,6 @@ public class InitialController {
 			rootElement.setDisable(false);
 			return;
 		}
-
-		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
-		selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
 
 		//Write prefix to file and then pass it
 
@@ -601,6 +610,16 @@ public class InitialController {
 			// Ensure that any errors do not lead to the system crashing
 			rootElement.setDisable(false);
 		}
+		
+		prefixOnlyLabel.setVisible(false);
+		prefixOnlyLabel.setManaged	(false);
+		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+		selectedDecl.setVisible(true);
+		selectedDecl.setManaged(true);
+		selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+		selectedPN.setVisible(true);
+		selectedPN.setManaged(true);
+		
 		rootElement.setDisable(false);
 
 	}
