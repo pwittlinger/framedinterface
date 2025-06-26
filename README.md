@@ -13,5 +13,7 @@ In order to run the Framed Autonomy tool, download the JAR file [here] (https://
 
 Additionally copy the two PDDL Domain files [domain_no_reset.pddl](https://github.com/giacomo1096/FramedAutonomyTool/blob/79dcaaa88d8f51f28e64723c8650e8d166f6ff9e/tool/domain_no_reset.pddl) and [domain_with_reset.pddl](https://github.com/giacomo1096/FramedAutonomyTool/blob/79dcaaa88d8f51f28e64723c8650e8d166f6ff9e/tool/domain_with_reset.pddl) into the same directory as the launcher.
 
-Additionally, download the Fast Downward Planner ([here](https://www.fast-downward.org/latest/)), and compile it into a directory called "fast-downward".
-More information on how to install the Fast Downward can be found [here](https://github.com/aibasel/downward/blob/main/BUILD.md.)
+Additionally, download the Fast Downward Planner ([here](https://www.fast-downward.org/latest/)), and compile it into a directory called "fast-downward". A full description on how to install the Fast Downward can be found [here](https://github.com/aibasel/downward/blob/main/BUILD.md). This is a little bit more involved for Windows Users, as it involves installing [Visual Studio](https://visualstudio.microsoft.com/de/vs/older-downloads/), [Python](https://www.python.org/downloads/windows/) (make sure it is set in your PATH variables!) and [CMake](http://www.cmake.org/download/). 
+
+Alternatively you can execute the file "setup_planner", which will install the 'Apptainer' (formerly Singularity) image of the planner.
+For windows this requires 'WSL' (Windows Subsystem for Linux), which should come pre-installed with Windows 10 or newer.

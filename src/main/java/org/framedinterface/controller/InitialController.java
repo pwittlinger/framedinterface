@@ -28,7 +28,6 @@ import org.kordamp.ikonli.javafx.FontIcon;
 import org.processmining.datapetrinets.DataPetriNetsWithMarkings;
 import org.processmining.datapetrinets.io.DPNIOException;
 import org.processmining.datapetrinets.io.DataPetriNetImporter;
-//import ProcessBuilder;
 import org.processmining.models.graphbased.directed.petrinet.Petrinet;
 import org.processmining.models.semantics.petrinet.PetrinetSemantics;
 import org.processmining.models.semantics.petrinet.impl.PetrinetSemanticsFactory;
@@ -223,7 +222,6 @@ public class InitialController {
 	private String finMarking;
 	private boolean resetDomain;
 	private boolean displayViolations;
-	//private static String framedAutonomyJar = "C:\\Users\\paulw\\Desktop\\framedAutonomy\\FramedAutonomyTool.jar"; 
 	private static String framedAutonomyJar = "FramedAutonomyTool.jar";
 	private ArrayList<String> currentPlan;
 	private ArrayList<String> currentPrefix;
@@ -235,6 +233,8 @@ public class InitialController {
 
 	@FXML
 	private void initialize() {
+
+		// Initialize variables
 		resetDomain = true;
 		displayViolations = false;
 		planPresent = false;
@@ -398,10 +398,7 @@ public class InitialController {
 		});
 		
 		//All cells in planListView are handled by EventCell class
-		planListView.setCellFactory(value -> new EventCell(selectionCallback));
-		//planListView.setCellFactory(value -> selectionCallback.toString());
-		
-	
+		planListView.setCellFactory(value -> new EventCell(selectionCallback));	
 
 	}
 
@@ -450,11 +447,12 @@ public class InitialController {
 					e.printStackTrace();
 				}
 			}
-			//modelTabelView.getItems().addAll(abstractModels);
+
+			//If the plan has not been executed then show the Trace Prefix
 			if (!planPresent) {
 				abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations)); //Monitoring states for an empty prefix
 				modelTabelView.getItems().addAll(abstractModels);
-			} else {
+			} else { // Otherwise show the last generated plan
 				abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(currentPlan, displayViolations)); //Monitoring states for an empty prefix
 				modelTabelView.getItems().addAll(abstractModels);
 			}
@@ -483,6 +481,8 @@ public class InitialController {
 	@FXML
     void onClickPlanner(ActionEvent event) throws IOException, InterruptedException {
 
+		try {
+			
 		rootElement.setDisable(true);
 
 		planPresent = true;
@@ -491,21 +491,22 @@ public class InitialController {
 
 		modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
 
+		if ((modelTabelView.getItems().size() < 2)|| (declPath == null) || (petrinetPath == null)){
+			// This check alone could cause issues if someone uploaded multiple petri nets
+			// Then deleted all of them
+			// then uploaded multiple declare models
+			// then tried to run the planner.
+			System.out.println("Error: Number of input files not matching");
+			rootElement.setDisable(false);
+			return;
+		}
+
 		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
 		selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
 
 		//Write prefix to file and then pass it
 
 		BufferedWriter writer = new BufferedWriter(new FileWriter(currentPath + "/prefix.txt"));
-
-		/*
-		if (curPrefix.getText().contains("<None>")) {
-			writer.write("");
-		}	
-		else {
-			writer.write(curPrefix.getText());
-		}
-		*/
 
 		if (currentPrefix.isEmpty()) {
 			writer.write("");
@@ -549,7 +550,13 @@ public class InitialController {
 		int plannerExit = 1;
 		if (exitCode == 0){
 			// Run downward planner
-			plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
+			File f = new File(currentPath+"/fast-downward/fast-downward.py");
+			if (f.exists()){
+				plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
+			}
+			else {
+			plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
+			}
 			System.out.println("Planning Done");
 			
 		}
@@ -558,37 +565,24 @@ public class InitialController {
 			ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
 
 			ArrayList<String> onlyActions = new ArrayList<>();
-			//updateplanListView(generatedPlan);
 			planListView.getItems().clear();
 
-			//int numSteps = generatedPlan.size();
-			//int numSteps = 0;
 			for (String action : generatedPlan) {
 
 				String[] steps = action.split(" ");
 				System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
 
-				//if ((steps[0].contains("violate")) ||(steps[0].contains("reset")))
 				int actInd = steps.length-2;
 				if (steps[0].contains("sync")) {
-					//onlyActions.add(steps[actInd]);
 					onlyActions.add(steps[0]+";"+steps[actInd]);
 				}
 				if (steps[0].contains("prefix_violate")) {
-					//onlyActions.add(steps[actInd]);
 					onlyActions.add(steps[0]+";"+steps[actInd]);
 				}
 				if (steps[0].contains("reset")) {
-					//onlyActions.add(steps[0]+"-"+steps[actInd]);
 					onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
 				}
 				
-
-				
-				//planListView.getItems().add(new EventData(numSteps, steps[steps.length-2]));
-				//resultsList.add(monitoringTask.getValue());
-				//planListView.getItems().add(action);
-				//numSteps++;
 
 			}
 			System.out.println(onlyActions);
@@ -599,6 +593,10 @@ public class InitialController {
 			labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
 		}
 
+		} catch (Exception e) {
+			// Ensure that any errors do not lead to the system crashing
+			rootElement.setDisable(false);
+		}
 		rootElement.setDisable(false);
 
 	}
