@@ -90,7 +90,7 @@
                         </TableView>
                      </children>
                   </VBox>
-                  <HBox alignment="CENTER" styleClass="single-parameter">
+                  <HBox alignment="CENTER_LEFT" styleClass="single-parameter">
                      <children>
                         <Label styleClass="single-parameter__title" text="Model reset" HBox.hgrow="ALWAYS">
                            <font>
@@ -100,7 +100,7 @@
                         <CheckBox fx:id="buttonResetYes" mnemonicParsing="false" onAction="#onClickResetYes" />
                      </children>
                   </HBox>
-                  <HBox alignment="CENTER" styleClass="buttons-group--primary">
+                  <HBox alignment="CENTER_RIGHT" styleClass="buttons-group--primary">
                      <children>
                         <Button fx:id="buttonRunPlanner" mnemonicParsing="false" onAction="#onClickPlanner" styleClass="standard-button" text="Run Planner" />
                      </children>
@@ -115,7 +115,7 @@
                </styleClass>
             </VBox>
             <Separator orientation="VERTICAL" prefHeight="200.0" styleClass="separator--primary" />
-            <SplitPane dividerPositions="0.8" HBox.hgrow="ALWAYS">
+            <SplitPane dividerPositions="0.78" HBox.hgrow="ALWAYS">
                <items>
                   <SplitPane dividerPositions="0.5" orientation="VERTICAL">
                      <items>
@@ -152,7 +152,7 @@
                         </VBox>
                         <VBox layoutX="10.0" layoutY="10.0" styleClass="section-box">
                            <children>
-                              <FlowPane alignment="CENTER_LEFT" columnHalignment="CENTER" hgap="15.0" prefWrapLength="850.0" vgap="10.0">
+                              <FlowPane alignment="CENTER_LEFT" columnHalignment="CENTER" hgap="15.0" prefWrapLength="700.0" vgap="10.0">
                                  <children>
                                     <HBox alignment="CENTER_LEFT">
                                        <children>
@@ -226,41 +226,20 @@
                            </VBox.margin>
                         </HBox>
                         <ListView fx:id="planListView" snapToPixel="false" VBox.vgrow="ALWAYS" />
-                        <HBox alignment="CENTER">
+                        <VBox alignment="TOP_CENTER" spacing="5.0">
                            <children>
                               <HBox alignment="CENTER">
                                  <children>
-                                    <Label text="Plan Cost:">
-                                       <font>
-                                          <Font size="24.0" />
-                                       </font>
-                                    </Label>
-                                    <Label fx:id="labelCost">
-                                       <font>
-                                          <Font size="24.0" />
-                                       </font>
-                                    </Label>
+                                    <Label styleClass="single-parameter__title" text="Plan Cost:" />
+                                    <Label fx:id="labelCost" styleClass="single-parameter__title" />
                                  </children>
-                                 <HBox.margin>
-                                    <Insets right="15.0" />
-                                 </HBox.margin>
                                  <padding>
                                     <Insets left="10.0" right="10.0" />
                                  </padding>
                               </HBox>
-                              <Button fx:id="buttonPrefix" mnemonicParsing="false" onAction="#onClickPrefix" styleClass="standard-button" text="Reset">
-                                 <HBox.margin>
-                                    <Insets right="20.0" />
-                                 </HBox.margin>
-                              </Button>
+                              <Button fx:id="buttonPrefix" mnemonicParsing="false" onAction="#onClickPrefix" styleClass="standard-button" text="Reset" />
                            </children>
-                           <padding>
-                              <Insets left="5.0" right="5.0" />
-                           </padding>
-                           <opaqueInsets>
-                              <Insets />
-                           </opaqueInsets>
-                        </HBox>
+                        </VBox>
                      </children>
                   </VBox>
                </items>
