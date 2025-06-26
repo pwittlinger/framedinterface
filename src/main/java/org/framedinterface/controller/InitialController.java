@@ -57,6 +57,7 @@ import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.Slider;
+import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -111,6 +112,9 @@ public class InitialController {
     @FXML
     private Button buttonRunPlanner;
 
+    @FXML
+    private SplitPane resultsSplitPane;
+    
     @FXML
     private Label curPrefix;
 
@@ -296,14 +300,14 @@ public class InitialController {
 			}
 		});
 
-		//Enable and disable timelineControls and planListView based on if there are input models or not
+		//Enable and disable timelineControls and resultsSplitPane based on if there are input models or not
+		resultsSplitPane.setDisable(true);
 		timelineControls.setDisable(true);
-		planListView.setDisable(true);
 		modelTabelView.getItems().addListener(new InvalidationListener() {
 			@Override
 			public void invalidated(Observable observable) {
+				resultsSplitPane.setDisable(modelTabelView.getItems().isEmpty());
 				timelineControls.setDisable(modelTabelView.getItems().isEmpty());
-				planListView.setDisable(modelTabelView.getItems().isEmpty());
 			}
 		});
 

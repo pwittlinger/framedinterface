@@ -115,7 +115,7 @@
                </styleClass>
             </VBox>
             <Separator orientation="VERTICAL" prefHeight="200.0" styleClass="separator--primary" />
-            <SplitPane dividerPositions="0.78" HBox.hgrow="ALWAYS">
+            <SplitPane fx:id="resultsSplitPane" dividerPositions="0.78" HBox.hgrow="ALWAYS">
                <items>
                   <SplitPane dividerPositions="0.5" orientation="VERTICAL">
                      <items>
@@ -126,7 +126,7 @@
                                     <HBox alignment="CENTER_LEFT">
                                        <children>
                                   <Label alignment="CENTER" style="&#10;" styleClass="single-parameter__title" text="Declare Model" textAlignment="CENTER" wrapText="false" />
-                                          <ChoiceBox fx:id="declModelChoice" prefWidth="150.0" styleClass="standard-choice-box" />
+                                          <ChoiceBox fx:id="declModelChoice" prefWidth="170.0" styleClass="standard-choice-box" />
                                        </children>
                                     </HBox>
                                     <HBox alignment="CENTER_LEFT" spacing="2.0">
@@ -157,7 +157,7 @@
                                     <HBox alignment="CENTER_LEFT">
                                        <children>
                                           <Label alignment="CENTER" style="&#10;" styleClass="single-parameter__title" text="PN Model" textAlignment="CENTER" wrapText="false" />
-                                          <ChoiceBox fx:id="pnModelChoice" prefWidth="150.0" styleClass="standard-choice-box" />
+                                          <ChoiceBox fx:id="pnModelChoice" prefWidth="170.0" styleClass="standard-choice-box" />
                                        </children>
                                     </HBox>
                                     <HBox alignment="CENTER_LEFT" spacing="2.0">
