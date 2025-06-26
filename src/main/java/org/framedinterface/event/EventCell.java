@@ -1,6 +1,7 @@
 package org.framedinterface.event;
 
 import java.io.IOException;
+import java.net.URL;
 import java.util.function.Consumer;
 
 import javafx.fxml.FXML;
@@ -81,8 +82,8 @@ public class EventCell extends ListCell<EventData> {
 	
 	private boolean loadFxml() {
 		if (loader == null) {
-			//Load ActionCell contents if not already loaded
-			loader = new FXMLLoader(getClass().getClassLoader().getResource("EventCell.fxml"));
+			//Load EventCell contents if not already loaded
+			loader = new FXMLLoader(getClass().getResource("/org/framedinterface/EventCell.fxml"));
 			loader.setController(this);
 			try {
 				loader.load();

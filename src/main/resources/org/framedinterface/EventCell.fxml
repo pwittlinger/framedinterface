@@ -4,9 +4,10 @@
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox fx:id="rootRegion" alignment="TOP_CENTER" stylesheets="@../css/main.css" xmlns="http://javafx.com/javafx/16" xmlns:fx="http://javafx.com/fxml/1">
+<VBox fx:id="rootRegion" alignment="TOP_CENTER" xmlns="http://javafx.com/javafx/16" xmlns:fx="http://javafx.com/fxml/1">
    <children>
       <Label fx:id="activityNameLabel" styleClass="event-title" text="Activity Name" />
+      <Label fx:id="actionLabel" styleClass="event-statistics" text="Action" />
       <HBox alignment="TOP_CENTER" spacing="5.0">
          <children>
             <Label styleClass="event-statistics" text="Satisifed:" />

@@ -30,7 +30,7 @@ public class App extends Application {
         ((InitialController)fxmlLoader.getController()).setStage(stage);
         Locale.setDefault(Locale.UK);
         scene = new Scene(parent);
-        //scene.getStylesheets().add(getClass().getResource("/org/framedinterface/main.css").toString());
+        scene.getStylesheets().add(getClass().getResource("/org/framedinterface/main.css").toString());
         stage.setScene(scene);
         stage.setTitle("Framed-Autonomy Planner");
         stage.getIcons().add(new Image(App.class.getResourceAsStream("/org/framedinterface/frAIm.png")));
