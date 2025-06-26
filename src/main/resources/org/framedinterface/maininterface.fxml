@@ -47,13 +47,14 @@
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Pane?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.paint.Color?>
 <?import javafx.scene.text.Font?>
 <?import javafx.scene.web.WebView?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
-<VBox fx:id="rootElement" styleClass="standard-bg-color" xmlns="http://javafx.com/javafx/16" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.framedinterface.controller.InitialController">
+<VBox fx:id="rootElement" styleClass="ui-root" xmlns="http://javafx.com/javafx/16" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.framedinterface.controller.InitialController">
   <children>
       <HBox VBox.vgrow="ALWAYS">
          <children>
@@ -61,31 +62,41 @@
                <children>
                   <VBox prefHeight="396.0" prefWidth="468.0" spacing="5.0" styleClass="parameters-pane" VBox.vgrow="NEVER">
                      <children>
-                        <HBox styleClass="buttons-group--primary">
+                        <HBox styleClass="single-parameter">
                            <children>
-                              <Label styleClass="section-box__title" text="Process Specifications" HBox.hgrow="ALWAYS">
+                              <Label styleClass="single-parameter__title" text="Process Specifications" HBox.hgrow="ALWAYS">
                                  <font>
                                     <Font size="24.0" />
                                  </font>
                               </Label>
-                              <Button fx:id="uploadModel" mnemonicParsing="false" onAction="#onButtonClickedUploadModel" styleClass="standard-button" text="Upload..." />
+                              <Region HBox.hgrow="ALWAYS" />
+                              <Button fx:id="uploadModel" mnemonicParsing="false" onAction="#onButtonClickedUploadModel" styleClass="standard-button" text="Select..." />
                            </children>
                         </HBox>
                         <TableView fx:id="modelTabelView" editable="true">
                           <columns>
                             <TableColumn fx:id="modelNameColumn" prefWidth="137.5" text="Model Name" />
-                            <TableColumn fx:id="modelTypeColumn" prefWidth="56.5" text="Type" />
-                              <TableColumn fx:id="modelRemoveColumn" prefWidth="49.5" />
+                            <TableColumn fx:id="modelTypeColumn" maxWidth="60.0" minWidth="60.0" prefWidth="60.0" text="Type" />
+                              <TableColumn fx:id="modelRemoveColumn" maxWidth="30.0" minWidth="30.0" prefWidth="30.0" />
                           </columns>
                            <columnResizePolicy>
                               <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
                            </columnResizePolicy>
+                           <styleClass>
+                              <String fx:value="table-padding" />
+                              <String fx:value="hidden-scroll-bar--horizontal" />
+                           </styleClass>
                         </TableView>
                      </children>
                   </VBox>
                   <HBox alignment="CENTER" styleClass="single-parameter">
                      <children>
-                        <CheckBox fx:id="buttonResetYes" mnemonicParsing="false" onAction="#onClickResetYes" text="Model Reset" />
+                        <Label styleClass="single-parameter__title" text="Model reset" HBox.hgrow="ALWAYS">
+                           <font>
+                              <Font size="24.0" />
+                           </font>
+                        </Label>
+                        <CheckBox fx:id="buttonResetYes" mnemonicParsing="false" onAction="#onClickResetYes" />
                      </children>
                   </HBox>
                   <HBox alignment="CENTER" styleClass="buttons-group--primary">

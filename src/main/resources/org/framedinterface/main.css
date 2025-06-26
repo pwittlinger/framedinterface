@@ -418,6 +418,21 @@
 
 
 /**
+ * frAIm specific styles
+ */
+ 
+.ui-root {
+	-fx-background-color: #ffffff;
+	-fx-padding: 5	5 5 5;
+	-fx-spacing: 5;
+}
+
+.table-padding {
+	-fx-padding: 0	5 0 5;
+}
+ 
+
+/**
  * Background
  */
 
@@ -536,6 +551,7 @@
  */
 
 .standard-button {
+	-fx-font-size: 14px;
 	-fx-border-width: 2px;
 	-fx-border-color: #393939;
 	-fx-font-weight: bold;
@@ -772,19 +788,13 @@
  */
 
 .section-box {
-	-fx-padding: 25	20 20 20;
+	-fx-padding: 10	10 10 10;
 	-fx-background-color: #ffffff;
 	-fx-spacing: 15px;
 }
 
 .section-box__title {
 	-fx-font-weight: bold;
-	-fx-text-fill: #393939;
-	-fx-font-size: 16px;
-	-fx-max-width: infinity;
-}
-
-.section-box__titlee {
 	-fx-text-fill: #393939;
 	-fx-font-size: 16px;
 	-fx-max-width: infinity;
@@ -814,12 +824,18 @@
  */
 
 .single-parameter {
-	-fx-border-width: 0 0 1 0;
-	-fx-border-color: #aaaaaa;
-	-fx-max-height: 50;
-	-fx-pref-height: 50;
-	-fx-min-height: 50;
+	-fx-max-height: 34;
+	-fx-pref-height: 34;
+	-fx-min-height: 34;
 }	
+
+.single-parameter__title {
+	-fx-font-weight: bold;
+	-fx-text-fill: #393939;
+	-fx-font-size: 18px;
+	-fx-max-height: infinity;
+	-fx-padding: 0 10 0 0;
+}
 
 
 /**

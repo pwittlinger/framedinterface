@@ -242,7 +242,7 @@ public class InitialController {
 		currentPlan = new ArrayList<>();
 		currentPrefix = new ArrayList<>();
 		
-		modelTabelView.setPlaceholder(new Label("No input models selected"));
+		modelTabelView.setPlaceholder(new Label("No process specifications selected"));
 		modelNameColumn.setCellFactory(TextFieldTableCell.forTableColumn());
 		modelNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelName()));
 		modelTypeColumn.setCellFactory(TextFieldTableCell.forTableColumn());
@@ -254,8 +254,8 @@ public class InitialController {
 				param -> new ReadOnlyObjectWrapper<AbstractModel>(param.getValue())
 				);
 		modelRemoveColumn.setCellFactory(param -> new TableCell<AbstractModel, AbstractModel>() {
-			private final Button removeButton = new Button("Remove");
-
+			private final Button removeButton = new Button();
+			private FontIcon deleteFontIcon = new FontIcon("fa-trash");
 			
 			@Override
 			protected void updateItem(AbstractModel item, boolean empty) {
@@ -266,8 +266,10 @@ public class InitialController {
 					return;
 				}
 				
-				if (!removeButton.getStyleClass().contains("standard-button")) {
-					removeButton.getStyleClass().add("standard-button");
+				if (!removeButton.getStyleClass().contains("action-cell__button")) {
+					removeButton.getStyleClass().add("action-cell__button");
+					deleteFontIcon.getStyleClass().add("action-cell__delete-icon");
+					removeButton.setGraphic(deleteFontIcon);
 				}
 
 				setGraphic(removeButton);
