@@ -19,7 +19,7 @@ public class RunPlannerTask extends Task<Integer> {
 
 	@Override
 	protected Integer call() throws Exception {
-		Thread.sleep(3000);
+		//Thread.sleep(3000);
 		Integer exitCode = null;
 		if (download) {
 			exitCode = runWithoutDownload();

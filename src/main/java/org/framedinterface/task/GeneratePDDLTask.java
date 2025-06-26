@@ -30,7 +30,7 @@ public class GeneratePDDLTask extends Task<Integer> {
 			domain = "y";
 		}
 
-		Thread.sleep(3000);
+		//Thread.sleep(3000);
 
 
 		ProcessBuilder pb = new ProcessBuilder(commandStrings);
@@ -81,7 +81,7 @@ public class GeneratePDDLTask extends Task<Integer> {
 		int exitCode = process.waitFor();
 
 		if (exitCode != 0) {
-			System.out.println("GeneratePDDLTask failed with code: " + exitCode);
+			System.out.println("GeneratePDDLTask failed with exit code: " + exitCode);
 			throw new Exception("Generating PDDL failed. Command line exit code: "  + exitCode);
 		}
 

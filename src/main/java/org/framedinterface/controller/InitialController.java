@@ -21,9 +21,9 @@ import org.framedinterface.model.ModelType;
 import org.framedinterface.model.PnModel;
 import org.framedinterface.task.GeneratePDDLTask;
 import org.framedinterface.task.RunPlannerTask;
+import org.framedinterface.utils.AlertUtils;
 import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ModelUtils;
-import org.framedinterface.utils.RunnerUtils;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -55,6 +55,7 @@ import javafx.beans.value.ObservableValue;
 import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Worker;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.scene.control.Button;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
@@ -70,6 +71,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.StackPane;
 import javafx.scene.web.WebView;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -87,6 +89,9 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 
 public class InitialController {
+	
+	@FXML 
+	private StackPane rootElement;
 
     @FXML
     private Button buttonPrefix;
@@ -199,7 +204,7 @@ public class InitialController {
     @FXML
     private Pane paneStatus;
 	@FXML
-    private VBox rootElement;
+    private VBox mainContents;
 
 
 	private static String precentageFormat = "%.1f";
@@ -219,6 +224,8 @@ public class InitialController {
 	private boolean animationInProgress; //Used to allow navigation of events during animation
 	private SimpleIntegerProperty currentEventIndex = new SimpleIntegerProperty(0); //Various ui elements listen to this value for updates, also used to determine the model state to visualize
 	private FontIcon pauseFontIcon = new FontIcon("fa-pause"); //Icon to be displayed when animation is paused
+	private javafx.scene.Node progressLayer;
+	boolean progressLayerLoadAttempted = false;
 
 
 	List<VBox> resultsList;
@@ -501,8 +508,32 @@ public class InitialController {
     void onClickPlanner(ActionEvent event) throws IOException, InterruptedException {
 
 //		try {
-			
-		setRootElementDisable(true);
+		if (progressLayer == null && !progressLayerLoadAttempted) {
+			try {
+				// Load the progress layer
+				FXMLLoader loader = new FXMLLoader(getClass().getResource("/org/framedinterface/ProgressLayer.fxml"));
+				progressLayer = loader.load();
+				ProgressLayerController progressLayerController = loader.getController();
+				progressLayerController.getProgressTextLabel().setText("Running planner...");
+				
+				progressLayerController.getCancelButton().setOnAction(e -> {
+					executorService.shutdownNow(); //TODO: Terminate the currently executing task instead
+					executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors()); //Didn't see a way to restart after shutdown
+					setUiBusy(false);
+				});
+				
+			} catch (Exception e) {
+				System.out.println("Cannot load progress layer");
+				e.printStackTrace();
+			} finally {
+				progressLayerLoadAttempted = true;
+			}
+		}
+		
+		
+		
+		
+		setUiBusy(true);
 
 		planPresent = true;
 
@@ -516,7 +547,7 @@ public class InitialController {
 			// then uploaded multiple declare models
 			// then tried to run the planner.
 			System.out.println("Error: Number of input files not matching");
-			setRootElementDisable(false);
+			setUiBusy(false);
 			return;
 		}
 
@@ -562,7 +593,8 @@ public class InitialController {
 		GeneratePDDLTask generatePDDLTask = new GeneratePDDLTask(commandStrings, finMarking, resetDomain);
 		generatePDDLTask.setOnFailed(taskEvent -> {
 			// Ensure that any errors do not lead to the system crashing
-			setRootElementDisable(false);
+			AlertUtils.showError("Generating PDDL failed");
+			setUiBusy(false);
 		});
 		generatePDDLTask.setOnSucceeded(pddlTaskEvent -> {
 			
@@ -571,7 +603,8 @@ public class InitialController {
 			RunPlannerTask runPlannerTask = new RunPlannerTask(currentPath, resetDomain, !f.exists());
 			runPlannerTask.setOnFailed(plannerTaskEvent -> {
 				// Ensure that any errors do not lead to the system crashing
-				setRootElementDisable(false);
+				AlertUtils.showError("Running the planner failed");
+				setUiBusy(false);
 			});
 			runPlannerTask.setOnSucceeded(plannerTaskEvent -> {
 				ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
@@ -604,7 +637,7 @@ public class InitialController {
 				this.currentPlan = onlyActions;
 				labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
 				
-				setRootElementDisable(false);
+				setUiBusy(false);
 			});
 			
 			executorService.execute(runPlannerTask);
@@ -658,10 +691,10 @@ public class InitialController {
 //				
 //			} catch (Exception e) {
 //				// Ensure that any errors do not lead to the system crashing
-//				setRootElementDisable(false);
+//				setUiBusy(false);
 //			}
 //			
-//			setRootElementDisable(false);
+//			setUiBusy(false);
 		});
 		
 		executorService.execute(generatePDDLTask);
@@ -718,7 +751,7 @@ public class InitialController {
 //
 //		} catch (Exception e) {
 //			// Ensure that any errors do not lead to the system crashing
-//			rootElement.setDisable(false);
+//			mainContents.setDisable(false);
 //		}
 		
 		prefixOnlyLabel.setVisible(false);
@@ -731,10 +764,18 @@ public class InitialController {
 		selectedPN.setManaged(true);
 	}
 	
-	private void setRootElementDisable(boolean disable) { 
-		//Not 100% sure why rootElement.setDisable(disable) does not work when called directly
-		//...I guess Platform.runLater has the side effect of ensuring that the view is refreshed 
-		Platform.runLater(() -> rootElement.setDisable(disable));
+	private void setUiBusy(boolean disable) { 
+		//Not 100% sure why mainContents.setDisable(disable) does not work when called directly (at least without busy layer)
+		//...I guess Platform.runLater has the side effect of ensuring that the view is refreshed (adding busy layer probably has the same effect)
+		Platform.runLater(() -> mainContents.setDisable(disable));
+		
+		if (progressLayer != null) {
+			if (disable) {
+				rootElement.getChildren().add(progressLayer);
+			} else {
+				rootElement.getChildren().remove(progressLayer);
+			}
+		}
 	}
 
     @FXML
