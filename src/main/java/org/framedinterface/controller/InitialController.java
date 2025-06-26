@@ -19,6 +19,8 @@ import org.framedinterface.model.AbstractModel;
 import org.framedinterface.model.DeclareModel;
 import org.framedinterface.model.ModelType;
 import org.framedinterface.model.PnModel;
+import org.framedinterface.task.GeneratePDDLTask;
+import org.framedinterface.task.RunPlannerTask;
 import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ModelUtils;
 import org.framedinterface.utils.RunnerUtils;
@@ -39,6 +41,7 @@ import org.w3c.dom.events.EventTarget;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
+import javafx.application.Platform;
 import javafx.animation.Animation.Status;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
@@ -220,7 +223,7 @@ public class InitialController {
 
 	List<VBox> resultsList;
     private Stage stage;
-    private ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+	private ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 	private int defaultViolationCost = 3;
 	private String declPath;
 	private String petrinetPath;
@@ -497,9 +500,9 @@ public class InitialController {
 	@FXML
     void onClickPlanner(ActionEvent event) throws IOException, InterruptedException {
 
-		try {
+//		try {
 			
-		rootElement.setDisable(true);
+		setRootElementDisable(true);
 
 		planPresent = true;
 
@@ -513,7 +516,7 @@ public class InitialController {
 			// then uploaded multiple declare models
 			// then tried to run the planner.
 			System.out.println("Error: Number of input files not matching");
-			rootElement.setDisable(false);
+			setRootElementDisable(false);
 			return;
 		}
 
@@ -556,72 +559,182 @@ public class InitialController {
 
 		//Run the Framed Autonomy Tool Jar
 		// Assumed to be located in the project repository
-
-		int exitCode = RunnerUtils.generatePDDL(commandStrings, finMarking, resetDomain);
-
-		System.out.println("Process exited with code: " + exitCode);
-		int plannerExit = 1;
-		if (exitCode == 0){
-			// Run downward planner
-			File f = new File(currentPath+"/fast-downward/fast-downward.py");
-			if (f.exists()){
-				plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
-			}
-			else {
-			plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
-			}
-			System.out.println("Planning Done");
-			
-		}
-
-		if (plannerExit == 0){
-			ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
-
-			ArrayList<String> onlyActions = new ArrayList<>();
-			planListView.getItems().clear();
-
-			for (String action : generatedPlan) {
-
-				String[] steps = action.split(" ");
-				System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
-
-				int actInd = steps.length-2;
-				if (steps[0].contains("sync")) {
-					onlyActions.add(steps[0]+";"+steps[actInd]);
-				}
-				if (steps[0].contains("prefix_violate")) {
-					onlyActions.add(steps[0]+";"+steps[actInd]);
-				}
-				if (steps[0].contains("reset")) {
-					onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
-				}
-				
-
-			}
-			System.out.println(onlyActions);
-			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
-			updateplanListView(onlyActions);
-			updateTimelineControls(onlyActions);
-			this.currentPlan = onlyActions;
-			labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
-		}
-
-		} catch (Exception e) {
+		GeneratePDDLTask generatePDDLTask = new GeneratePDDLTask(commandStrings, finMarking, resetDomain);
+		generatePDDLTask.setOnFailed(taskEvent -> {
 			// Ensure that any errors do not lead to the system crashing
-			rootElement.setDisable(false);
-		}
+			setRootElementDisable(false);
+		});
+		generatePDDLTask.setOnSucceeded(pddlTaskEvent -> {
+			
+			File f = new File(currentPath+"/fast-downward/fast-downward.py");
+			
+			RunPlannerTask runPlannerTask = new RunPlannerTask(currentPath, resetDomain, !f.exists());
+			runPlannerTask.setOnFailed(plannerTaskEvent -> {
+				// Ensure that any errors do not lead to the system crashing
+				setRootElementDisable(false);
+			});
+			runPlannerTask.setOnSucceeded(plannerTaskEvent -> {
+				ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
+				
+				ArrayList<String> onlyActions = new ArrayList<>();
+				planListView.getItems().clear();
+				
+				for (String action : generatedPlan) {
+					
+					String[] steps = action.split(" ");
+					System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+					
+					int actInd = steps.length-2;
+					if (steps[0].contains("sync")) {
+						onlyActions.add(steps[0]+";"+steps[actInd]);
+					}
+					if (steps[0].contains("prefix_violate")) {
+						onlyActions.add(steps[0]+";"+steps[actInd]);
+					}
+					if (steps[0].contains("reset")) {
+						onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
+					}
+					
+					
+				}
+				System.out.println(onlyActions);
+				modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
+				updateplanListView(onlyActions);
+				updateTimelineControls(onlyActions);
+				this.currentPlan = onlyActions;
+				labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
+				
+				setRootElementDisable(false);
+			});
+			
+			executorService.execute(runPlannerTask);
+			
+			
+			
+//			int plannerExit = 1;
+//			
+//			try {
+//				// Run downward planner
+//				f = new File(currentPath+"/fast-downward/fast-downward.py");
+//				if (f.exists()){
+//					plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
+//				}
+//				else {
+//					plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
+//				}
+//				System.out.println("Planning Done");
+//				
+//				if (plannerExit == 0){
+//					ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
+//		
+//					ArrayList<String> onlyActions = new ArrayList<>();
+//					planListView.getItems().clear();
+//		
+//					for (String action : generatedPlan) {
+//		
+//						String[] steps = action.split(" ");
+//						System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+//		
+//						int actInd = steps.length-2;
+//						if (steps[0].contains("sync")) {
+//							onlyActions.add(steps[0]+";"+steps[actInd]);
+//						}
+//						if (steps[0].contains("prefix_violate")) {
+//							onlyActions.add(steps[0]+";"+steps[actInd]);
+//						}
+//						if (steps[0].contains("reset")) {
+//							onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
+//						}
+//						
+//		
+//					}
+//					System.out.println(onlyActions);
+//					modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
+//					updateplanListView(onlyActions);
+//					updateTimelineControls(onlyActions);
+//					this.currentPlan = onlyActions;
+//					labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
+//				}
+//				
+//			} catch (Exception e) {
+//				// Ensure that any errors do not lead to the system crashing
+//				setRootElementDisable(false);
+//			}
+//			
+//			setRootElementDisable(false);
+		});
+		
+		executorService.execute(generatePDDLTask);
+			
+	
+//			int exitCode = RunnerUtils.generatePDDL(commandStrings, finMarking, resetDomain);
+//	
+//			System.out.println("Process exited with code: " + exitCode);
+//			int plannerExit = 1;
+//			if (exitCode == 0){
+//				// Run downward planner
+//				File f = new File(currentPath+"/fast-downward/fast-downward.py");
+//				if (f.exists()){
+//					plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
+//				}
+//				else {
+//				plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
+//				}
+//				System.out.println("Planning Done");
+//				
+//			}
+//	
+//			if (plannerExit == 0){
+//				ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
+//	
+//				ArrayList<String> onlyActions = new ArrayList<>();
+//				planListView.getItems().clear();
+//	
+//				for (String action : generatedPlan) {
+//	
+//					String[] steps = action.split(" ");
+//					System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+//	
+//					int actInd = steps.length-2;
+//					if (steps[0].contains("sync")) {
+//						onlyActions.add(steps[0]+";"+steps[actInd]);
+//					}
+//					if (steps[0].contains("prefix_violate")) {
+//						onlyActions.add(steps[0]+";"+steps[actInd]);
+//					}
+//					if (steps[0].contains("reset")) {
+//						onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
+//					}
+//					
+//	
+//				}
+//				System.out.println(onlyActions);
+//				modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
+//				updateplanListView(onlyActions);
+//				updateTimelineControls(onlyActions);
+//				this.currentPlan = onlyActions;
+//				labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
+//			}
+//
+//		} catch (Exception e) {
+//			// Ensure that any errors do not lead to the system crashing
+//			rootElement.setDisable(false);
+//		}
 		
 		prefixOnlyLabel.setVisible(false);
-		prefixOnlyLabel.setManaged	(false);
+		prefixOnlyLabel.setManaged(false);
 		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
 		selectedDecl.setVisible(true);
 		selectedDecl.setManaged(true);
 		selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
 		selectedPN.setVisible(true);
 		selectedPN.setManaged(true);
-		
-		rootElement.setDisable(false);
-
+	}
+	
+	private void setRootElementDisable(boolean disable) { 
+		//Not 100% sure why rootElement.setDisable(disable) does not work when called directly
+		//...I guess Platform.runLater has the side effect of ensuring that the view is refreshed 
+		Platform.runLater(() -> rootElement.setDisable(disable));
 	}
 
     @FXML

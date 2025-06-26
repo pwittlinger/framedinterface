@@ -9,9 +9,8 @@ import java.util.ArrayList;
 
 import javafx.concurrent.Task;
 
-public class GeneratePDDLTask  extends Task<Integer> {
+public class GeneratePDDLTask extends Task<Integer> {
 
-	
 	private ArrayList<String> commandStrings;
 	private String finMarking;
 	private boolean reset;
@@ -21,17 +20,20 @@ public class GeneratePDDLTask  extends Task<Integer> {
 		this.finMarking = finMarking;
 		this.reset = reset;
 	}
-	
-	
-	
+
+
+
 	@Override
 	protected Integer call() throws Exception {
 		String domain = "n";
-        if (reset) {
-            domain = "y";
-        }
+		if (reset) {
+			domain = "y";
+		}
 
-        ProcessBuilder pb = new ProcessBuilder(commandStrings);
+		Thread.sleep(3000);
+
+
+		ProcessBuilder pb = new ProcessBuilder(commandStrings);
 		//Process process = pb.start();
 		pb.redirectError(Redirect.INHERIT);
 
@@ -77,10 +79,14 @@ public class GeneratePDDLTask  extends Task<Integer> {
 		}
 
 		int exitCode = process.waitFor();
-		System.out.println("Process exited with code: " + exitCode);
 
+		if (exitCode != 0) {
+			System.out.println("GeneratePDDLTask failed with code: " + exitCode);
+			throw new Exception("Generating PDDL failed. Command line exit code: "  + exitCode);
+		}
 
-        return exitCode;
+		System.out.println("GeneratePDDLTask done with code: " + exitCode);
+		return exitCode;
 	}
 
 }
