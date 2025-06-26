@@ -234,6 +234,7 @@ public class InitialController {
 	private ArrayList<String> currentPlan;
 	private ArrayList<String> currentPrefix;
 	private boolean planPresent;
+	private String os;
 
 	public void setStage(Stage stage) {
 		this.stage = stage;
@@ -241,6 +242,8 @@ public class InitialController {
 
 	@FXML
 	private void initialize() {
+		
+		System.out.println(os);
 		resetDomain = true;
 		displayViolations = false;
 		planPresent = false;
@@ -545,7 +548,13 @@ public class InitialController {
 		int plannerExit = 1;
 		if (exitCode == 0){
 			// Run downward planner
-			plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
+			File f = new File(currentPath+"/fast-downward/fast-downward.py");
+			if (f.exists()){
+				plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
+			}
+			else {
+			plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
+			}
 			System.out.println("Planning Done");
 			
 		}
