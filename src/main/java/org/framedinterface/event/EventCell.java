@@ -61,18 +61,23 @@ public class EventCell extends ListCell<EventData> {
 				if (item.isStart()) {
 					activityNameLabel.setText("-trace start-");
 					activityNameLabel.getStyleClass().add("event-title__artificial");
+					actionLabel.setVisible(false);
+					actionLabel.setManaged(false);
 				} else if (item.isEnd()) {
 					activityNameLabel.setText("-trace end-");
 					activityNameLabel.getStyleClass().add("event-title__artificial");
+					actionLabel.setVisible(false);
+					actionLabel.setManaged(false);
 				} else {
 					activityNameLabel.setText(item.getActivityName());
 					activityNameLabel.getStyleClass().remove("event-title__artificial");
+					actionLabel.setVisible(true);
+					actionLabel.setManaged(true);
+					actionLabel.setText(item.getPlanAction());
 				}
 				satisfiedLabel.setText(item.getDeclMonitoringStateCounts().get(MonitoringState.SAT) + " (" + item.getDeclMonitoringStateCounts().get(MonitoringState.POSS_SAT) + ")");
 				violatedLabel.setText(item.getDeclMonitoringStateCounts().get(MonitoringState.VIOL) + " (" + item.getDeclMonitoringStateCounts().get(MonitoringState.POSS_VIOL) + ")");
 				
-				actionLabel.setText(item.getPlanAction());
-
 				setText(null);
 				setGraphic(rootRegion);
 			}

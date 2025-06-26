@@ -487,7 +487,7 @@ public class InitialController {
 		selectedPN.setVisible(false);
 		selectedPN.setManaged(false);
 
-		updatePrefix();
+		updatePrefix(null);
 		updateSelectedModelVisualizations();
 		labelCost.setText("");
 		
@@ -660,8 +660,8 @@ public class InitialController {
 		}
 	}
 
-	@FXML
-	private void updatePrefix() {
+	
+	private void updatePrefix(Integer selectIndex) { //TODO: Allow building prefix event-by-event, without resetting after each event
 		tracePrefix = new ArrayList<String>(); //Resetting to empty trace
 
 		/*
@@ -687,6 +687,12 @@ public class InitialController {
 			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
 			updateplanListView(tracePrefix);
 			updateTimelineControls(tracePrefix);
+		}
+		
+		if (selectIndex != null) { //TODO: Not sure if this is the best place for scrolling to the added activity
+			eventSlider.setValue(selectIndex);
+			currentEventIndex.setValue(selectIndex);
+			animationTimeline.jumpTo(animationTimeline.getTotalDuration().multiply(eventSlider.getValue() / eventSlider.getMax()));
 		}
 
 
@@ -854,7 +860,7 @@ public class InitialController {
 			}
 		});
 
-			currentEventIndex.addListener((observable, oldValue, newValue) -> {
+		currentEventIndex.addListener((observable, oldValue, newValue) -> {
 			updateSelectedModelVisualizations();
 			planListView.scrollTo(newValue.intValue());
 			planListView.getSelectionModel().clearAndSelect(newValue.intValue());
@@ -952,7 +958,7 @@ public class InitialController {
 		if (activityName != null) {
 			
 			currentPrefix.add(activityName);
-			updatePrefix();
+			updatePrefix(currentPrefix.size());
 
 			/*
 			if (textFieldPrefix.getText().isEmpty()) {

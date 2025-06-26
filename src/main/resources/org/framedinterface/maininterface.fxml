@@ -152,7 +152,7 @@
                         </VBox>
                         <VBox layoutX="10.0" layoutY="10.0" styleClass="section-box">
                            <children>
-                              <FlowPane alignment="CENTER_LEFT" columnHalignment="CENTER" hgap="15.0" prefWrapLength="700.0" vgap="10.0">
+                              <FlowPane alignment="CENTER_LEFT" columnHalignment="CENTER" hgap="15.0" prefWrapLength="720.0" vgap="10.0">
                                  <children>
                                     <HBox alignment="CENTER_LEFT">
                                        <children>
@@ -178,7 +178,7 @@
                                     </HBox>
                                     <HBox alignment="CENTER_LEFT" spacing="4.0">
                                        <children>
-                                          <Label text="Violated activities" />
+                                          <Label text="Show Past Violations" />
                                           <CheckBox fx:id="bttnDisplayViolations" mnemonicParsing="false" onAction="#switchViolationStrings" />
                                        </children>
                                     </HBox>
@@ -225,13 +225,13 @@
                               </HBox>
                            </children>
                         </VBox>
-                        <ListView fx:id="planListView" snapToPixel="false" VBox.vgrow="ALWAYS" />
+                        <ListView fx:id="planListView" snapToPixel="false" styleClass="monitor-events-list" VBox.vgrow="ALWAYS" />
                         <HBox alignment="CENTER" VBox.vgrow="SOMETIMES">
                            <children>
                               <HBox alignment="CENTER">
                                  <children>
                                     <Label styleClass="single-parameter__title" text="Plan Cost:" />
-                                    <Label fx:id="labelCost" prefWidth="30.0" styleClass="single-parameter__title" text="99" />
+                                    <Label fx:id="labelCost" prefWidth="30.0" styleClass="single-parameter__title" />
                                  </children>
                               </HBox>
                               <Region maxWidth="20.0" HBox.hgrow="ALWAYS" />

@@ -1031,11 +1031,6 @@
 .event-cell {
 	-fx-background-color: #00a6fb;
 	-fx-padding: 10 15 10 15;
-	-fx-spacing: 15;
-}
-
-.event-data-box {
-	-fx-spacing: 5;
 }
 
 .event-title {
@@ -1043,11 +1038,21 @@
 	-fx-text-fill: #ffffff;
 }
 
+.event-title__artificial {
+	-fx-font-style: italic;
+}
+
 .event-number {
 	-fx-font-size: 24px;
 	-fx-text-fill: #ffffff;
 	-fx-alignment: CENTER;
 	-fx-min-width: 40;
+}
+
+.event-action {
+	-fx-font-size: 14px;
+	-fx-text-fill: #ffffff;
+	-fx-font-weight: bold
 }
 
 .event-data-text {
@@ -1058,6 +1063,7 @@
 .event-payload-box {
 	-fx-border-color: #ffffff;
 	-fx-border-width: 1 0 0 0;
+	-fx-padding: 5 0 0 0;
 }
 
 
