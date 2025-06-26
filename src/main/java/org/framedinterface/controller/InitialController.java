@@ -7,10 +7,8 @@ import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Array;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -34,7 +32,6 @@ import org.processmining.datapetrinets.io.DataPetriNetImporter;
 import org.processmining.models.graphbased.directed.petrinet.Petrinet;
 import org.processmining.models.semantics.petrinet.PetrinetSemantics;
 import org.processmining.models.semantics.petrinet.impl.PetrinetSemanticsFactory;
-import org.processmining.plugins.pnml.elements.PnmlPage;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -43,7 +40,6 @@ import org.w3c.dom.events.EventTarget;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
-import javafx.application.Platform;
 import javafx.animation.Animation.Status;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
@@ -61,8 +57,6 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
-import javafx.scene.control.ProgressIndicator;
-import javafx.scene.control.RadioButton;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
@@ -185,14 +179,14 @@ public class InitialController {
 	@FXML
 	private Slider eventSlider;
 	    @FXML
-    private RadioButton bttnDisplayViolations;
+    private CheckBox bttnDisplayViolations;
 	    @FXML
     private Label selectedDecl;
 
     @FXML
     private Label selectedPN;
     @FXML
-    private RadioButton buttonResetYes;
+    private CheckBox buttonResetYes;
 
     @FXML
     private Pane paneStatus;
@@ -253,12 +247,16 @@ public class InitialController {
 		modelNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelName()));
 		modelTypeColumn.setCellFactory(TextFieldTableCell.forTableColumn());
 		modelTypeColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelType().toString()));
+		
+		stepForwardButton.getStyleClass().add("standard-button");
+		
 		modelRemoveColumn.setCellValueFactory(
 				param -> new ReadOnlyObjectWrapper<AbstractModel>(param.getValue())
 				);
 		modelRemoveColumn.setCellFactory(param -> new TableCell<AbstractModel, AbstractModel>() {
 			private final Button removeButton = new Button("Remove");
 
+			
 			@Override
 			protected void updateItem(AbstractModel item, boolean empty) {
 				super.updateItem(item, empty);
@@ -266,6 +264,10 @@ public class InitialController {
 				if (item == null) {
 					setGraphic(null);
 					return;
+				}
+				
+				if (!removeButton.getStyleClass().contains("standard-button")) {
+					removeButton.getStyleClass().add("standard-button");
 				}
 
 				setGraphic(removeButton);
@@ -602,7 +604,7 @@ public class InitialController {
     @FXML
     void onClickResetYes(ActionEvent event) {
 		//resetDomain = true;
-		resetDomain = !resetDomain;
+		resetDomain = buttonResetYes.isSelected();
 		/*
 		if (resetDomain) {
 			labelCurrentDomain.setText("Domain_with_reset.pddl");
@@ -1030,7 +1032,7 @@ public class InitialController {
 	@FXML
 	private void switchViolationStrings() {
 
-		displayViolations = !displayViolations;
+		displayViolations = bttnDisplayViolations.isSelected();
 
 		updateSelectedModelVisualizations();
 		

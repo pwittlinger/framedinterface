@@ -4,21 +4,25 @@
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox fx:id="rootRegion" alignment="TOP_CENTER" xmlns="http://javafx.com/javafx/16" xmlns:fx="http://javafx.com/fxml/1">
+<VBox fx:id="rootRegion" alignment="TOP_CENTER" styleClass="event-cell" xmlns="http://javafx.com/javafx/16" xmlns:fx="http://javafx.com/fxml/1">
    <children>
       <Label fx:id="activityNameLabel" styleClass="event-title" text="Activity Name" />
-      <Label fx:id="actionLabel" styleClass="event-statistics" text="Action" />
-      <HBox alignment="TOP_CENTER" spacing="5.0">
+      <VBox alignment="TOP_CENTER">
          <children>
-            <Label styleClass="event-statistics" text="Satisifed:" />
-            <Label fx:id="satisfiedLabel" styleClass="event-statistics" text="0 (1)" />
+            <Label fx:id="actionLabel" styleClass="event-statistics" text="Action" VBox.vgrow="ALWAYS" />
+            <HBox alignment="TOP_CENTER" spacing="5.0">
+               <children>
+                  <Label styleClass="event-statistics" text="Satisifed:" />
+                  <Label fx:id="satisfiedLabel" styleClass="event-statistics" text="0 (1)" />
+               </children>
+            </HBox>
+            <HBox alignment="TOP_CENTER" spacing="5.0">
+               <children>
+                  <Label styleClass="event-statistics" text="Violated:" />
+                  <Label fx:id="violatedLabel" styleClass="event-statistics" text="2 (0)" />
+               </children>
+            </HBox>
          </children>
-      </HBox>
-      <HBox alignment="TOP_CENTER" spacing="5.0">
-         <children>
-            <Label styleClass="event-statistics" text="Violated:" />
-            <Label fx:id="violatedLabel" styleClass="event-statistics" text="2 (0)" />
-         </children>
-      </HBox>
+      </VBox>
    </children>
 </VBox>

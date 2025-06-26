@@ -32,12 +32,13 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -->
 
+<?import java.lang.String?>
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ChoiceBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
-<?import javafx.scene.control.RadioButton?>
 <?import javafx.scene.control.Separator?>
 <?import javafx.scene.control.Slider?>
 <?import javafx.scene.control.SplitPane?>
@@ -52,30 +53,23 @@
 <?import javafx.scene.web.WebView?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
-<VBox fx:id="rootElement" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.framedinterface.controller.InitialController">
+<VBox fx:id="rootElement" styleClass="standard-bg-color" xmlns="http://javafx.com/javafx/16" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.framedinterface.controller.InitialController">
   <children>
-    <SplitPane dividerPositions="0.2505567928730512, 0.7505567928730512" focusTraversable="true" prefHeight="-1.0" prefWidth="-1.0" VBox.vgrow="ALWAYS">
-      <items>
-            <VBox spacing="15.0">
+      <HBox VBox.vgrow="ALWAYS">
+         <children>
+            <VBox>
                <children>
-                  <VBox prefHeight="396.0" prefWidth="468.0" spacing="5.0" VBox.vgrow="NEVER">
+                  <VBox prefHeight="396.0" prefWidth="468.0" spacing="5.0" styleClass="parameters-pane" VBox.vgrow="NEVER">
                      <children>
-                        <HBox spacing="10.0">
+                        <HBox styleClass="buttons-group--primary">
                            <children>
-                              <Label text="Process Specifications">
+                              <Label styleClass="section-box__title" text="Process Specifications" HBox.hgrow="ALWAYS">
                                  <font>
                                     <Font size="24.0" />
                                  </font>
                               </Label>
-                              <Button fx:id="uploadModel" mnemonicParsing="false" onAction="#onButtonClickedUploadModel" text="Upload Model">
-                                 <font>
-                                    <Font size="24.0" />
-                                 </font>
-                              </Button>
+                              <Button fx:id="uploadModel" mnemonicParsing="false" onAction="#onButtonClickedUploadModel" styleClass="standard-button" text="Upload..." />
                            </children>
-                           <padding>
-                              <Insets top="15.0" />
-                           </padding>
                         </HBox>
                         <TableView fx:id="modelTabelView" editable="true">
                           <columns>
@@ -89,198 +83,188 @@
                         </TableView>
                      </children>
                   </VBox>
-                  <HBox />
-                  <HBox alignment="CENTER">
-                     <VBox.margin>
-                        <Insets />
-                     </VBox.margin>
-                     <padding>
-                        <Insets left="5.0" right="5.0" />
-                     </padding>
-                     <opaqueInsets>
-                        <Insets />
-                     </opaqueInsets>
-                  </HBox>
-                  <Separator prefWidth="200.0" />
-                  <HBox alignment="CENTER">
+                  <HBox alignment="CENTER" styleClass="single-parameter">
                      <children>
-                        <RadioButton fx:id="buttonResetYes" mnemonicParsing="false" onAction="#onClickResetYes" text="No Model Reset">
-                           <font>
-                              <Font size="20.0" />
-                           </font>
-                           <HBox.margin>
-                              <Insets left="5.0" right="25.0" />
-                           </HBox.margin></RadioButton>
+                        <CheckBox fx:id="buttonResetYes" mnemonicParsing="false" onAction="#onClickResetYes" text="Model Reset" />
                      </children>
                   </HBox>
-                  <HBox alignment="CENTER">
+                  <HBox alignment="CENTER" styleClass="buttons-group--primary">
                      <children>
-                        <Button fx:id="buttonRunPlanner" mnemonicParsing="false" onAction="#onClickPlanner" text="Run Planner">
-                           <font>
-                              <Font size="20.0" />
-                           </font>
-                        </Button>
+                        <Button fx:id="buttonRunPlanner" mnemonicParsing="false" onAction="#onClickPlanner" styleClass="standard-button" text="Run Planner" />
                      </children>
                   </HBox>
                </children>
                <padding>
-                  <Insets left="5.0" right="5.0" />
+                  <Insets left="5.0" />
                </padding>
+               <styleClass>
+                  <String fx:value="section-box" />
+                  <String fx:value="section-box--main-parameters" />
+               </styleClass>
             </VBox>
-            <SplitPane dividerPositions="0.5" orientation="VERTICAL">
+            <Separator orientation="VERTICAL" prefHeight="200.0" styleClass="separator--primary" />
+            <SplitPane dividerPositions="0.7" HBox.hgrow="ALWAYS">
                <items>
-                  <VBox>
-                     <children>
-                        <HBox alignment="CENTER_LEFT" fillHeight="false" spacing="5.0">
+                  <SplitPane dividerPositions="0.5" orientation="VERTICAL">
+                     <items>
+                        <VBox styleClass="section-box">
                            <children>
-                      <Label alignment="CENTER" style="&#10;" text="Declare" textAlignment="CENTER" wrapText="false">
-                                 <font>
-                            <Font size="18.0" fx:id="x1" />
-                                 </font>
-                                 <textFill>
-                            <Color red="0.624" green="0.624" blue="0.624" fx:id="x2" />
-                                 </textFill></Label>
-                              <Label text="Zoom" />
-                              <Slider fx:id="declZoomSlider" blockIncrement="0.1" max="4.0" value="1.0" />
-                              <HBox alignment="CENTER_LEFT" prefWidth="45.0" styleClass="percentage-box">
+                              <HBox alignment="CENTER_LEFT" fillHeight="false" spacing="5.0">
                                  <children>
-                                    <TextField fx:id="declZoomValueField" alignment="CENTER_RIGHT" maxWidth="34.0" style="-fx-background-color: transparent;" text="100.0">
-                                       <padding>
-                                          <Insets bottom="2.0" left="2.0" top="2.0" />
-                                       </padding>
-                                    </TextField>
-                                    <Label text="\%" />
+                            <Label alignment="CENTER" style="&#10;" text="Declare" textAlignment="CENTER" wrapText="false">
+                                       <font>
+                                  <Font size="18.0" fx:id="x1" />
+                                       </font>
+                                       <textFill>
+                                  <Color red="0.624" green="0.624" blue="0.624" fx:id="x2" />
+                                       </textFill>
+                                    </Label>
+                                    <Label text="Zoom" />
+                                    <Slider fx:id="declZoomSlider" blockIncrement="0.1" max="4.0" value="1.0" />
+                                    <HBox alignment="CENTER_LEFT" prefWidth="45.0" styleClass="percentage-box">
+                                       <children>
+                                          <TextField fx:id="declZoomValueField" alignment="CENTER_RIGHT" maxWidth="34.0" style="-fx-background-color: transparent;" text="100.0">
+                                             <padding>
+                                                <Insets bottom="2.0" left="2.0" top="2.0" />
+                                             </padding>
+                                          </TextField>
+                                          <Label text="\%" />
+                                       </children>
+                                    </HBox>
+                                    <ChoiceBox fx:id="declModelChoice" prefWidth="150.0" styleClass="standard-choice-box" />
                                  </children>
+                                 <opaqueInsets>
+                                    <Insets />
+                                 </opaqueInsets>
                               </HBox>
-                              <ChoiceBox fx:id="declModelChoice" prefWidth="150.0" />
+                              <WebView fx:id="declWebView" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS" />
                            </children>
-                           <opaqueInsets>
-                              <Insets />
-                           </opaqueInsets>
-                        </HBox>
-                        <WebView fx:id="declWebView" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS" />
-                     </children>
-                  </VBox>
-                  <VBox layoutX="10.0" layoutY="10.0">
-                     <children>
-                        <HBox alignment="CENTER_LEFT" fillHeight="false" spacing="5.0">
+                        </VBox>
+                        <VBox layoutX="10.0" layoutY="10.0" styleClass="section-box">
                            <children>
-                              <Label alignment="CENTER" style="&#10;" text="Petri net" textAlignment="CENTER" wrapText="false">
-                                 <font>
-                                    <Font size="18.0" fx:id="x11" />
-                                 </font>
-                                 <textFill>
-                                    <Color red="0.624" green="0.624" blue="0.624" fx:id="x21" />
-                                 </textFill>
+                              <HBox alignment="CENTER_LEFT" fillHeight="false" spacing="5.0">
+                                 <children>
+                                    <Label alignment="CENTER" style="&#10;" text="Petri net" textAlignment="CENTER" wrapText="false">
+                                       <font>
+                                          <Font size="18.0" fx:id="x11" />
+                                       </font>
+                                       <textFill>
+                                          <Color red="0.624" green="0.624" blue="0.624" fx:id="x21" />
+                                       </textFill>
+                                    </Label>
+                                    <Label text="Zoom" />
+                                    <Slider fx:id="pnZoomSlider" blockIncrement="0.1" max="4.0" value="1.0" />
+                                    <HBox alignment="CENTER_LEFT" prefWidth="45.0" styleClass="percentage-box">
+                                       <children>
+                                          <TextField fx:id="pnZoomValueField" alignment="CENTER_RIGHT" maxWidth="34.0" style="-fx-background-color: transparent;" text="100.0">
+                                             <padding>
+                                                <Insets bottom="2.0" left="2.0" top="2.0" />
+                                             </padding>
+                                          </TextField>
+                                          <Label text="\%" />
+                                       </children>
+                                    </HBox>
+                                    <ChoiceBox fx:id="pnModelChoice" prefWidth="150.0" styleClass="standard-choice-box" />
+                                    <CheckBox fx:id="bttnDisplayViolations" mnemonicParsing="false" onAction="#switchViolationStrings" text="Show Violations" />
+                                    <Label text="Final Marking:" />
+                                    <Label fx:id="labelFinalMarking" />
+                                 </children>
+                                 <opaqueInsets>
+                                    <Insets />
+                                 </opaqueInsets>
+                              </HBox>
+                              <WebView fx:id="pnWebView" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS" />
+                           </children>
+                        </VBox>
+                     </items>
+                     <padding>
+                        <Insets left="5.0" right="5.0" />
+                     </padding>
+                  </SplitPane>
+                  <VBox styleClass="section-box">
+                     <children>
+                  <Label alignment="CENTER" style="&#10;" text="Prefix+Continuation" textAlignment="CENTER" textFill="$x2" wrapText="false" VBox.vgrow="ALWAYS">
+                           <font>
+                              <Font size="24.0" />
+                           </font>
+                        </Label>
+                        <HBox>
+                           <children>
+                              <Label fx:id="selectedDecl" text="DECLARE MODEL" textAlignment="CENTER">
+                                 <HBox.margin>
+                                    <Insets left="5.0" right="15.0" />
+                                 </HBox.margin>
                               </Label>
-                              <Label text="Zoom" />
-                              <Slider fx:id="pnZoomSlider" blockIncrement="0.1" max="4.0" value="1.0" />
-                              <HBox alignment="CENTER_LEFT" prefWidth="45.0" styleClass="percentage-box">
-                                 <children>
-                                    <TextField fx:id="pnZoomValueField" alignment="CENTER_RIGHT" maxWidth="34.0" style="-fx-background-color: transparent;" text="100.0">
-                                       <padding>
-                                          <Insets bottom="2.0" left="2.0" top="2.0" />
-                                       </padding>
-                                    </TextField>
-                                    <Label text="\%" />
-                                 </children>
-                              </HBox>
-                              <ChoiceBox fx:id="pnModelChoice" prefWidth="150.0" />
-                              <RadioButton fx:id="bttnDisplayViolations" mnemonicParsing="false" onAction="#switchViolationStrings" text="Display Violations" />
-                              <Label text="Final Marking:" />
-                              <Label fx:id="labelFinalMarking" />
+                              <Label fx:id="selectedPN" text="PN MODEL" textAlignment="CENTER">
+                                 <HBox.margin>
+                                    <Insets left="15.0" right="5.0" />
+                                 </HBox.margin>
+                              </Label>
                            </children>
+                           <padding>
+                              <Insets left="5.0" right="5.0" />
+                           </padding>
+                           <VBox.margin>
+                              <Insets />
+                           </VBox.margin>
+                        </HBox>
+                        <ListView fx:id="planListView" snapToPixel="false" VBox.vgrow="ALWAYS" />
+                        <HBox alignment="CENTER">
+                           <children>
+                              <HBox alignment="CENTER">
+                                 <children>
+                                    <Label text="Plan Cost:">
+                                       <font>
+                                          <Font size="24.0" />
+                                       </font>
+                                    </Label>
+                                    <Label fx:id="labelCost">
+                                       <font>
+                                          <Font size="24.0" />
+                                       </font>
+                                    </Label>
+                                 </children>
+                                 <HBox.margin>
+                                    <Insets right="15.0" />
+                                 </HBox.margin>
+                                 <padding>
+                                    <Insets left="10.0" right="10.0" />
+                                 </padding>
+                              </HBox>
+                              <Button fx:id="buttonPrefix" mnemonicParsing="false" onAction="#onClickPrefix" styleClass="standard-button" text="Reset">
+                                 <HBox.margin>
+                                    <Insets right="20.0" />
+                                 </HBox.margin>
+                              </Button>
+                           </children>
+                           <padding>
+                              <Insets left="5.0" right="5.0" />
+                           </padding>
                            <opaqueInsets>
                               <Insets />
                            </opaqueInsets>
                         </HBox>
-                        <WebView fx:id="pnWebView" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS" />
                      </children>
                   </VBox>
                </items>
             </SplitPane>
-            <VBox>
-               <children>
-            <Label alignment="CENTER" style="&#10;" text="Prefix+Continuation" textAlignment="CENTER" textFill="$x2" wrapText="false" VBox.vgrow="ALWAYS">
-                     <font>
-                        <Font size="24.0" />
-                     </font></Label>
-                  <HBox>
-                     <children>
-                        <Label fx:id="selectedDecl" text="DECLARE MODEL" textAlignment="CENTER">
-                           <HBox.margin>
-                              <Insets left="5.0" right="15.0" />
-                           </HBox.margin></Label>
-                        <Label fx:id="selectedPN" text="PN MODEL" textAlignment="CENTER">
-                           <HBox.margin>
-                              <Insets left="15.0" right="5.0" />
-                           </HBox.margin></Label>
-                     </children>
-                     <padding>
-                        <Insets left="5.0" right="5.0" />
-                     </padding>
-                     <VBox.margin>
-                        <Insets />
-                     </VBox.margin>
-                  </HBox>
-                  <ListView fx:id="planListView" snapToPixel="false" VBox.vgrow="ALWAYS" />
-                  <HBox alignment="CENTER">
-                     <children>
-                        <HBox alignment="CENTER">
-                           <children>
-                              <Label text="Plan Cost:">
-                                 <font>
-                                    <Font size="24.0" />
-                                 </font>
-                              </Label>
-                              <Label fx:id="labelCost">
-                                 <font>
-                                    <Font size="24.0" />
-                                 </font>
-                              </Label>
-                           </children>
-                           <HBox.margin>
-                              <Insets right="15.0" />
-                           </HBox.margin>
-                           <padding>
-                              <Insets left="10.0" right="10.0" />
-                           </padding>
-                        </HBox>
-                        <Button fx:id="buttonPrefix" mnemonicParsing="false" onAction="#onClickPrefix" text="Reset">
-                           <HBox.margin>
-                              <Insets right="20.0" />
-                           </HBox.margin>
-                           <font>
-                              <Font size="24.0" />
-                           </font>
-                        </Button>
-                     </children>
-                     <padding>
-                        <Insets left="5.0" right="5.0" />
-                     </padding>
-                     <opaqueInsets>
-                        <Insets />
-                     </opaqueInsets>
-                  </HBox>
-               </children>
-            </VBox>
-      </items>
-    </SplitPane>
-      <HBox fx:id="timelineControls" alignment="CENTER_LEFT" spacing="5.0">
+         </children>
+      </HBox>
+      <HBox fx:id="timelineControls" alignment="CENTER_LEFT" spacing="5.0" styleClass="parameters-pane">
          <children>
-            <Button fx:id="stepBackwardButton" maxHeight="25.0" minHeight="25.0" mnemonicParsing="false" onAction="#stepBackward">
+            <Button fx:id="stepBackwardButton" maxHeight="25.0" minHeight="25.0" mnemonicParsing="false" onAction="#stepBackward" styleClass="small-button">
                <graphic>
-                  <FontIcon iconLiteral="fa-step-backward" />
+                  <FontIcon iconLiteral="fa-step-backward" styleClass="small-button__icon" />
                </graphic>
             </Button>
-            <Button fx:id="playPauseButton" maxHeight="25.0" minHeight="25.0" minWidth="30.0" mnemonicParsing="false" onAction="#playPause">
+            <Button fx:id="playPauseButton" maxHeight="25.0" minHeight="25.0" minWidth="30.0" mnemonicParsing="false" onAction="#playPause" styleClass="small-button">
                <graphic>
-                  <FontIcon fx:id="playFonticon" iconLiteral="fa-play" />
+                  <FontIcon fx:id="playFonticon" iconLiteral="fa-play" styleClass="small-button__icon" />
                </graphic>
             </Button>
-            <Button fx:id="stepForwardButton" maxHeight="25.0" minHeight="25.0" mnemonicParsing="false" onAction="#stepForward">
+            <Button fx:id="stepForwardButton" maxHeight="25.0" minHeight="25.0" mnemonicParsing="false" onAction="#stepForward" styleClass="small-button">
                <graphic>
-                  <FontIcon iconLiteral="fa-step-forward" />
+                  <FontIcon iconLiteral="fa-step-forward" styleClass="small-button__icon" />
                </graphic>
             </Button>
             <HBox alignment="CENTER" prefWidth="50.0">
