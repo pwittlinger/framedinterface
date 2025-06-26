@@ -482,6 +482,10 @@ public class InitialController {
 	@FXML
     void onClickPlanner(ActionEvent event) throws IOException, InterruptedException {
 
+		try {
+			
+		
+
 		rootElement.setDisable(true);
 
 		planPresent = true;
@@ -490,21 +494,18 @@ public class InitialController {
 
 		modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
 
+		if ((modelTabelView.getItems().size() < 2)|| (declPath == null) || (petrinetPath == null)){
+			System.out.println("Error: Number of input files not matching");
+			rootElement.setDisable(false);
+			return;
+		}
+
 		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
 		selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
 
 		//Write prefix to file and then pass it
 
 		BufferedWriter writer = new BufferedWriter(new FileWriter(currentPath + "/prefix.txt"));
-
-		/*
-		if (curPrefix.getText().contains("<None>")) {
-			writer.write("");
-		}	
-		else {
-			writer.write(curPrefix.getText());
-		}
-		*/
 
 		if (currentPrefix.isEmpty()) {
 			writer.write("");
@@ -550,7 +551,7 @@ public class InitialController {
 			// Run downward planner
 			File f = new File(currentPath+"/fast-downward/fast-downward.py");
 			if (f.exists()){
-				plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
+				plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
 			}
 			else {
 			plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
@@ -604,6 +605,10 @@ public class InitialController {
 			labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
 		}
 
+		} catch (Exception e) {
+			// Ensure that any errors do not lead to the system crashing
+			rootElement.setDisable(false);
+		}
 		rootElement.setDisable(false);
 
 	}
