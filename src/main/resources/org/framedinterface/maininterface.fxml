@@ -92,7 +92,7 @@
                   </VBox>
                   <HBox alignment="CENTER_LEFT" styleClass="single-parameter">
                      <children>
-                        <Label styleClass="single-parameter__title" text="Model reset" HBox.hgrow="ALWAYS">
+                        <Label styleClass="single-parameter__title" text="Recover After Violation" HBox.hgrow="ALWAYS">
                            <font>
                               <Font size="24.0" />
                            </font>
@@ -178,7 +178,7 @@
                                     </HBox>
                                     <HBox alignment="CENTER_LEFT" spacing="4.0">
                                        <children>
-                                          <Label text="All Violations" />
+                                          <Label text="Violated activities" />
                                           <CheckBox fx:id="bttnDisplayViolations" mnemonicParsing="false" onAction="#switchViolationStrings" />
                                        </children>
                                     </HBox>
