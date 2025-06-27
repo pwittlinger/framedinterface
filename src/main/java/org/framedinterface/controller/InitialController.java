@@ -56,6 +56,7 @@ import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Worker;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.geometry.Bounds;
 import javafx.scene.control.Button;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
@@ -73,6 +74,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.web.WebView;
+import javafx.stage.Popup;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
@@ -86,6 +88,7 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 
 public class InitialController {
@@ -205,6 +208,10 @@ public class InitialController {
     private Pane paneStatus;
 	@FXML
     private VBox mainContents;
+	@FXML
+    private Button toolTipButton;
+	@FXML
+    private Button toolTipButtonPN;
 
 
 	private static String precentageFormat = "%.1f";
@@ -1209,6 +1216,96 @@ public class InitialController {
 		displayViolations = bttnDisplayViolations.isSelected();
 
 		updateSelectedModelVisualizations();
+		
+	}
+
+	@FXML
+	private void onClickToolTip() {
+
+	Popup legendPopup = new Popup();
+
+	VBox legendBox = new VBox(10);
+	legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
+
+	Label title = new Label("Color Legend:");
+	legendBox.getChildren().addAll(
+		title,
+		createLegendItem(Color.web("#79a888"), "Constraint Temporarily Satisfied"),
+		createLegendItem(Color.web("#66ccff"), "Constraint Permanently Satisfied"),
+		createLegendItem(Color.web("#ffd700"), "Constraint Temporarily Violated"),
+		createLegendItem(Color.web("#d44942"), "Constraint Permanently Violated")
+	);
+
+	legendPopup.getContent().add(legendBox);
+	legendPopup.setAutoHide(true); // hides on outside click
+
+	// Attach to your button
+	toolTipButton.setOnAction(e -> {
+		if (!legendPopup.isShowing()) {
+			Bounds screenBounds = toolTipButton.localToScreen(toolTipButton.getBoundsInLocal());
+			double screenX = screenBounds.getMinX();
+			double screenY = screenBounds.getMinY();
+
+			// Show slightly below the button
+			legendPopup.show(toolTipButton, screenX, screenY + toolTipButton.getHeight());
+			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
+		} else {
+			legendPopup.hide();
+		}
+	});
+
+
+
+		
+	}
+
+	// Helper method
+	private HBox createLegendItem(Color color, String description) {
+		Rectangle rect = new Rectangle(20, 20, color);
+		rect.setStroke(Color.BLACK);       // black border
+		rect.setStrokeWidth(1); 
+		Label label = new Label(description);
+		HBox item = new HBox(10, rect, label);
+		return item;
+	}
+
+		@FXML
+	private void onClickToolTipPN() {
+
+	Popup legendPopup = new Popup();
+
+	VBox legendBox = new VBox(10);
+	legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
+
+	Label title = new Label("Color Legend:");
+	legendBox.getChildren().addAll(
+		title,
+		createLegendItem(Color.web("#66ccff"), "Transition fired"),
+		createLegendItem(Color.web("#FFFFFF"), "Transition enabled"),
+		createLegendItem(Color.web("#d44942"), "Transition violated (fired but not enabled)"),
+		createLegendItem(Color.web("#D3D3D3"), "Transition not enabled")
+	);
+
+	legendPopup.getContent().add(legendBox);
+	legendPopup.setAutoHide(true); // hides on outside click
+
+	// Attach to your button
+	toolTipButtonPN.setOnAction(e -> {
+		if (!legendPopup.isShowing()) {
+			Bounds screenBounds = toolTipButtonPN.localToScreen(toolTipButtonPN.getBoundsInLocal());
+			double screenX = screenBounds.getMinX();
+			double screenY = screenBounds.getMinY();
+
+			// Show slightly below the button
+			legendPopup.show(toolTipButtonPN, screenX, screenY + toolTipButtonPN.getHeight());
+			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
+		} else {
+			legendPopup.hide();
+		}
+	});
+
+
+
 		
 	}
 
