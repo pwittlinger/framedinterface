@@ -600,7 +600,7 @@ public class InitialController {
 			
 			File f = new File(currentPath+"/fast-downward/fast-downward.py");
 			
-			RunPlannerTask runPlannerTask = new RunPlannerTask(currentPath, resetDomain, !f.exists());
+			RunPlannerTask runPlannerTask = new RunPlannerTask(currentPath, resetDomain, f.exists());
 			runPlannerTask.setOnFailed(plannerTaskEvent -> {
 				// Ensure that any errors do not lead to the system crashing
 				AlertUtils.showError("Running the planner failed");
@@ -818,26 +818,17 @@ public class InitialController {
 	private void updatePrefix(Integer selectIndex) { //TODO: Allow building prefix event-by-event, without resetting after each event
 		tracePrefix = new ArrayList<String>(); //Resetting to empty trace
 
-		/*
-		if (textFieldPrefix.getText() != null && !textFieldPrefix.getText().equals("")) {
-			String prefixText = textFieldPrefix.getText();
-			prefixText.replace(" ", ",");
-			//String[] activityArray = textFieldPrefix.getText().split(",");
-			String[] activityArray =prefixText.split(",");
-			for (int i = 0; i < activityArray.length; i++) {
-				String activity = activityArray[i].strip();
-				if (!activity.isBlank()) {
-					tracePrefix.add(activity.toLowerCase());
-				}
-			}
-		}
-		*/
-
 		if (!currentPrefix.isEmpty()) {
 			tracePrefix = currentPrefix;
+			//modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
+			//modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
+			//updateplanListView(tracePrefix);
+			//updateTimelineControls(tracePrefix);
 		}
 
-		if (!planPresent){
+		if ((!planPresent)){
+			// Very stupid fix but i didn't have time to find a better solution
+			modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
 			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
 			updateplanListView(tracePrefix);
 			updateTimelineControls(tracePrefix);
