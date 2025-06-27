@@ -56,8 +56,7 @@
 <?import javafx.scene.web.WebView?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
-
-<StackPane fx:id="rootElement" styleClass="standard-bg-color" xmlns="http://javafx.com/javafx/16" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.framedinterface.controller.InitialController">
+<StackPane fx:id="rootElement" styleClass="standard-bg-color" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.framedinterface.controller.InitialController">
    <children>
       <VBox fx:id="mainContents" styleClass="ui-root">
         <children>
@@ -149,6 +148,7 @@
                                                 </HBox>
                                              </children>
                                           </HBox>
+                                          <Button fx:id="toolTipButton" mnemonicParsing="false" onAction="#onClickToolTip" styleClass="standard-button" text="Tooltip" />
                                        </children>
                                     </FlowPane>
                                     <WebView fx:id="declWebView" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS" />
@@ -190,6 +190,7 @@
                                              <children>
                                                 <Label text="Final Marking:" />
                                                 <Label fx:id="labelFinalMarking" />
+                                                <Button fx:id="toolTipButtonPN" mnemonicParsing="false" onAction="#onClickToolTipPN" styleClass="standard-button" text="Tooltip" />
                                              </children>
                                           </HBox>
                                        </children>
