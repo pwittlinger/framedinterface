@@ -212,7 +212,10 @@ public class InitialController {
     private Button toolTipButton;
 	@FXML
     private Button toolTipButtonPN;
-
+	@FXML
+	private Button toolTipButtonPlan;
+	@FXML
+	private Button toolTipButtonRunPlan;
 
 	private static String precentageFormat = "%.1f";
 	private String initialDeclWebViewScript;
@@ -259,6 +262,8 @@ public class InitialController {
 
 		// Initialize variables
 		resetDomain = true;
+		buttonResetYes.setSelected(true);
+		
 		displayViolations = false;
 		planPresent = false;
 		currentPath = Paths.get(".").toAbsolutePath().normalize().toString();
@@ -787,16 +792,8 @@ public class InitialController {
 
     @FXML
     void onClickResetYes(ActionEvent event) {
-		//resetDomain = true;
+		// Toggle the Domain
 		resetDomain = buttonResetYes.isSelected();
-		/*
-		if (resetDomain) {
-			labelCurrentDomain.setText("Domain_with_reset.pddl");
-		}
-		else{
-			labelCurrentDomain.setText("Domain_no_reset.pddl");
-		}
-		*/
 		
     }
 
@@ -1227,8 +1224,10 @@ public class InitialController {
 	VBox legendBox = new VBox(10);
 	legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
 
+	Label helpT = new Label("To add to the Prefix, click on the Activity name.");
 	Label title = new Label("Color Legend:");
 	legendBox.getChildren().addAll(
+		helpT,
 		title,
 		createLegendItem(Color.web("#79a888"), "Constraint Temporarily Satisfied"),
 		createLegendItem(Color.web("#66ccff"), "Constraint Permanently Satisfied"),
@@ -1277,8 +1276,10 @@ public class InitialController {
 	VBox legendBox = new VBox(10);
 	legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
 
+	Label helpT = new Label("To add to the Prefix, click on the Transition label.\n");
 	Label title = new Label("Color Legend:");
 	legendBox.getChildren().addAll(
+		helpT,
 		title,
 		createLegendItem(Color.web("#66ccff"), "Transition fired"),
 		createLegendItem(Color.web("#FFFFFF"), "Transition enabled"),
@@ -1303,10 +1304,80 @@ public class InitialController {
 			legendPopup.hide();
 		}
 	});
+	}
 
+		@FXML
+	private void onClickToolTipRunPlan() {
 
+	Popup legendPopup = new Popup();
 
-		
+	VBox legendBox = new VBox(10);
+	legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
+	
+	legendBox.getChildren().addAll(
+		new Label("To run the planner, ensure that Fast Downward is executable on your machine."),	
+		new Label("Recover after Violation: if this option is enabled, a violated frame component is reset during planning. Otherwise it will be permanently violated (no further planning)"),
+		new Label("Always ensure that your given Petri Net contains a final marking.")
+
+	);
+
+	legendPopup.getContent().add(legendBox);
+	legendPopup.setAutoHide(true); // hides on outside click
+
+	// Attach to your button
+	toolTipButtonRunPlan.setOnAction(e -> {
+		if (!legendPopup.isShowing()) {
+			Bounds screenBounds = toolTipButtonRunPlan.localToScreen(toolTipButtonRunPlan.getBoundsInLocal());
+			double screenX = screenBounds.getMinX();
+			double screenY = screenBounds.getMinY();
+
+			// Show slightly below the button
+			legendPopup.show(toolTipButtonRunPlan, screenX, screenY + toolTipButtonRunPlan.getHeight());
+			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
+		} else {
+			legendPopup.hide();
+		}
+	});
+	}
+
+		@FXML
+	private void onClickToolTipPlan() {
+
+	Popup legendPopup = new Popup();
+
+	VBox legendBox = new VBox(10);
+	legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
+	
+	legendBox.getChildren().addAll(
+		new Label("Click on one of the Elements in the pane below to replay the prefix/trace onto the selected process models."),	
+		new Label(""),
+		new Label("The first line shows the current activity in the plan."),
+		new Label("The next line shows the action that was taken by the planner:"),
+		new Label("\t i) \tprefix_sync: Successfully replayed the activity of the prefix onto the process models"),
+		new Label("\t ii) \tprefix_violate_pn: Currently executed transition was in violation of the control flow of the Petri net"),
+		new Label("\t iii) \tprefix_violate_pn: Currently executed transition was in violation of the control flow of the Petri net"),
+		new Label("\t iv) \tprefix_violate_pn: Currently executed transition was in violation of the control flow of the Petri net"),
+		new Label("\t v) \treset: Reset the currently displayed frame component (contraint/petri net)"),
+		new Label("\t vi) \tsync: Currently executed transition was successfully replayed on the process frame")
+	);
+
+	legendPopup.getContent().add(legendBox);
+	legendPopup.setAutoHide(true); // hides on outside click
+
+	// Attach to your button
+	toolTipButtonPlan.setOnAction(e -> {
+		if (!legendPopup.isShowing()) {
+			Bounds screenBounds = toolTipButtonPlan.localToScreen(toolTipButtonPlan.getBoundsInLocal());
+			double screenX = screenBounds.getMinX();
+			double screenY = screenBounds.getMinY();
+
+			// Show slightly below the button
+			legendPopup.show(toolTipButtonPlan, screenX, screenY + toolTipButtonPlan.getHeight());
+			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
+		} else {
+			legendPopup.hide();
+		}
+	});
 	}
 
 }

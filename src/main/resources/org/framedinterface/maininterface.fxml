@@ -47,11 +47,9 @@
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.FlowPane?>
 <?import javafx.scene.layout.HBox?>
-<?import javafx.scene.layout.Pane?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
-<?import javafx.scene.paint.Color?>
 <?import javafx.scene.text.Font?>
 <?import javafx.scene.web.WebView?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
@@ -105,6 +103,11 @@
                         </HBox>
                         <HBox alignment="CENTER_RIGHT" styleClass="buttons-group--primary">
                            <children>
+                              <Button fx:id="toolTipButtonRunPlan" mnemonicParsing="false" onAction="#onClickToolTipRunPlan" styleClass="standard-button" text="Help" />
+                           </children>
+                        </HBox>
+                        <HBox alignment="CENTER_RIGHT" styleClass="buttons-group--primary">
+                           <children>
                               <Button fx:id="buttonRunPlanner" mnemonicParsing="false" onAction="#onClickPlanner" styleClass="standard-button" text="Run Planner" />
                            </children>
                         </HBox>
@@ -148,7 +151,12 @@
                                                 </HBox>
                                              </children>
                                           </HBox>
-                                          <Button fx:id="toolTipButton" mnemonicParsing="false" onAction="#onClickToolTip" styleClass="standard-button" text="Tooltip" />
+                                          <HBox>
+                                             <children>
+                                                <Region maxWidth="20.0" />
+                                                <Button fx:id="toolTipButton" mnemonicParsing="false" onAction="#onClickToolTip" styleClass="standard-button" text="Help" />
+                                             </children>
+                                          </HBox>
                                        </children>
                                     </FlowPane>
                                     <WebView fx:id="declWebView" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS" />
@@ -190,7 +198,8 @@
                                              <children>
                                                 <Label text="Final Marking:" />
                                                 <Label fx:id="labelFinalMarking" />
-                                                <Button fx:id="toolTipButtonPN" mnemonicParsing="false" onAction="#onClickToolTipPN" styleClass="standard-button" text="Tooltip" />
+                                                <Region maxWidth="20.0" />
+                                                <Button fx:id="toolTipButtonPN" mnemonicParsing="false" onAction="#onClickToolTipPN" styleClass="standard-button" text="Help" />
                                              </children>
                                           </HBox>
                                        </children>
@@ -226,6 +235,7 @@
                                                 <Label fx:id="selectedPN" maxWidth="1.7976931348623157E308" text="PN MODEL" textAlignment="CENTER" />
                                              </children>
                                           </VBox>
+                                          <Button fx:id="toolTipButtonPlan" mnemonicParsing="false" onAction="#onClickToolTipPlan" styleClass="standard-button" text="Help" />
                                        </children>
                                     </HBox>
                                  </children>
@@ -280,22 +290,6 @@
                   </Slider>
                </children>
             </HBox>
-          <HBox id="HBox" alignment="CENTER_LEFT" spacing="5.0" VBox.vgrow="NEVER">
-            <children>
-              <Label maxHeight="1.7976931348623157E308" maxWidth="-1.0" text="Status: " HBox.hgrow="ALWAYS">
-                <font>
-                  <Font size="11.0" fx:id="x3" />
-                </font>
-                <textFill>
-                  <Color red="0.625" green="0.625" blue="0.625" fx:id="x4" />
-                </textFill>
-              </Label>
-              <Pane fx:id="paneStatus" prefHeight="-1.0" prefWidth="-1.0" HBox.hgrow="ALWAYS" />
-            </children>
-            <padding>
-              <Insets bottom="3.0" left="3.0" right="3.0" top="3.0" />
-            </padding>
-          </HBox>
         </children>
       </VBox>
    </children>

@@ -373,10 +373,10 @@ public class PnModel extends AbstractModel  {
 	    					
 	    					// Setting all regular transitions
 	    					if ((this.firedTransitions.contains(t.getLabel().toLowerCase())) && (!this.violatedFiringsKeep.contains(t.getLabel().toLowerCase()))){
-	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=lightblue, color=black, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=\"#66ccff\", color=black, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
 	    					}
 	    					else if((this.violatedFiringsKeep.contains(t.getLabel().toLowerCase()))) {
-	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=red, color=black, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
+	    						sb.append(activityEncoding+" [label=\""+t.getLabel()+"\", style=\"filled,dashed\", fillcolor=\"#d44942\", color=black, tooltip=\"violationCount=" +this.violationCount.get(t.getLabel().toLowerCase()) +"\"]; ");
 	    					}
 	    					// Regular Transitions that are enabled
 	    					else if ((allEnabledTransitions.contains(t))) {
