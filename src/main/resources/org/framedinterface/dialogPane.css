@@ -1,0 +1,76 @@
+/**
+ * This css file contains all style classes that are specific to dialog panes (mainly alerts).
+ * Decided to keep these styles separate because dialog stylesheets have to be added programatically
+ * and I did not want to add the entire main.css to the dialog pane.
+ */
+
+
+
+@font-face {
+    font-family: 'Open Sans', sans-serif;
+    src: url('fonts/OpenSans-Regular.ttf');
+}
+
+@font-face {
+    font-family: 'Open Sans', sans-serif;
+    font-weight: bold;
+    src: url('fonts/OpenSans-Bold.ttf');
+}
+
+@font-face {
+    font-family: 'Open Sans', sans-serif;
+    font-style: italic;
+    src: url('fonts/OpenSans-Italic.ttf');
+}
+
+@font-face {
+    font-family: 'Open Sans', sans-serif;
+    font-weight: bold;
+    font-style: italic;
+    src: url('fonts/OpenSans-BoldItalic.ttf');
+}
+
+.root {
+	-fx-font-family: "Open Sans";
+}
+
+
+
+
+.dialog-pane {
+    -fx-background-color: white;
+}
+
+.dialog-pane .label {
+    -fx-text-fill: #393939;
+}
+
+.dialog-pane:header .header-panel {
+    -fx-background-color: white;
+}
+
+.dialog-pane:header .header-panel .label {
+    -fx-text-fill: #393939;
+    -fx-font-size: 2em;
+}
+
+.dialog-pane > *.label.content{
+    -fx-font-size: 14px;
+    -fx-padding: 20px;
+}
+
+.dialog-pane .button {
+	-fx-border-width: 2px;
+	-fx-border-color: #393939;
+	-fx-font-weight: bold;
+	-fx-background-color: #393939;
+	-fx-text-fill: white;
+	-fx-background-radius: 0px;
+	-fx-border-radius: 0px;
+	-fx-cursor: hand;
+}
+
+.dialog-pane .button:hover {
+	-fx-background-color: white;
+	-fx-text-fill: #393939;
+}

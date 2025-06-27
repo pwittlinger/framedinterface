@@ -19,9 +19,11 @@ import org.framedinterface.model.AbstractModel;
 import org.framedinterface.model.DeclareModel;
 import org.framedinterface.model.ModelType;
 import org.framedinterface.model.PnModel;
+import org.framedinterface.task.GeneratePDDLTask;
+import org.framedinterface.task.RunPlannerTask;
+import org.framedinterface.utils.AlertUtils;
 import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ModelUtils;
-import org.framedinterface.utils.RunnerUtils;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -53,13 +55,13 @@ import javafx.beans.value.ObservableValue;
 import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Worker;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.scene.control.Button;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
-import javafx.scene.control.ProgressIndicator;
-import javafx.scene.control.RadioButton;
 import javafx.scene.control.Slider;
+import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -69,6 +71,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.StackPane;
 import javafx.scene.web.WebView;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -86,6 +89,9 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 
 public class InitialController {
+	
+	@FXML 
+	private StackPane rootElement;
 
     @FXML
     private Button buttonPrefix;
@@ -114,6 +120,9 @@ public class InitialController {
     @FXML
     private Button buttonRunPlanner;
 
+    @FXML
+    private SplitPane resultsSplitPane;
+    
     @FXML
     private Label curPrefix;
 
@@ -164,6 +173,8 @@ public class InitialController {
 	private ChoiceBox<AbstractModel> pnModelChoice;
 	@FXML
 	private WebView pnWebView;
+	@FXML
+	private Label prefixOnlyLabel;
 		@FXML
 	private HBox timelineControls;
 	@FXML
@@ -181,19 +192,19 @@ public class InitialController {
 	@FXML
 	private Slider eventSlider;
 	    @FXML
-    private RadioButton bttnDisplayViolations;
+    private CheckBox bttnDisplayViolations;
 	    @FXML
     private Label selectedDecl;
 
     @FXML
     private Label selectedPN;
     @FXML
-    private RadioButton buttonResetYes;
+    private CheckBox buttonResetYes;
 
     @FXML
     private Pane paneStatus;
 	@FXML
-    private VBox rootElement;
+    private VBox mainContents;
 
 
 	private static String precentageFormat = "%.1f";
@@ -213,11 +224,13 @@ public class InitialController {
 	private boolean animationInProgress; //Used to allow navigation of events during animation
 	private SimpleIntegerProperty currentEventIndex = new SimpleIntegerProperty(0); //Various ui elements listen to this value for updates, also used to determine the model state to visualize
 	private FontIcon pauseFontIcon = new FontIcon("fa-pause"); //Icon to be displayed when animation is paused
+	private javafx.scene.Node progressLayer;
+	boolean progressLayerLoadAttempted = false;
 
 
 	List<VBox> resultsList;
     private Stage stage;
-    private ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+	private ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 	private int defaultViolationCost = 3;
 	private String declPath;
 	private String petrinetPath;
@@ -245,17 +258,24 @@ public class InitialController {
 		currentPlan = new ArrayList<>();
 		currentPrefix = new ArrayList<>();
 		
-		modelTabelView.setPlaceholder(new Label("No input models selected"));
+		selectedDecl.setVisible(false);
+		selectedDecl.setManaged(false);
+		selectedPN.setVisible(false);
+		selectedPN.setManaged(false);
+		
+		modelTabelView.setPlaceholder(new Label("No process specifications selected"));
 		modelNameColumn.setCellFactory(TextFieldTableCell.forTableColumn());
 		modelNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelName()));
 		modelTypeColumn.setCellFactory(TextFieldTableCell.forTableColumn());
 		modelTypeColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelType().toString()));
+		
 		modelRemoveColumn.setCellValueFactory(
 				param -> new ReadOnlyObjectWrapper<AbstractModel>(param.getValue())
 				);
 		modelRemoveColumn.setCellFactory(param -> new TableCell<AbstractModel, AbstractModel>() {
-			private final Button removeButton = new Button("Remove");
-
+			private final Button removeButton = new Button();
+			private FontIcon deleteFontIcon = new FontIcon("fa-trash");
+			
 			@Override
 			protected void updateItem(AbstractModel item, boolean empty) {
 				super.updateItem(item, empty);
@@ -263,6 +283,12 @@ public class InitialController {
 				if (item == null) {
 					setGraphic(null);
 					return;
+				}
+				
+				if (!removeButton.getStyleClass().contains("action-cell__button")) {
+					removeButton.getStyleClass().add("action-cell__button");
+					deleteFontIcon.getStyleClass().add("action-cell__delete-icon");
+					removeButton.setGraphic(deleteFontIcon);
 				}
 
 				setGraphic(removeButton);
@@ -289,14 +315,14 @@ public class InitialController {
 			}
 		});
 
-		//Enable and disable timelineControls and planListView based on if there are input models or not
+		//Enable and disable timelineControls and resultsSplitPane based on if there are input models or not
+		resultsSplitPane.setDisable(true);
 		timelineControls.setDisable(true);
-		planListView.setDisable(true);
 		modelTabelView.getItems().addListener(new InvalidationListener() {
 			@Override
 			public void invalidated(Observable observable) {
+				resultsSplitPane.setDisable(modelTabelView.getItems().isEmpty());
 				timelineControls.setDisable(modelTabelView.getItems().isEmpty());
-				planListView.setDisable(modelTabelView.getItems().isEmpty());
 			}
 		});
 
@@ -464,7 +490,14 @@ public class InitialController {
     	modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
 		currentPrefix.clear();
 
-		updatePrefix();
+		prefixOnlyLabel.setVisible(true);
+		prefixOnlyLabel.setManaged(true);
+		selectedDecl.setVisible(false);
+		selectedDecl.setManaged(false);
+		selectedPN.setVisible(false);
+		selectedPN.setManaged(false);
+
+		updatePrefix(null);
 		updateSelectedModelVisualizations();
 		labelCost.setText("");
 		
@@ -474,9 +507,33 @@ public class InitialController {
 	@FXML
     void onClickPlanner(ActionEvent event) throws IOException, InterruptedException {
 
-		try {
-			
-		rootElement.setDisable(true);
+//		try {
+		if (progressLayer == null && !progressLayerLoadAttempted) {
+			try {
+				// Load the progress layer
+				FXMLLoader loader = new FXMLLoader(getClass().getResource("/org/framedinterface/ProgressLayer.fxml"));
+				progressLayer = loader.load();
+				ProgressLayerController progressLayerController = loader.getController();
+				progressLayerController.getProgressTextLabel().setText("Running planner...");
+				
+				progressLayerController.getCancelButton().setOnAction(e -> {
+					executorService.shutdownNow(); //TODO: Terminate the currently executing task instead
+					executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors()); //Didn't see a way to restart after shutdown
+					setUiBusy(false);
+				});
+				
+			} catch (Exception e) {
+				System.out.println("Cannot load progress layer");
+				e.printStackTrace();
+			} finally {
+				progressLayerLoadAttempted = true;
+			}
+		}
+		
+		
+		
+		
+		setUiBusy(true);
 
 		planPresent = true;
 
@@ -490,12 +547,9 @@ public class InitialController {
 			// then uploaded multiple declare models
 			// then tried to run the planner.
 			System.out.println("Error: Number of input files not matching");
-			rootElement.setDisable(false);
+			setUiBusy(false);
 			return;
 		}
-
-		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
-		selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
 
 		//Write prefix to file and then pass it
 
@@ -536,68 +590,198 @@ public class InitialController {
 
 		//Run the Framed Autonomy Tool Jar
 		// Assumed to be located in the project repository
-
-		int exitCode = RunnerUtils.generatePDDL(commandStrings, finMarking, resetDomain);
-
-		System.out.println("Process exited with code: " + exitCode);
-		int plannerExit = 1;
-		if (exitCode == 0){
-			// Run downward planner
-			File f = new File(currentPath+"/fast-downward/fast-downward.py");
-			if (f.exists()){
-				plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
-			}
-			else {
-			plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
-			}
-			System.out.println("Planning Done");
-			
-		}
-
-		if (plannerExit == 0){
-			ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
-
-			ArrayList<String> onlyActions = new ArrayList<>();
-			planListView.getItems().clear();
-
-			for (String action : generatedPlan) {
-
-				String[] steps = action.split(" ");
-				System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
-
-				int actInd = steps.length-2;
-				if (steps[0].contains("sync")) {
-					onlyActions.add(steps[0]+";"+steps[actInd]);
-				}
-				if (steps[0].contains("prefix_violate")) {
-					onlyActions.add(steps[0]+";"+steps[actInd]);
-				}
-				if (steps[0].contains("reset")) {
-					onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
-				}
-				
-
-			}
-			System.out.println(onlyActions);
-			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
-			updateplanListView(onlyActions);
-			updateTimelineControls(onlyActions);
-			this.currentPlan = onlyActions;
-			labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
-		}
-
-		} catch (Exception e) {
+		GeneratePDDLTask generatePDDLTask = new GeneratePDDLTask(commandStrings, finMarking, resetDomain);
+		generatePDDLTask.setOnFailed(taskEvent -> {
 			// Ensure that any errors do not lead to the system crashing
-			rootElement.setDisable(false);
+			AlertUtils.showError("Generating PDDL failed");
+			setUiBusy(false);
+		});
+		generatePDDLTask.setOnSucceeded(pddlTaskEvent -> {
+			
+			File f = new File(currentPath+"/fast-downward/fast-downward.py");
+			
+			RunPlannerTask runPlannerTask = new RunPlannerTask(currentPath, resetDomain, !f.exists());
+			runPlannerTask.setOnFailed(plannerTaskEvent -> {
+				// Ensure that any errors do not lead to the system crashing
+				AlertUtils.showError("Running the planner failed");
+				setUiBusy(false);
+			});
+			runPlannerTask.setOnSucceeded(plannerTaskEvent -> {
+				ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
+				
+				ArrayList<String> onlyActions = new ArrayList<>();
+				planListView.getItems().clear();
+				
+				for (String action : generatedPlan) {
+					
+					String[] steps = action.split(" ");
+					System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+					
+					int actInd = steps.length-2;
+					if (steps[0].contains("sync")) {
+						onlyActions.add(steps[0]+";"+steps[actInd]);
+					}
+					if (steps[0].contains("prefix_violate")) {
+						onlyActions.add(steps[0]+";"+steps[actInd]);
+					}
+					if (steps[0].contains("reset")) {
+						onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
+					}
+					
+					
+				}
+				System.out.println(onlyActions);
+				modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
+				updateplanListView(onlyActions);
+				updateTimelineControls(onlyActions);
+				this.currentPlan = onlyActions;
+				labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
+				
+				setUiBusy(false);
+			});
+			
+			executorService.execute(runPlannerTask);
+			
+			
+			
+//			int plannerExit = 1;
+//			
+//			try {
+//				// Run downward planner
+//				f = new File(currentPath+"/fast-downward/fast-downward.py");
+//				if (f.exists()){
+//					plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
+//				}
+//				else {
+//					plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
+//				}
+//				System.out.println("Planning Done");
+//				
+//				if (plannerExit == 0){
+//					ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
+//		
+//					ArrayList<String> onlyActions = new ArrayList<>();
+//					planListView.getItems().clear();
+//		
+//					for (String action : generatedPlan) {
+//		
+//						String[] steps = action.split(" ");
+//						System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+//		
+//						int actInd = steps.length-2;
+//						if (steps[0].contains("sync")) {
+//							onlyActions.add(steps[0]+";"+steps[actInd]);
+//						}
+//						if (steps[0].contains("prefix_violate")) {
+//							onlyActions.add(steps[0]+";"+steps[actInd]);
+//						}
+//						if (steps[0].contains("reset")) {
+//							onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
+//						}
+//						
+//		
+//					}
+//					System.out.println(onlyActions);
+//					modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
+//					updateplanListView(onlyActions);
+//					updateTimelineControls(onlyActions);
+//					this.currentPlan = onlyActions;
+//					labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
+//				}
+//				
+//			} catch (Exception e) {
+//				// Ensure that any errors do not lead to the system crashing
+//				setUiBusy(false);
+//			}
+//			
+//			setUiBusy(false);
+		});
+		
+		executorService.execute(generatePDDLTask);
+			
+	
+//			int exitCode = RunnerUtils.generatePDDL(commandStrings, finMarking, resetDomain);
+//	
+//			System.out.println("Process exited with code: " + exitCode);
+//			int plannerExit = 1;
+//			if (exitCode == 0){
+//				// Run downward planner
+//				File f = new File(currentPath+"/fast-downward/fast-downward.py");
+//				if (f.exists()){
+//					plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
+//				}
+//				else {
+//				plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
+//				}
+//				System.out.println("Planning Done");
+//				
+//			}
+//	
+//			if (plannerExit == 0){
+//				ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
+//	
+//				ArrayList<String> onlyActions = new ArrayList<>();
+//				planListView.getItems().clear();
+//	
+//				for (String action : generatedPlan) {
+//	
+//					String[] steps = action.split(" ");
+//					System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+//	
+//					int actInd = steps.length-2;
+//					if (steps[0].contains("sync")) {
+//						onlyActions.add(steps[0]+";"+steps[actInd]);
+//					}
+//					if (steps[0].contains("prefix_violate")) {
+//						onlyActions.add(steps[0]+";"+steps[actInd]);
+//					}
+//					if (steps[0].contains("reset")) {
+//						onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
+//					}
+//					
+//	
+//				}
+//				System.out.println(onlyActions);
+//				modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
+//				updateplanListView(onlyActions);
+//				updateTimelineControls(onlyActions);
+//				this.currentPlan = onlyActions;
+//				labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
+//			}
+//
+//		} catch (Exception e) {
+//			// Ensure that any errors do not lead to the system crashing
+//			mainContents.setDisable(false);
+//		}
+		
+		prefixOnlyLabel.setVisible(false);
+		prefixOnlyLabel.setManaged(false);
+		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+		selectedDecl.setVisible(true);
+		selectedDecl.setManaged(true);
+		selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+		selectedPN.setVisible(true);
+		selectedPN.setManaged(true);
+	}
+	
+	private void setUiBusy(boolean disable) { 
+		//Not 100% sure why mainContents.setDisable(disable) does not work when called directly (at least without busy layer)
+		//...I guess Platform.runLater has the side effect of ensuring that the view is refreshed (adding busy layer probably has the same effect)
+		Platform.runLater(() -> mainContents.setDisable(disable));
+		
+		if (progressLayer != null) {
+			if (disable) {
+				rootElement.getChildren().add(progressLayer);
+			} else {
+				rootElement.getChildren().remove(progressLayer);
+			}
 		}
-		rootElement.setDisable(false);
-
 	}
 
     @FXML
     void onClickResetYes(ActionEvent event) {
 		//resetDomain = true;
-		resetDomain = !resetDomain;
+		resetDomain = buttonResetYes.isSelected();
 		/*
 		if (resetDomain) {
 			labelCurrentDomain.setText("Domain_with_reset.pddl");
@@ -630,8 +814,8 @@ public class InitialController {
 		}
 	}
 
-	@FXML
-	private void updatePrefix() {
+	
+	private void updatePrefix(Integer selectIndex) { //TODO: Allow building prefix event-by-event, without resetting after each event
 		tracePrefix = new ArrayList<String>(); //Resetting to empty trace
 
 		/*
@@ -657,6 +841,12 @@ public class InitialController {
 			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
 			updateplanListView(tracePrefix);
 			updateTimelineControls(tracePrefix);
+		}
+		
+		if (selectIndex != null) { //TODO: Not sure if this is the best place for scrolling to the added activity
+			eventSlider.setValue(selectIndex);
+			currentEventIndex.setValue(selectIndex);
+			animationTimeline.jumpTo(animationTimeline.getTotalDuration().multiply(eventSlider.getValue() / eventSlider.getMax()));
 		}
 
 
@@ -824,7 +1014,7 @@ public class InitialController {
 			}
 		});
 
-			currentEventIndex.addListener((observable, oldValue, newValue) -> {
+		currentEventIndex.addListener((observable, oldValue, newValue) -> {
 			updateSelectedModelVisualizations();
 			planListView.scrollTo(newValue.intValue());
 			planListView.getSelectionModel().clearAndSelect(newValue.intValue());
@@ -922,7 +1112,7 @@ public class InitialController {
 		if (activityName != null) {
 			
 			currentPrefix.add(activityName);
-			updatePrefix();
+			updatePrefix(currentPrefix.size());
 
 			/*
 			if (textFieldPrefix.getText().isEmpty()) {
@@ -1025,7 +1215,7 @@ public class InitialController {
 	@FXML
 	private void switchViolationStrings() {
 
-		displayViolations = !displayViolations;
+		displayViolations = bttnDisplayViolations.isSelected();
 
 		updateSelectedModelVisualizations();
 		
