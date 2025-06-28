@@ -21,6 +21,7 @@ import org.apache.commons.collections4.BidiMap;
 import org.processmining.datapetrinets.DataPetriNetsWithMarkings;
 import org.processmining.datapetrinets.io.DPNIOException;
 import org.processmining.datapetrinets.io.DataPetriNetImporter;
+import org.processmining.models.graphbased.AttributeMap;
 import org.processmining.models.graphbased.directed.petrinet.elements.Transition;
 
 import org.framedinterface.model.DeclareModel;
@@ -42,6 +43,7 @@ public class ModelUtils {
 		Map<String, List<DeclareConstraint>> activityToUnaryMap = createActivityToUnaryMap(activities, declareConstrains); 
 
 		DeclareModel declareModel = new DeclareModel(modelId, modelName, activities, activityToEncodingMap, declareConstrains, activityToUnaryMap);
+		declareModel.setFilePath(modelPath.toAbsolutePath().toString());
 		return declareModel;
 	}
 
@@ -53,7 +55,8 @@ public class ModelUtils {
 		while(sc.hasNextLine()) {
 			String line = sc.nextLine();
 			if(line.startsWith("activity ") && line.length() > 9) {
-				activityNames.add(line.substring(9));
+				//activityNames.add(line.substring(9));
+				activityNames.add(line.substring(9).toLowerCase());
 			}
 		}
 		sc.close();
@@ -65,7 +68,8 @@ public class ModelUtils {
 	private static BidiMap<String, String> createActivityToEncodingMap(LinkedHashSet<String> activities) {
 		BidiMap<String, String> activityToEncodingMap =  new DualHashBidiMap<String, String>(); //I am not sure if this provides predictable iteration order; if yes, then activities set could be removed
 		for (String activity : activities) {
-			activityToEncodingMap.putIfAbsent(activity, "n"+activityToEncodingMap.size());
+			activityToEncodingMap.putIfAbsent(activity.toLowerCase(), "n"+activityToEncodingMap.size());
+			//activityToEncodingMap.putIfAbsent(activity, "n"+activityToEncodingMap.size());
 		}
 		return activityToEncodingMap;
 	}
@@ -134,7 +138,8 @@ public class ModelUtils {
 			activationActivity = mUnary.group(1);
 		}
 
-		return new DeclareConstraint(constraintString, template, activationActivity, targetActivity);
+		//return new DeclareConstraint(constraintString, template, activationActivity, targetActivity);
+		return new DeclareConstraint(constraintString, template, activationActivity.toLowerCase(), targetActivity.toLowerCase());
 	}
 
 
@@ -144,18 +149,27 @@ public class ModelUtils {
 		DataPetriNetImporter dataPetriNetImporter = new DataPetriNetImporter(); //There should be a version for regular Petri nets somewhere, but reusing the data Petri nets one will hopefully be fine
 		InputStream inputStream = new BufferedInputStream(new FileInputStream(modelPath.toString()));
 		DataPetriNetsWithMarkings dataPetriNet = dataPetriNetImporter.importFromStream(inputStream).getDPN();
-		Set<String> activityNames = createActivityNamesSet(dataPetriNet); //It is probably not necessary to encode the activity names of the Petri net
+		
+		for (Transition transition : dataPetriNet.getTransitions()) {
+			transition.getAttributeMap().put(AttributeMap.LABEL, transition.getLabel().toLowerCase());
+		}
+		
+		LinkedHashSet<String> activities = createActivityNamesSet(dataPetriNet); //It is probably not necessary to encode the activity names of the Petri net
+		BidiMap<String, String> activityToEncodingMap = createActivityToEncodingMap(activities);
+		
+		
 
-		PnModel dpnModel = new PnModel(modelId, modelName, activityNames, dataPetriNet);
+		PnModel dpnModel = new PnModel(modelId, modelName, activities, activityToEncodingMap, dataPetriNet);
+		dpnModel.setFilePath(modelPath.toAbsolutePath().toString());
 		return dpnModel;
 	}
 
 	//Creates activity names set based on DPN model
-	private static Set<String> createActivityNamesSet(DataPetriNetsWithMarkings dataPetriNet) {
-		Set<String> activityNames = new LinkedHashSet<String>();
+	private static LinkedHashSet<String> createActivityNamesSet(DataPetriNetsWithMarkings dataPetriNet) {
+		LinkedHashSet<String> activityNames = new LinkedHashSet<String>();
 		for (Transition transition : dataPetriNet.getTransitions()) {
 			if (!transition.isInvisible()) {
-				activityNames.add(transition.getLabel());
+				activityNames.add(transition.getLabel().toLowerCase());
 			}
 		}
 		return activityNames;

@@ -11,6 +11,7 @@ public abstract class AbstractModel {
 	private ModelType modelType;
 	private LinkedHashSet<String> activities; //For predictable iteration order
 	private BidiMap<String, String> activityToEncodingMap; //To allow lookup by both keys and values
+	public String fullFilePath;
 	
 	public AbstractModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, ModelType modelType) {
 		this.modelId = modelId;
@@ -47,14 +48,24 @@ public abstract class AbstractModel {
 	public BidiMap<String, String> getActivityToEncodingMap() {
 		return activityToEncodingMap;
 	}
+
+	public void setFilePath(String filePath) {
+		this.fullFilePath = filePath;
+	}
 	
-	public abstract void updateMonitoringStates(List<String> activities);
+	public String getFilePath(){
+		return this.fullFilePath;
+	}
 	
-	public abstract String getVisualisationString(int activityIndex);
+	public abstract void updateMonitoringStates(List<String> activities, boolean displayViolations);
+	
+	public abstract String getVisualisationString(int activityIndex, boolean displayViolations);
 
 	@Override
 	public String toString() {
 		return "AbstractModel [modelName=" + modelName + ", modelType=" + modelType + "]";
 	}
+
+	public abstract void resetModel();
 	
 }

@@ -72,9 +72,10 @@ public class RunnerUtils {
     }
 
     public static int runPlanner(String currentPath, boolean domainReset) throws InterruptedException, IOException{
+		
         ArrayList<String> commandFastDownward = new ArrayList<String>();
             String domainPath;
-			String fastDownwardPath = currentPath+"/fast-downward-22.12.tar/fast-downward.py";
+			String fastDownwardPath = currentPath+"/fast-downward/fast-downward.py";
 			
 			String problemPath = currentPath+"/problem.pddl";
             if (domainReset){
@@ -87,6 +88,46 @@ public class RunnerUtils {
 			//commandFastDownward.add(pythonPath);
 			commandFastDownward.add("python.exe");
 			commandFastDownward.add(fastDownwardPath);
+			commandFastDownward.add(domainPath);
+			commandFastDownward.add(problemPath);
+			commandFastDownward.add("--search");
+			commandFastDownward.add("\"astar(blind())\"");
+
+			System.out.println(commandFastDownward);
+			System.out.println("Starting Planning...");
+			File output = new File(currentPath+"/results.txt");
+
+			ProcessBuilder pbPlanner = new ProcessBuilder(commandFastDownward);
+			pbPlanner.redirectOutput(output);
+
+			Process processPlanner = pbPlanner.start();
+			return processPlanner.waitFor();
+    }
+
+	public static int runPlanner2(String currentPath, boolean domainReset) throws InterruptedException, IOException{
+		String os = System.getProperty("os.name");
+
+        ArrayList<String> commandFastDownward = new ArrayList<String>();
+            String domainPath;
+			//String fastDownwardPath = currentPath+"/fast-downward/fast-downward.py";
+			
+			//String problemPath = currentPath+"/problem.pddl";
+			String problemPath = "problem.pddl";
+            if (domainReset){
+                //domainPath = currentPath+"/domain_with_reset.pddl";
+				domainPath = "domain_with_reset.pddl";
+            }
+            else{
+                domainPath = "domain_no_reset.pddl";
+            }
+
+			//commandFastDownward.add(pythonPath);
+			if (os.contains("Windows")) {
+				commandFastDownward.add("wsl");
+			}
+			commandFastDownward.add("apptainer/bin/apptainer");
+			commandFastDownward.add("run");
+			commandFastDownward.add("fast-downward.sif");
 			commandFastDownward.add(domainPath);
 			commandFastDownward.add(problemPath);
 			commandFastDownward.add("--search");

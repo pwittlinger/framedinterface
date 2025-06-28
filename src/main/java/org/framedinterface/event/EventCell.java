@@ -1,6 +1,7 @@
 package org.framedinterface.event;
 
 import java.io.IOException;
+import java.net.URL;
 import java.util.function.Consumer;
 
 import javafx.fxml.FXML;
@@ -21,6 +22,8 @@ public class EventCell extends ListCell<EventData> {
 	private Label satisfiedLabel;
 	@FXML
 	private Label violatedLabel;
+	@FXML
+	private Label actionLabel;
 	
 	private int eventNumber;
 	private Consumer<Integer> selectionCallback;
@@ -58,12 +61,19 @@ public class EventCell extends ListCell<EventData> {
 				if (item.isStart()) {
 					activityNameLabel.setText("-trace start-");
 					activityNameLabel.getStyleClass().add("event-title__artificial");
+					actionLabel.setVisible(false);
+					actionLabel.setManaged(false);
 				} else if (item.isEnd()) {
 					activityNameLabel.setText("-trace end-");
 					activityNameLabel.getStyleClass().add("event-title__artificial");
+					actionLabel.setVisible(false);
+					actionLabel.setManaged(false);
 				} else {
 					activityNameLabel.setText(item.getActivityName());
 					activityNameLabel.getStyleClass().remove("event-title__artificial");
+					actionLabel.setVisible(true);
+					actionLabel.setManaged(true);
+					actionLabel.setText(item.getPlanAction());
 				}
 				satisfiedLabel.setText(item.getDeclMonitoringStateCounts().get(MonitoringState.SAT) + " (" + item.getDeclMonitoringStateCounts().get(MonitoringState.POSS_SAT) + ")");
 				violatedLabel.setText(item.getDeclMonitoringStateCounts().get(MonitoringState.VIOL) + " (" + item.getDeclMonitoringStateCounts().get(MonitoringState.POSS_VIOL) + ")");
@@ -77,8 +87,8 @@ public class EventCell extends ListCell<EventData> {
 	
 	private boolean loadFxml() {
 		if (loader == null) {
-			//Load ActionCell contents if not already loaded
-			loader = new FXMLLoader(getClass().getClassLoader().getResource("fxml/EventCell.fxml"));
+			//Load EventCell contents if not already loaded
+			loader = new FXMLLoader(getClass().getResource("/org/framedinterface/EventCell.fxml"));
 			loader.setController(this);
 			try {
 				loader.load();

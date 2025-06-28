@@ -18,16 +18,18 @@ import java.util.function.Consumer;
 import org.framedinterface.model.AbstractModel;
 import org.framedinterface.model.DeclareModel;
 import org.framedinterface.model.ModelType;
+import org.framedinterface.model.PnModel;
+import org.framedinterface.task.GeneratePDDLTask;
+import org.framedinterface.task.RunPlannerTask;
+import org.framedinterface.utils.AlertUtils;
 import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ModelUtils;
-import org.framedinterface.utils.RunnerUtils;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.processmining.datapetrinets.DataPetriNetsWithMarkings;
 import org.processmining.datapetrinets.io.DPNIOException;
 import org.processmining.datapetrinets.io.DataPetriNetImporter;
-//import ProcessBuilder;
 import org.processmining.models.graphbased.directed.petrinet.Petrinet;
 import org.processmining.models.semantics.petrinet.PetrinetSemantics;
 import org.processmining.models.semantics.petrinet.impl.PetrinetSemanticsFactory;
@@ -39,6 +41,7 @@ import org.w3c.dom.events.EventTarget;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
+import javafx.application.Platform;
 import javafx.animation.Animation.Status;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
@@ -52,11 +55,14 @@ import javafx.beans.value.ObservableValue;
 import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Worker;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
+import javafx.geometry.Bounds;
 import javafx.scene.control.Button;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.Slider;
+import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -65,7 +71,10 @@ import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.StackPane;
 import javafx.scene.web.WebView;
+import javafx.stage.Popup;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
@@ -79,9 +88,13 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 
 public class InitialController {
+	
+	@FXML 
+	private StackPane rootElement;
 
     @FXML
     private Button buttonPrefix;
@@ -89,7 +102,7 @@ public class InitialController {
     private Button buttonResetNo;
 
     @FXML
-    private Button buttonResetYes;
+    private Label labelCost;
 
 	@FXML
 	private TableView<AbstractModel> modelTabelView;
@@ -101,7 +114,8 @@ public class InitialController {
 	private TableColumn<AbstractModel, AbstractModel> modelRemoveColumn;
 
 	@FXML
-    private ListView<String> planListView;
+    //private ListView<String> planListView;
+	private ListView<EventData> planListView;
 
 	@FXML
 	private ScrollPane resultsPane;
@@ -109,6 +123,9 @@ public class InitialController {
     @FXML
     private Button buttonRunPlanner;
 
+    @FXML
+    private SplitPane resultsSplitPane;
+    
     @FXML
     private Label curPrefix;
 
@@ -159,6 +176,8 @@ public class InitialController {
 	private ChoiceBox<AbstractModel> pnModelChoice;
 	@FXML
 	private WebView pnWebView;
+	@FXML
+	private Label prefixOnlyLabel;
 		@FXML
 	private HBox timelineControls;
 	@FXML
@@ -175,7 +194,28 @@ public class InitialController {
 	private Label totalEventsNumber;
 	@FXML
 	private Slider eventSlider;
+	    @FXML
+    private CheckBox bttnDisplayViolations;
+	    @FXML
+    private Label selectedDecl;
 
+    @FXML
+    private Label selectedPN;
+    @FXML
+    private CheckBox buttonResetYes;
+
+    @FXML
+    private Pane paneStatus;
+	@FXML
+    private VBox mainContents;
+	@FXML
+    private Button toolTipButton;
+	@FXML
+    private Button toolTipButtonPN;
+	@FXML
+	private Button toolTipButtonPlan;
+	@FXML
+	private Button toolTipButtonRunPlan;
 
 	private static String precentageFormat = "%.1f";
 	private String initialDeclWebViewScript;
@@ -194,19 +234,24 @@ public class InitialController {
 	private boolean animationInProgress; //Used to allow navigation of events during animation
 	private SimpleIntegerProperty currentEventIndex = new SimpleIntegerProperty(0); //Various ui elements listen to this value for updates, also used to determine the model state to visualize
 	private FontIcon pauseFontIcon = new FontIcon("fa-pause"); //Icon to be displayed when animation is paused
+	private javafx.scene.Node progressLayer;
+	boolean progressLayerLoadAttempted = false;
 
 
 	List<VBox> resultsList;
     private Stage stage;
-    private ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+	private ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 	private int defaultViolationCost = 3;
 	private String declPath;
 	private String petrinetPath;
 	private String currentPath;
 	private String finMarking;
 	private boolean resetDomain;
-	//private static String framedAutonomyJar = "C:\\Users\\paulw\\Desktop\\framedAutonomy\\FramedAutonomyTool.jar"; 
-	private static String framedAutonomyJar = "FramedAutonomyTool.jar"; 
+	private boolean displayViolations;
+	private static String framedAutonomyJar = "FramedAutonomyTool.jar";
+	private ArrayList<String> currentPlan;
+	private ArrayList<String> currentPrefix;
+	private boolean planPresent;
 
 	public void setStage(Stage stage) {
 		this.stage = stage;
@@ -214,20 +259,35 @@ public class InitialController {
 
 	@FXML
 	private void initialize() {
+
+		// Initialize variables
 		resetDomain = true;
-		currentPath = Paths.get(".").toAbsolutePath().normalize().toString();
+		buttonResetYes.setSelected(true);
 		
-		modelTabelView.setPlaceholder(new Label("No input models selected"));
+		displayViolations = false;
+		planPresent = false;
+		currentPath = Paths.get(".").toAbsolutePath().normalize().toString();
+		currentPlan = new ArrayList<>();
+		currentPrefix = new ArrayList<>();
+		
+		selectedDecl.setVisible(false);
+		selectedDecl.setManaged(false);
+		selectedPN.setVisible(false);
+		selectedPN.setManaged(false);
+		
+		modelTabelView.setPlaceholder(new Label("No process specifications selected"));
 		modelNameColumn.setCellFactory(TextFieldTableCell.forTableColumn());
 		modelNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelName()));
 		modelTypeColumn.setCellFactory(TextFieldTableCell.forTableColumn());
 		modelTypeColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelType().toString()));
+		
 		modelRemoveColumn.setCellValueFactory(
 				param -> new ReadOnlyObjectWrapper<AbstractModel>(param.getValue())
 				);
 		modelRemoveColumn.setCellFactory(param -> new TableCell<AbstractModel, AbstractModel>() {
-			private final Button removeButton = new Button("Remove");
-
+			private final Button removeButton = new Button();
+			private FontIcon deleteFontIcon = new FontIcon("fa-trash");
+			
 			@Override
 			protected void updateItem(AbstractModel item, boolean empty) {
 				super.updateItem(item, empty);
@@ -235,6 +295,12 @@ public class InitialController {
 				if (item == null) {
 					setGraphic(null);
 					return;
+				}
+				
+				if (!removeButton.getStyleClass().contains("action-cell__button")) {
+					removeButton.getStyleClass().add("action-cell__button");
+					deleteFontIcon.getStyleClass().add("action-cell__delete-icon");
+					removeButton.setGraphic(deleteFontIcon);
 				}
 
 				setGraphic(removeButton);
@@ -249,21 +315,26 @@ public class InitialController {
 			if (newValue != null) {
 				if (newValue.getModelType() == ModelType.DECLARE) {
 					declModelChoice.getSelectionModel().select(newValue);
+					declPath = newValue.getFilePath();
 				} else if (newValue.getModelType() == ModelType.PN) {
 					pnModelChoice.getSelectionModel().select(newValue);
+					petrinetPath = newValue.getFilePath();
+					PnModel p_ = (PnModel) newValue;
+					finMarking = p_.finalMarking;
+					labelFinalMarking.setText(finMarking);
 				}
 				//modelTableView.getSelectionModel().clearSelection(); //Causes a weird IndexOutOfBoundsException exception
 			}
 		});
 
-		//Enable and disable timelineControls and planListView based on if there are input models or not
+		//Enable and disable timelineControls and resultsSplitPane based on if there are input models or not
+		resultsSplitPane.setDisable(true);
 		timelineControls.setDisable(true);
-		planListView.setDisable(true);
 		modelTabelView.getItems().addListener(new InvalidationListener() {
 			@Override
 			public void invalidated(Observable observable) {
+				resultsSplitPane.setDisable(modelTabelView.getItems().isEmpty());
 				timelineControls.setDisable(modelTabelView.getItems().isEmpty());
-				planListView.setDisable(modelTabelView.getItems().isEmpty());
 			}
 		});
 
@@ -312,10 +383,32 @@ public class InitialController {
 		
 		//Triggering visualization update when the model selection is changed
 		declModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+			declPath = newValue.getFilePath();
+
+			if (!currentPlan.isEmpty()){
+				newValue.resetModel();
+				newValue.updateMonitoringStates(currentPlan, displayViolations);
+			}
 			updateVisualization(declWebView, newValue, ModelType.DECLARE);
-			//updateplanListViewStatistics(newValue, planListView.getItems());
+			updateplanListViewStatistics(newValue, planListView.getItems());
+			
 		});
-		pnModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> updateVisualization(pnWebView, newValue, ModelType.PN));
+		pnModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+			petrinetPath = newValue.getFilePath();
+			PnModel p_ = (PnModel) newValue;
+			finMarking = p_.finalMarking;
+			labelFinalMarking.setText(finMarking);
+			
+			//if (!currentPlan.isEmpty()){
+			//	p_.resetModel();
+			//	p_.updateMonitoringStates(currentPlan, displayViolations);
+			//}
+			updateVisualization(pnWebView, newValue, ModelType.PN);
+
+
+			
+			
+		});
 
 		//Timeline setup
 		setupTimelineControls();
@@ -336,10 +429,7 @@ public class InitialController {
 		});
 		
 		//All cells in planListView are handled by EventCell class
-		//planListView.setCellFactory(value -> new EventCell(selectionCallback));
-		//planListView.setCellFactory(value -> selectionCallback.toString());
-		
-	
+		planListView.setCellFactory(value -> new EventCell(selectionCallback));	
 
 	}
 
@@ -382,50 +472,124 @@ public class InitialController {
 					} else {
 						System.err.println("Skipping model of unknown type: " + modelExtension);
 					}
+					modelCounter++;
 				} catch (DPNIOException | IOException | IndexOutOfBoundsException e) {
 					System.err.println("Unable to load model: " + modelFile.getAbsolutePath());
 					e.printStackTrace();
 				}
 			}
-			//modelTabelView.getItems().addAll(abstractModels);
-			abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix)); //Monitoring states for an empty prefix
-			modelTabelView.getItems().addAll(abstractModels);
+
+			//If the plan has not been executed then show the Trace Prefix
+			if (!planPresent) {
+				abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations)); //Monitoring states for an empty prefix
+				modelTabelView.getItems().addAll(abstractModels);
+			} else { // Otherwise show the last generated plan
+				abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(currentPlan, displayViolations)); //Monitoring states for an empty prefix
+				modelTabelView.getItems().addAll(abstractModels);
+			}
+
 		}
     }
 
     @FXML
     void onClickPrefix(ActionEvent event) {
-		// Set the Prefix and Clear the text field
-		//System.out.println(textFieldPrefix.getText());
+		//TODO: Rename function
+		// Now denotes the reset of the plan.
+
+		planPresent = false;
+	
 		// The FramedAutonomy Tool casts everything to lowerCase, so I do the same here. Otherwise there could be an issue when running the planner
-		curPrefix.setText(textFieldPrefix.getText().toLowerCase());
-		textFieldPrefix.clear();
+    	modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
+		currentPrefix.clear();
+
+		prefixOnlyLabel.setVisible(true);
+		prefixOnlyLabel.setManaged(true);
+		selectedDecl.setVisible(false);
+		selectedDecl.setManaged(false);
+		selectedPN.setVisible(false);
+		selectedPN.setManaged(false);
+
+		updatePrefix(null);
+		updateSelectedModelVisualizations();
+		labelCost.setText("");
+		
+
     }
 
 	@FXML
     void onClickPlanner(ActionEvent event) throws IOException, InterruptedException {
 
+//		try {
+		if (progressLayer == null && !progressLayerLoadAttempted) {
+			try {
+				// Load the progress layer
+				FXMLLoader loader = new FXMLLoader(getClass().getResource("/org/framedinterface/ProgressLayer.fxml"));
+				progressLayer = loader.load();
+				ProgressLayerController progressLayerController = loader.getController();
+				progressLayerController.getProgressTextLabel().setText("Running planner...");
+				
+				progressLayerController.getCancelButton().setOnAction(e -> {
+					executorService.shutdownNow(); //TODO: Terminate the currently executing task instead
+					executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors()); //Didn't see a way to restart after shutdown
+					setUiBusy(false);
+				});
+				
+			} catch (Exception e) {
+				System.out.println("Cannot load progress layer");
+				e.printStackTrace();
+			} finally {
+				progressLayerLoadAttempted = true;
+			}
+		}
+		
+		
+		
+		
+		setUiBusy(true);
+
+		planPresent = true;
+
 		planListView.getItems().clear();
+
+		modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
+
+		if ((modelTabelView.getItems().size() < 2)|| (declPath == null) || (petrinetPath == null)){
+			// This check alone could cause issues if someone uploaded multiple petri nets
+			// Then deleted all of them
+			// then uploaded multiple declare models
+			// then tried to run the planner.
+			System.out.println("Error: Number of input files not matching");
+			setUiBusy(false);
+			return;
+		}
 
 		//Write prefix to file and then pass it
 
 		BufferedWriter writer = new BufferedWriter(new FileWriter(currentPath + "/prefix.txt"));
 
-		if (curPrefix.getText().contains("<None>")) {
+		if (currentPrefix.isEmpty()) {
 			writer.write("");
 		}	
 		else {
-			writer.write(curPrefix.getText());
+			
+			String prefixString = currentPrefix.toString();
+			prefixString = prefixString.replace(",", "");
+			prefixString = prefixString.replace("[", "");
+			prefixString = prefixString.replace("]", "");
+			System.out.println(prefixString);
+			writer.write(prefixString);
 		}
+
 				
 		writer.close();
 
 		ArrayList<String> commandStrings = new ArrayList<String>();
 		commandStrings.add("java");
 		commandStrings.add("-jar");
+		//commandStrings.add(currentPath+"/"+framedAutonomyJar);
 		commandStrings.add(currentPath+"/"+framedAutonomyJar);
 		
-		if (modelTabelView.getItems().size() != 2){
+		if (modelTabelView.getItems().size() < 2){
 			System.out.println("Error: Number of input files not matching");
 			return;
 		}
@@ -438,41 +602,199 @@ public class InitialController {
 
 		//Run the Framed Autonomy Tool Jar
 		// Assumed to be located in the project repository
-
-		int exitCode = RunnerUtils.generatePDDL(commandStrings, finMarking, resetDomain);
-
-		System.out.println("Process exited with code: " + exitCode);
-		int plannerExit = 1;
-		if (exitCode == 0){
-			// Run downward planner
-			plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
-			System.out.println("Planning Done");
+		GeneratePDDLTask generatePDDLTask = new GeneratePDDLTask(commandStrings, finMarking, resetDomain);
+		generatePDDLTask.setOnFailed(taskEvent -> {
+			// Ensure that any errors do not lead to the system crashing
+			AlertUtils.showError("Generating PDDL failed");
+			setUiBusy(false);
+		});
+		generatePDDLTask.setOnSucceeded(pddlTaskEvent -> {
 			
-		}
-
-		if (plannerExit == 0){
-			ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
-
-			for (String action : generatedPlan) {
-				//resultsList.add(monitoringTask.getValue());
-				planListView.getItems().add(action);
-
+			File f = new File(currentPath+"/fast-downward/fast-downward.py");
+			
+			RunPlannerTask runPlannerTask = new RunPlannerTask(currentPath, resetDomain, f.exists());
+			runPlannerTask.setOnFailed(plannerTaskEvent -> {
+				// Ensure that any errors do not lead to the system crashing
+				AlertUtils.showError("Running the planner failed");
+				setUiBusy(false);
+			});
+			runPlannerTask.setOnSucceeded(plannerTaskEvent -> {
+				ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
+				
+				ArrayList<String> onlyActions = new ArrayList<>();
+				planListView.getItems().clear();
+				
+				for (String action : generatedPlan) {
+					
+					String[] steps = action.split(" ");
+					System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+					
+					int actInd = steps.length-2;
+					if (steps[0].contains("sync")) {
+						onlyActions.add(steps[0]+";"+steps[actInd]);
+					}
+					if (steps[0].contains("prefix_violate")) {
+						onlyActions.add(steps[0]+";"+steps[actInd]);
+					}
+					if (steps[0].contains("reset")) {
+						onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
+					}
+					
+					
+				}
+				System.out.println(onlyActions);
+				modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
+				updateplanListView(onlyActions);
+				updateTimelineControls(onlyActions);
+				this.currentPlan = onlyActions;
+				labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
+				
+				setUiBusy(false);
+			});
+			
+			executorService.execute(runPlannerTask);
+			
+			
+			
+//			int plannerExit = 1;
+//			
+//			try {
+//				// Run downward planner
+//				f = new File(currentPath+"/fast-downward/fast-downward.py");
+//				if (f.exists()){
+//					plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
+//				}
+//				else {
+//					plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
+//				}
+//				System.out.println("Planning Done");
+//				
+//				if (plannerExit == 0){
+//					ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
+//		
+//					ArrayList<String> onlyActions = new ArrayList<>();
+//					planListView.getItems().clear();
+//		
+//					for (String action : generatedPlan) {
+//		
+//						String[] steps = action.split(" ");
+//						System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+//		
+//						int actInd = steps.length-2;
+//						if (steps[0].contains("sync")) {
+//							onlyActions.add(steps[0]+";"+steps[actInd]);
+//						}
+//						if (steps[0].contains("prefix_violate")) {
+//							onlyActions.add(steps[0]+";"+steps[actInd]);
+//						}
+//						if (steps[0].contains("reset")) {
+//							onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
+//						}
+//						
+//		
+//					}
+//					System.out.println(onlyActions);
+//					modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
+//					updateplanListView(onlyActions);
+//					updateTimelineControls(onlyActions);
+//					this.currentPlan = onlyActions;
+//					labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
+//				}
+//				
+//			} catch (Exception e) {
+//				// Ensure that any errors do not lead to the system crashing
+//				setUiBusy(false);
+//			}
+//			
+//			setUiBusy(false);
+		});
+		
+		executorService.execute(generatePDDLTask);
+			
+	
+//			int exitCode = RunnerUtils.generatePDDL(commandStrings, finMarking, resetDomain);
+//	
+//			System.out.println("Process exited with code: " + exitCode);
+//			int plannerExit = 1;
+//			if (exitCode == 0){
+//				// Run downward planner
+//				File f = new File(currentPath+"/fast-downward/fast-downward.py");
+//				if (f.exists()){
+//					plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
+//				}
+//				else {
+//				plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
+//				}
+//				System.out.println("Planning Done");
+//				
+//			}
+//	
+//			if (plannerExit == 0){
+//				ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
+//	
+//				ArrayList<String> onlyActions = new ArrayList<>();
+//				planListView.getItems().clear();
+//	
+//				for (String action : generatedPlan) {
+//	
+//					String[] steps = action.split(" ");
+//					System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+//	
+//					int actInd = steps.length-2;
+//					if (steps[0].contains("sync")) {
+//						onlyActions.add(steps[0]+";"+steps[actInd]);
+//					}
+//					if (steps[0].contains("prefix_violate")) {
+//						onlyActions.add(steps[0]+";"+steps[actInd]);
+//					}
+//					if (steps[0].contains("reset")) {
+//						onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
+//					}
+//					
+//	
+//				}
+//				System.out.println(onlyActions);
+//				modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
+//				updateplanListView(onlyActions);
+//				updateTimelineControls(onlyActions);
+//				this.currentPlan = onlyActions;
+//				labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
+//			}
+//
+//		} catch (Exception e) {
+//			// Ensure that any errors do not lead to the system crashing
+//			mainContents.setDisable(false);
+//		}
+		
+		prefixOnlyLabel.setVisible(false);
+		prefixOnlyLabel.setManaged(false);
+		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+		selectedDecl.setVisible(true);
+		selectedDecl.setManaged(true);
+		selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+		selectedPN.setVisible(true);
+		selectedPN.setManaged(true);
+	}
+	
+	private void setUiBusy(boolean disable) { 
+		//Not 100% sure why mainContents.setDisable(disable) does not work when called directly (at least without busy layer)
+		//...I guess Platform.runLater has the side effect of ensuring that the view is refreshed (adding busy layer probably has the same effect)
+		Platform.runLater(() -> mainContents.setDisable(disable));
+		
+		if (progressLayer != null) {
+			if (disable) {
+				rootElement.getChildren().add(progressLayer);
+			} else {
+				rootElement.getChildren().remove(progressLayer);
 			}
 		}
-
-
 	}
 
     @FXML
-    void onClickResetNo(ActionEvent event) {
-		resetDomain = false;
-		labelCurrentDomain.setText("Domain_no_reset.pddl");
-    }
-
-    @FXML
     void onClickResetYes(ActionEvent event) {
-		resetDomain = true;
-		labelCurrentDomain.setText("Domain_with_reset.pddl");
+		// Toggle the Domain
+		resetDomain = buttonResetYes.isSelected();
+		
     }
 
 	@FXML
@@ -496,21 +818,32 @@ public class InitialController {
 		}
 	}
 
-	@FXML
-	private void updatePrefix() {
+	
+	private void updatePrefix(Integer selectIndex) { //TODO: Allow building prefix event-by-event, without resetting after each event
 		tracePrefix = new ArrayList<String>(); //Resetting to empty trace
-		if (textFieldPrefix.getText() != null && !textFieldPrefix.getText().equals("")) {
-			String[] activityArray = textFieldPrefix.getText().split(",");
-			for (int i = 0; i < activityArray.length; i++) {
-				String activity = activityArray[i].strip();
-				if (!activity.isBlank()) {
-					tracePrefix.add(activity);
-				}
-			}
+
+		if (!currentPrefix.isEmpty()) {
+			tracePrefix = currentPrefix;
+			//modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
+			//modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
+			//updateplanListView(tracePrefix);
+			//updateTimelineControls(tracePrefix);
 		}
-		modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix));
-		updateplanListView(tracePrefix);
-		updateTimelineControls(tracePrefix);
+
+		if ((!planPresent)){
+			// Very stupid fix but i didn't have time to find a better solution
+			modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
+			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
+			updateplanListView(tracePrefix);
+			updateTimelineControls(tracePrefix);
+		}
+		
+		if (selectIndex != null) { //TODO: Not sure if this is the best place for scrolling to the added activity
+			eventSlider.setValue(selectIndex);
+			currentEventIndex.setValue(selectIndex);
+			animationTimeline.jumpTo(animationTimeline.getTotalDuration().multiply(eventSlider.getValue() / eventSlider.getMax()));
+		}
+
 
 
 	}
@@ -581,11 +914,10 @@ public class InitialController {
 		
 		visualizationWebView.getEngine().getLoadWorker().stateProperty().addListener(initialLoadListener);
 		
-		//visualizationWebView.getEngine().load((getClass().getClassLoader().getResource("visPage.html")).toString());
 		
 		visualizationWebView.getEngine().load((getClass().getClassLoader().getResource("visPage.html")).toString());
 		visualizationWebView.setContextMenuEnabled(false); //Setting it in FXML causes an IllegalArgumentException
-		//((JSObject)visualizationWebView.getEngine().executeScript("window")).setMember("app", this);
+		
 
 		if (modelType == ModelType.DECLARE) { //This part is a bit annoying, but there is no true "pass by reference" in Java 
 			visualizationWebView.getEngine().getLoadWorker().stateProperty().addListener((observable, oldValue, newValue) -> {
@@ -692,30 +1024,36 @@ public class InitialController {
 		List<EventData> eventDataList = new ArrayList<EventData>();
 		eventDataList.add(EventData.createStartEvent());
 		for (int i = 0; i < activities.size(); i++) {
-			eventDataList.add(new EventData(i+1, activities.get(i)));
+			//eventDataList.add(new EventData(i+1, activities.get(i)));
+			String[] planAction = activities.get(i).split(";");
+			System.out.println("planAction"+activities.get(i));
+			if (planAction.length == 1) {
+				eventDataList.add(new EventData(i+1, activities.get(i)));
+			} else{
+				eventDataList.add(new EventData(i+1, planAction[1], planAction[0]));
+			}
+			
 		}
 		eventDataList.add(EventData.createEndEvent(activities.size()+1));
 		updateplanListViewStatistics(declModelChoice.getSelectionModel().getSelectedItem(), eventDataList);
+		updateplanListViewStatistics(pnModelChoice.getSelectionModel().getSelectedItem(), eventDataList);
 		
-		/*
+		
 		planListView.getItems().clear();
 		planListView.getItems().addAll(eventDataList);
 		planListView.getSelectionModel().selectFirst();
-		*/
-
-		planListView.getItems().clear();
-		planListView.getItems().addAll(activities);
-		planListView.getSelectionModel().selectFirst();
+		
 	}
 
 	//Updates the statistics shown in the planListView
 	private void updateplanListViewStatistics(AbstractModel abstractModel, List<EventData> eventDataList) {
-		if (abstractModel != null) {
+		if ((abstractModel != null) && (abstractModel.getModelType() == ModelType.DECLARE) ) {
 			DeclareModel declareModel = (DeclareModel) abstractModel;
 			for (int i = 0; i < eventDataList.size(); i++) {
 				eventDataList.get(i).setDeclMonitoringStateCounts(declareModel.getMonitoringStateCounts(i));
 			}
-		} else {
+		} 		
+		else if (abstractModel == null) {
 			for (EventData eventData : eventDataList) {
 				eventData.setDeclMonitoringStateCounts(Map.of(
 						MonitoringState.SAT, 0,
@@ -767,6 +1105,11 @@ public class InitialController {
 			}
 		}
 		if (activityName != null) {
+			
+			currentPrefix.add(activityName);
+			updatePrefix(currentPrefix.size());
+
+			/*
 			if (textFieldPrefix.getText().isEmpty()) {
 				textFieldPrefix.setText(activityName);
 			} else {
@@ -776,6 +1119,7 @@ public class InitialController {
 					textFieldPrefix.setText(textFieldPrefix.getText() + ", " + activityName);
 				}
 			}
+			*/
 		}
 	}
 
@@ -783,6 +1127,7 @@ public class InitialController {
 	private void updateSelectedModelVisualizations() {
 		updateVisualization(declWebView, declModelChoice.getSelectionModel().getSelectedItem(), ModelType.DECLARE);
 		updateVisualization(pnWebView, pnModelChoice.getSelectionModel().getSelectedItem(), ModelType.PN);
+
 	}
 
 
@@ -800,7 +1145,7 @@ public class InitialController {
 			//((JSObject)visualizationWebView.getEngine().executeScript("window")).setMember("app", this); //Does not work after reload for some reason
 			visualizationWebView.getEngine().executeScript("clearModel()");
 		} else {
-			visualizationString = abstractModel.getVisualisationString(currentEventIndex.get());
+			visualizationString = abstractModel.getVisualisationString(currentEventIndex.get(), displayViolations);
 			if (visualizationString != null) {
 				script = "setModel('" + visualizationString + "')";
 				if (visualizationWebView.getEngine().getLoadWorker().stateProperty().get() == Worker.State.SUCCEEDED) { //If load worker is not busy then execute current script
@@ -862,25 +1207,177 @@ public class InitialController {
 		}
 	}
 
-	//Updates the statistics shown in the traceListView
-	private void updatePlanListViewStatistics(AbstractModel abstractModel, List<EventData> eventDataList) {
-		if (abstractModel != null) {
-			DeclareModel declareModel = (DeclareModel) abstractModel;
-			for (int i = 0; i < eventDataList.size(); i++) {
-				eventDataList.get(i).setDeclMonitoringStateCounts(declareModel.getMonitoringStateCounts(i));
-			}
-		} else {
-			for (EventData eventData : eventDataList) {
-				eventData.setDeclMonitoringStateCounts(Map.of(
-						MonitoringState.SAT, 0,
-						MonitoringState.POSS_SAT, 0,
-						MonitoringState.POSS_VIOL, 0,
-						MonitoringState.VIOL, 0
-						));
-			}
-		}
-		planListView.refresh();
+	@FXML
+	private void switchViolationStrings() {
+
+		displayViolations = bttnDisplayViolations.isSelected();
+
+		updateSelectedModelVisualizations();
+		
 	}
 
+	@FXML
+	private void onClickToolTip() {
+
+	Popup legendPopup = new Popup();
+
+	VBox legendBox = new VBox(10);
+	legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
+
+	Label helpT = new Label("To add to the Prefix, click on the Activity name.");
+	Label title = new Label("Color Legend:");
+	legendBox.getChildren().addAll(
+		helpT,
+		title,
+		createLegendItem(Color.web("#79a888"), "Constraint Temporarily Satisfied"),
+		createLegendItem(Color.web("#66ccff"), "Constraint Permanently Satisfied"),
+		createLegendItem(Color.web("#ffd700"), "Constraint Temporarily Violated"),
+		createLegendItem(Color.web("#d44942"), "Constraint Permanently Violated")
+	);
+
+	legendPopup.getContent().add(legendBox);
+	legendPopup.setAutoHide(true); // hides on outside click
+
+	// Attach to your button
+	toolTipButton.setOnAction(e -> {
+		if (!legendPopup.isShowing()) {
+			Bounds screenBounds = toolTipButton.localToScreen(toolTipButton.getBoundsInLocal());
+			double screenX = screenBounds.getMinX();
+			double screenY = screenBounds.getMinY();
+
+			// Show slightly below the button
+			legendPopup.show(toolTipButton, screenX, screenY + toolTipButton.getHeight());
+			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
+		} else {
+			legendPopup.hide();
+		}
+	});
+
+
+
+		
+	}
+
+	// Helper method
+	private HBox createLegendItem(Color color, String description) {
+		Rectangle rect = new Rectangle(20, 20, color);
+		rect.setStroke(Color.BLACK);       // black border
+		rect.setStrokeWidth(1); 
+		Label label = new Label(description);
+		HBox item = new HBox(10, rect, label);
+		return item;
+	}
+
+		@FXML
+	private void onClickToolTipPN() {
+
+	Popup legendPopup = new Popup();
+
+	VBox legendBox = new VBox(10);
+	legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
+
+	Label helpT = new Label("To add to the Prefix, click on the Transition label.\n");
+	Label title = new Label("Color Legend:");
+	legendBox.getChildren().addAll(
+		helpT,
+		title,
+		createLegendItem(Color.web("#66ccff"), "Transition fired"),
+		createLegendItem(Color.web("#FFFFFF"), "Transition enabled"),
+		createLegendItem(Color.web("#d44942"), "Transition violated (fired but not enabled)"),
+		createLegendItem(Color.web("#D3D3D3"), "Transition not enabled")
+	);
+
+	legendPopup.getContent().add(legendBox);
+	legendPopup.setAutoHide(true); // hides on outside click
+
+	// Attach to your button
+	toolTipButtonPN.setOnAction(e -> {
+		if (!legendPopup.isShowing()) {
+			Bounds screenBounds = toolTipButtonPN.localToScreen(toolTipButtonPN.getBoundsInLocal());
+			double screenX = screenBounds.getMinX();
+			double screenY = screenBounds.getMinY();
+
+			// Show slightly below the button
+			legendPopup.show(toolTipButtonPN, screenX, screenY + toolTipButtonPN.getHeight());
+			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
+		} else {
+			legendPopup.hide();
+		}
+	});
+	}
+
+		@FXML
+	private void onClickToolTipRunPlan() {
+
+	Popup legendPopup = new Popup();
+
+	VBox legendBox = new VBox(10);
+	legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
+	
+	legendBox.getChildren().addAll(
+		new Label("To run the planner, ensure that Fast Downward is executable on your machine."),	
+		new Label("Recover after Violation: if this option is enabled, a violated frame component is reset during planning. Otherwise it will be permanently violated (no further planning)"),
+		new Label("Always ensure that your given Petri Net contains a final marking.")
+
+	);
+
+	legendPopup.getContent().add(legendBox);
+	legendPopup.setAutoHide(true); // hides on outside click
+
+	// Attach to your button
+	toolTipButtonRunPlan.setOnAction(e -> {
+		if (!legendPopup.isShowing()) {
+			Bounds screenBounds = toolTipButtonRunPlan.localToScreen(toolTipButtonRunPlan.getBoundsInLocal());
+			double screenX = screenBounds.getMinX();
+			double screenY = screenBounds.getMinY();
+
+			// Show slightly below the button
+			legendPopup.show(toolTipButtonRunPlan, screenX, screenY + toolTipButtonRunPlan.getHeight());
+			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
+		} else {
+			legendPopup.hide();
+		}
+	});
+	}
+
+		@FXML
+	private void onClickToolTipPlan() {
+
+	Popup legendPopup = new Popup();
+
+	VBox legendBox = new VBox(10);
+	legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
+	
+	legendBox.getChildren().addAll(
+		new Label("Click on one of the Elements in the pane below to replay the prefix/trace onto the selected process models."),	
+		new Label(""),
+		new Label("The first line shows the current activity in the plan."),
+		new Label("The next line shows the action that was taken by the planner:"),
+		new Label("\t i) \tprefix_sync: Successfully replayed the activity of the prefix onto the process models"),
+		new Label("\t ii) \tprefix_violate_pn: Currently executed transition was in violation of the control flow of the Petri net"),
+		new Label("\t iii) \tprefix_violate_pn: Currently executed transition was in violation of the control flow of the Petri net"),
+		new Label("\t iv) \tprefix_violate_pn: Currently executed transition was in violation of the control flow of the Petri net"),
+		new Label("\t v) \treset: Reset the currently displayed frame component (contraint/petri net)"),
+		new Label("\t vi) \tsync: Currently executed transition was successfully replayed on the process frame")
+	);
+
+	legendPopup.getContent().add(legendBox);
+	legendPopup.setAutoHide(true); // hides on outside click
+
+	// Attach to your button
+	toolTipButtonPlan.setOnAction(e -> {
+		if (!legendPopup.isShowing()) {
+			Bounds screenBounds = toolTipButtonPlan.localToScreen(toolTipButtonPlan.getBoundsInLocal());
+			double screenX = screenBounds.getMinX();
+			double screenY = screenBounds.getMinY();
+
+			// Show slightly below the button
+			legendPopup.show(toolTipButtonPlan, screenX, screenY + toolTipButtonPlan.getHeight());
+			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
+		} else {
+			legendPopup.hide();
+		}
+	});
+	}
 
 }

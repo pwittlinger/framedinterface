@@ -39,17 +39,75 @@ public class DeclareModel extends AbstractModel  {
 	}
 
 	@Override
-	public void updateMonitoringStates(List<String> activities) {
+	public void updateMonitoringStates(List<String> activities, boolean displayViolations) {
 		//Resetting the automata and adding initial monitoring states (constraint states before any events occur)
 		Map<DeclareConstraint, MonitoringState> initialStates = new HashMap<DeclareConstraint, MonitoringState>();
 		declareConstraints.forEach(declareConstraint -> initialStates.put(declareConstraint, declareConstraint.resetAutomaton()));
 		monitoringStates = new ArrayList<Map<DeclareConstraint,MonitoringState>>();
 		monitoringStates.add(initialStates);
 		
-		for (String activity : activities) {
+		for (String act : activities) {
+			String[] planAction = act.split(";");
+			String activity;
+			
+			
+			if (planAction.length == 2) {
+				activity = planAction[1];
+			}
+			else{
+				activity = planAction[0];
+			}
+
+			//Check if the action is reset-petrinet
+			if (activity.startsWith("reset") && !activity.equals("reset-petrinet")) {
+				// Format for Plan output us absence_activitym
+				
+				//String[] resetAct = activity.split("_");
+				String resetAct = activity.substring(6);
+				//first remove "reset-": this part is present on all of them
+				
+				for (DeclareConstraint dc : declareConstraints) {
+
+					// This causes an issue for no coexistence constraints, as the planner appends another _ and -
+					// This turns it into not_co-existence_act1_act2
+					String templateName_ = dc.getTemplate().getTemplateName().toLowerCase(); // not co-existence
+					//
+					templateName_ = templateName_.replace(" ", "_");// Making sure the planner output and the template name match up
+					String activ_;
+					if (dc.getTemplate().getReverseActivationTarget()) {
+						activ_ = dc.getTargetActivity();
+					} else {activ_ = dc.getActivationActivity();}
+					
+					//if ((templateName_.equals(resetAct[0].split("-")[1])) && (activ_.toLowerCase().equals(resetAct[1]))) {
+					if (resetAct.contains(templateName_) && (resetAct.contains(activ_.toLowerCase()))) {
+						String target_;
+							if (dc.getTemplate().getReverseActivationTarget()) {
+									target_ = dc.getActivationActivity();
+							} else {target_ = dc.getTargetActivity();}
+
+						if (!(target_.isBlank())&&(!resetAct.contains(target_.toLowerCase()))){
+							continue;
+						}
+						/*if (resetAct.length>2) {
+							String target_;
+							if (dc.getTemplate().getReverseActivationTarget()) {
+									target_ = dc.getActivationActivity();
+							} else {target_ = dc.getTargetActivity();}
+							if (!target_.toLowerCase().equals(resetAct[2])) {
+								continue;
+							}
+						}
+						*/
+						dc.resetAutomaton();
+					}
+				}
+			}
+
 			Map<DeclareConstraint, MonitoringState> monitoringState = new HashMap<DeclareConstraint, MonitoringState>();
-			declareConstraints.forEach(declareConstraint -> monitoringState.put(declareConstraint, declareConstraint.executeNextActivity(activity)));
+			declareConstraints.forEach(declareConstraint -> monitoringState.put(declareConstraint, declareConstraint.executeNextActivity(activity.toLowerCase())));
 			monitoringStates.add(monitoringState);
+			
+			
 		}
 		
 		//Adding final monitoring states  (constraint states when the trace terminates)
@@ -64,7 +122,7 @@ public class DeclareModel extends AbstractModel  {
 	}
 
 	@Override
-	public String getVisualisationString(int activityIndex) {
+	public String getVisualisationString(int activityIndex, boolean displayViolations) {
 		StringBuilder sb = new StringBuilder("digraph \"\" {");
 		sb.append("id = \"graphRoot_" + getModelId() + "\"");
 		sb.append("ranksep = \".6\"");
@@ -84,8 +142,17 @@ public class DeclareModel extends AbstractModel  {
 		
 		sb.append("}");
 
-		System.out.println(sb.toString());
+		//System.out.println(sb.toString());
 		return sb.toString().replace("'", "\\'"); //A crude fix to allow ' characters in activity names
+	}
+
+	@Override
+	public void resetModel(){
+
+		for (DeclareConstraint dc : declareConstraints) {
+			dc.resetAutomaton();
+		}
+
 	}
 	
 	
