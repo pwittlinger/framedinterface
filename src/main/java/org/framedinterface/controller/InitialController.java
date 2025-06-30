@@ -639,6 +639,12 @@ public class InitialController {
 					if (steps[0].contains("reset")) {
 						onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
 					}
+					if (steps[0].contains("violate_pn")) {
+						onlyActions.add(steps[0]+";"+steps[actInd]);
+					}
+					if (steps[0].contains("violate_decl")) {
+						onlyActions.add(steps[0]+";"+steps[actInd]);
+					}
 					
 					
 				}
