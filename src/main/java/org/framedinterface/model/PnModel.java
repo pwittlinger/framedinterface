@@ -54,12 +54,13 @@ public class PnModel extends AbstractModel  {
 	public void updateMonitoringStates(List<String> activities, boolean displayViolations) {
 		// TODO Auto-generated method stub
 
-		//Marking curState = this.petrinetSemantics.getCurrentState();
+		// Initial set up when FrAIm first loads.
 		if (this.visStrings.isEmpty()){
 			this.visStrings.add(createVisualisationString());
 			this.visStringsViolation.add(createVisualisationStringViolation());
 		} else {
-			// The prefix sync is part of the plan, so in order to keep indexing correct I don't want to recompute the prefix
+			// The prefix sync is part of the plan, so in order to keep indexing correct i reset everything
+			// since I don't want to recompute the prefix
 			resetVisualizationStrings();
 			this.visStrings.add(createVisualisationString());
 			this.visStringsViolation.add(createVisualisationStringViolation());
@@ -70,7 +71,6 @@ public class PnModel extends AbstractModel  {
 		// Or move token directly to the outgoing state?
 
 		for (String act : activities) {
-
 			
 			String[] planAction = act.split(";");
 			
@@ -93,7 +93,7 @@ public class PnModel extends AbstractModel  {
 			}
 			
 			Collection<Transition> currentlyEnabledTransitions = this.petrinetSemantics.getExecutableTransitions();
-			//if (this.dataPetriNet.getTransitions().)
+			
 			if (!currentlyEnabledTransitions.toString().toLowerCase().contains(act)){
 				// Transition is not enabled, set the Marking
 				// Update the colour of the previously enabled transition
@@ -106,7 +106,8 @@ public class PnModel extends AbstractModel  {
 
 				
 			}
-			else {			try {
+			else {			
+				try {
 				// Always fire the transition
 				this.petrinetSemantics.executeExecutableTransition(getTransitionViaLabel(this.dataPetriNet.getTransitions(), act));
 				this.firedTransitions.add(act);
@@ -126,6 +127,9 @@ public class PnModel extends AbstractModel  {
 		
 	}
 
+	/**
+	 * Sets the final marking of the currently selected Data Petri Net (if possible)
+	 */
 	public void setFinalMarking() {
 
 		try {
@@ -309,11 +313,20 @@ public class PnModel extends AbstractModel  {
 		return m_;
 	}
 
+	/**
+	 * Clear the list of visualization strings.
+	 * Used whenever changing the process models.
+	 */
 	public void resetVisualizationStrings(){
 		this.visStrings.clear();
 		this.visStringsViolation.clear();
 	}
 
+	/**
+	 * 
+	 * @param tLabel String label of the transition for which to fetch all incoming places.
+	 * @return Returns a list of all Places (Place objects) for the given Transition.
+	 */
 	public ArrayList<Place> getAllIncomingPlaces(String tLabel) {
 		Set<PetrinetEdge<? extends PetrinetNode, ? extends PetrinetNode>> allEdges = this.dataPetriNet.getEdges();
 		Collection<Place> allPlaces_ = this.dataPetriNet.getPlaces();

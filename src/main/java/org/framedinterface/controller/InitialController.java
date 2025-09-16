@@ -544,7 +544,6 @@ public class InitialController {
 		
 		
 		
-		
 		setUiBusy(true);
 
 		planPresent = true;
@@ -660,118 +659,10 @@ public class InitialController {
 			
 			executorService.execute(runPlannerTask);
 			
-			
-			
-//			int plannerExit = 1;
-//			
-//			try {
-//				// Run downward planner
-//				f = new File(currentPath+"/fast-downward/fast-downward.py");
-//				if (f.exists()){
-//					plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
-//				}
-//				else {
-//					plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
-//				}
-//				System.out.println("Planning Done");
-//				
-//				if (plannerExit == 0){
-//					ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
-//		
-//					ArrayList<String> onlyActions = new ArrayList<>();
-//					planListView.getItems().clear();
-//		
-//					for (String action : generatedPlan) {
-//		
-//						String[] steps = action.split(" ");
-//						System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
-//		
-//						int actInd = steps.length-2;
-//						if (steps[0].contains("sync")) {
-//							onlyActions.add(steps[0]+";"+steps[actInd]);
-//						}
-//						if (steps[0].contains("prefix_violate")) {
-//							onlyActions.add(steps[0]+";"+steps[actInd]);
-//						}
-//						if (steps[0].contains("reset")) {
-//							onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
-//						}
-//						
-//		
-//					}
-//					System.out.println(onlyActions);
-//					modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
-//					updateplanListView(onlyActions);
-//					updateTimelineControls(onlyActions);
-//					this.currentPlan = onlyActions;
-//					labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
-//				}
-//				
-//			} catch (Exception e) {
-//				// Ensure that any errors do not lead to the system crashing
-//				setUiBusy(false);
-//			}
-//			
-//			setUiBusy(false);
 		});
 		
 		executorService.execute(generatePDDLTask);
-			
-	
-//			int exitCode = RunnerUtils.generatePDDL(commandStrings, finMarking, resetDomain);
-//	
-//			System.out.println("Process exited with code: " + exitCode);
-//			int plannerExit = 1;
-//			if (exitCode == 0){
-//				// Run downward planner
-//				File f = new File(currentPath+"/fast-downward/fast-downward.py");
-//				if (f.exists()){
-//					plannerExit = RunnerUtils.runPlanner(currentPath, resetDomain);
-//				}
-//				else {
-//				plannerExit = RunnerUtils.runPlanner2(currentPath, resetDomain);
-//				}
-//				System.out.println("Planning Done");
-//				
-//			}
-//	
-//			if (plannerExit == 0){
-//				ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
-//	
-//				ArrayList<String> onlyActions = new ArrayList<>();
-//				planListView.getItems().clear();
-//	
-//				for (String action : generatedPlan) {
-//	
-//					String[] steps = action.split(" ");
-//					System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
-//	
-//					int actInd = steps.length-2;
-//					if (steps[0].contains("sync")) {
-//						onlyActions.add(steps[0]+";"+steps[actInd]);
-//					}
-//					if (steps[0].contains("prefix_violate")) {
-//						onlyActions.add(steps[0]+";"+steps[actInd]);
-//					}
-//					if (steps[0].contains("reset")) {
-//						onlyActions.add(steps[0]+";"+steps[0]+"-"+steps[actInd]);
-//					}
-//					
-//	
-//				}
-//				System.out.println(onlyActions);
-//				modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
-//				updateplanListView(onlyActions);
-//				updateTimelineControls(onlyActions);
-//				this.currentPlan = onlyActions;
-//				labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
-//			}
-//
-//		} catch (Exception e) {
-//			// Ensure that any errors do not lead to the system crashing
-//			mainContents.setDisable(false);
-//		}
-		
+				
 		prefixOnlyLabel.setVisible(false);
 		prefixOnlyLabel.setManaged(false);
 		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());

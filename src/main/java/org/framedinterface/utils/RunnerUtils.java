@@ -11,7 +11,7 @@ import java.util.ArrayList;
 
 
 public class RunnerUtils {
-    //private static String pythonPath = "C:/Users/paulw/anaconda3/python.exe";
+    
 
     public static int generatePDDL(ArrayList<String> commandStrings, String finMarking, boolean reset) throws IOException, InterruptedException{
         String domain = "n";
@@ -71,9 +71,18 @@ public class RunnerUtils {
         return exitCode;
     }
 
+	/**
+	 * This function executes the locally installed version of Fast-Downward on the newly generated PDDL instances.
+	 * @param currentPath The path the current directory(of the JAR file)
+	 * @param domainReset A boolean flag indicating which Domain (.pddl) should be used when invoking Fast-Downward-
+	 * @return 
+	 * @throws InterruptedException
+	 * @throws IOException
+	 */
+
     public static int runPlanner(String currentPath, boolean domainReset) throws InterruptedException, IOException{
 		
-        ArrayList<String> commandFastDownward = new ArrayList<String>();
+        	ArrayList<String> commandFastDownward = new ArrayList<String>();
             String domainPath;
 			String fastDownwardPath = currentPath+"/fast-downward/fast-downward.py";
 			
@@ -85,7 +94,7 @@ public class RunnerUtils {
                 domainPath = currentPath+"/domain_no_reset.pddl";
             }
 
-			//commandFastDownward.add(pythonPath);
+			// Building the Array that will be passed to Process Builder to invoke Fast-Downward.
 			commandFastDownward.add("python.exe");
 			commandFastDownward.add(fastDownwardPath);
 			commandFastDownward.add(domainPath);
@@ -109,19 +118,17 @@ public class RunnerUtils {
 
         ArrayList<String> commandFastDownward = new ArrayList<String>();
             String domainPath;
-			//String fastDownwardPath = currentPath+"/fast-downward/fast-downward.py";
-			
-			//String problemPath = currentPath+"/problem.pddl";
+
 			String problemPath = "problem.pddl";
             if (domainReset){
-                //domainPath = currentPath+"/domain_with_reset.pddl";
+                
 				domainPath = "domain_with_reset.pddl";
             }
             else{
                 domainPath = "domain_no_reset.pddl";
             }
 
-			//commandFastDownward.add(pythonPath);
+			
 			if (os.contains("Windows")) {
 				commandFastDownward.add("wsl");
 			}

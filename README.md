@@ -1,13 +1,14 @@
 # About
 This repository provides a graphical user interface for the Framed Autonomy Tool described by [Acitelli et. al (2025)](https://doi.org/10.1016/j.is.2025.102573).
-It takes process models in ".pnml" and ".decl" format, as well as a Prefix, and provides an optimal plan.
+It takes process models in ".pnml" and ".decl" format, and returns an optimal continuation for the given Prefix.
+This facilitates different kind of analyses in regards to the Prefix or the process models.
 
 # Getting Started
 
 
 ## Preliminiaries
 The tool is known to work with Java 17.
-In order to run the Planner component, python3 is required 
+In order to run the Planner component, python3 is required. 
 
 In order to run the Framed Autonomy tool, download the JAR file [here] (https://github.com/giacomo1096/FramedAutonomyTool/blob/79dcaaa88d8f51f28e64723c8650e8d166f6ff9e/tool/FramedAutonomyTool.jar) and put it into the same directory as the launcher project.
 
@@ -17,3 +18,7 @@ Additionally, download the Fast Downward Planner ([here](https://www.fast-downwa
 
 Alternatively you can execute the file "setup_planner", which will install the 'Apptainer' (formerly Singularity) image of the planner.
 For windows this requires 'WSL' (Windows Subsystem for Linux), which should come pre-installed with Windows 10 or newer.
+
+## Good to know
+- The planner currently supported is Fast-Downward, with A* and a fully blind heuristic.
+- The names of the different transition should be unique within a single process model (?)
