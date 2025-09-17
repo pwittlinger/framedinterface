@@ -305,7 +305,8 @@ public class InitialController {
 
 				setGraphic(removeButton);
 				removeButton.setOnAction(
-						event -> getTableView().getItems().remove(item)
+						event -> {getTableView().getItems().remove(item);
+						updateSelectedModelVisualizations();}
 						);
 			}
 		});
@@ -552,14 +553,43 @@ public class InitialController {
 
 		modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
 
-		if ((modelTabelView.getItems().size() < 2)|| (declPath == null) || (petrinetPath == null)){
+		try {
+			declPath = declModelChoice.getSelectionModel().getSelectedItem().getFilePath();
+		} catch (Exception e) {
+			// TODO: handle exception
+			System.out.println(e.toString());
+			System.out.println("declPath could not be set (because model is empty)");
+			declPath = "\"\"";
+		}
+		
+		try {
+			petrinetPath = pnModelChoice.getSelectionModel().getSelectedItem().getFilePath(); 
+		} catch (Exception e) {
+			// TODO: handle exception
+			System.out.println(e.toString());
+			System.out.println("petrinetPath could not be set (because model is empty)");
+			petrinetPath = "\" \"";
+		}
+		
+		System.out.println(declPath);
+		System.out.println(petrinetPath);
+
+		if ((modelTabelView.getItems().size() < 2) || (declPath == null) || (petrinetPath == null)){
 			// This check alone could cause issues if someone uploaded multiple petri nets
 			// Then deleted all of them
 			// then uploaded multiple declare models
 			// then tried to run the planner.
 			System.out.println("Error: Number of input files not matching");
-			setUiBusy(false);
-			return;
+
+			//setUiBusy(false);
+			//return;
+
+			if (declPath == null) {
+				declPath = "\"\"";				
+			}
+			if (petrinetPath == null) {
+				petrinetPath = "\" \"";
+			}
 		}
 
 		//Write prefix to file and then pass it
@@ -585,19 +615,20 @@ public class InitialController {
 		ArrayList<String> commandStrings = new ArrayList<String>();
 		commandStrings.add("java");
 		commandStrings.add("-jar");
-		//commandStrings.add(currentPath+"/"+framedAutonomyJar);
 		commandStrings.add(currentPath+"/"+framedAutonomyJar);
 		
-		if (modelTabelView.getItems().size() < 2){
-			System.out.println("Error: Number of input files not matching");
-			return;
-		}
-		else{
+		//if (modelTabelView.getItems().size() < 2){
+		//	System.out.println("Error: Number of input files not matching");
+			//return;
+		//}
+		//else{
 			commandStrings.add(declPath);
 			commandStrings.add("\""+currentPath+"/prefix.txt"+"\"");
 			commandStrings.add(petrinetPath);
-		}
+		//}
 
+
+		System.out.println(commandStrings.toString());
 
 		//Run the Framed Autonomy Tool Jar
 		// Assumed to be located in the project repository
@@ -665,12 +696,22 @@ public class InitialController {
 				
 		prefixOnlyLabel.setVisible(false);
 		prefixOnlyLabel.setManaged(false);
-		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
-		selectedDecl.setVisible(true);
-		selectedDecl.setManaged(true);
-		selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
-		selectedPN.setVisible(true);
-		selectedPN.setManaged(true);
+		try {
+			selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+			selectedDecl.setVisible(true);
+			selectedDecl.setManaged(true);
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		
+		try {
+			selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+			selectedPN.setVisible(true);
+			selectedPN.setManaged(true);
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		
 	}
 	
 	private void setUiBusy(boolean disable) { 
@@ -716,7 +757,8 @@ public class InitialController {
 	}
 
 	
-	private void updatePrefix(Integer selectIndex) { //TODO: Allow building prefix event-by-event, without resetting after each event
+	private void updatePrefix(Integer selectIndex) { 
+		//TODO: Allow building prefix event-by-event, without resetting after each event
 		tracePrefix = new ArrayList<String>(); //Resetting to empty trace
 
 		if (!currentPrefix.isEmpty()) {
@@ -994,6 +1036,10 @@ public class InitialController {
 
 	//Called when the user clicks on graph elements
 	private void addToTracePrefix(String modelId, String activityEncoding) {
+		if (planPresent) {
+			return;
+		}
+		
 		String activityName = null;
 		for (AbstractModel abstractModel : modelTabelView.getItems()) {
 			if (abstractModel.getModelId().equals(modelId)) {
@@ -1022,9 +1068,22 @@ public class InitialController {
 
 	//Convenience method for when both visualizations need to be updated
 	private void updateSelectedModelVisualizations() {
-		updateVisualization(declWebView, declModelChoice.getSelectionModel().getSelectedItem(), ModelType.DECLARE);
-		updateVisualization(pnWebView, pnModelChoice.getSelectionModel().getSelectedItem(), ModelType.PN);
+		//modelTabelView.getItems().forEach(null);
+		try {
+			updateVisualization(declWebView, declModelChoice.getSelectionModel().getSelectedItem(), ModelType.DECLARE);
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		
+		try {
+			updateVisualization(pnWebView, pnModelChoice.getSelectionModel().getSelectedItem(), ModelType.PN);
 
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		
+		//declPath = declModelChoice.getSelectionModel().getSelectedItem().getFilePath();
+		//petrinetPath = pnModelChoice.getSelectionModel().getSelectedItem().getFilePath();
 	}
 
 
@@ -1115,7 +1174,9 @@ public class InitialController {
 
 	@FXML
 	private void onClickToolTip() {
-
+	/*
+	 * This function is used to show the tooltip for the DECLARE visualizer.
+	 */
 	Popup legendPopup = new Popup();
 
 	VBox legendBox = new VBox(10);
@@ -1144,7 +1205,6 @@ public class InitialController {
 
 			// Show slightly below the button
 			legendPopup.show(toolTipButton, screenX, screenY + toolTipButton.getHeight());
-			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
 		} else {
 			legendPopup.hide();
 		}
@@ -1165,7 +1225,7 @@ public class InitialController {
 		return item;
 	}
 
-		@FXML
+	@FXML
 	private void onClickToolTipPN() {
 
 	Popup legendPopup = new Popup();
@@ -1196,14 +1256,13 @@ public class InitialController {
 
 			// Show slightly below the button
 			legendPopup.show(toolTipButtonPN, screenX, screenY + toolTipButtonPN.getHeight());
-			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
 		} else {
 			legendPopup.hide();
 		}
 	});
 	}
 
-		@FXML
+	@FXML
 	private void onClickToolTipRunPlan() {
 
 	Popup legendPopup = new Popup();
@@ -1230,7 +1289,6 @@ public class InitialController {
 
 			// Show slightly below the button
 			legendPopup.show(toolTipButtonRunPlan, screenX, screenY + toolTipButtonRunPlan.getHeight());
-			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
 		} else {
 			legendPopup.hide();
 		}
