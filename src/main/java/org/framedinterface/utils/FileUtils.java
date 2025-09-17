@@ -76,6 +76,9 @@ public class FileUtils {
 					System.err.println("Could not parse entry file!");
 					e.printStackTrace();
 		}
+
+		// Turning plan cost into number of violations.
+		tCost = String.valueOf(Integer.parseInt(tCost) / 3);
 		
 		return tCost;
 	}

@@ -574,24 +574,6 @@ public class InitialController {
 		System.out.println(declPath);
 		System.out.println(petrinetPath);
 
-		if ((modelTabelView.getItems().size() < 2) || (declPath == null) || (petrinetPath == null)){
-			// This check alone could cause issues if someone uploaded multiple petri nets
-			// Then deleted all of them
-			// then uploaded multiple declare models
-			// then tried to run the planner.
-			System.out.println("Error: Number of input files not matching");
-
-			//setUiBusy(false);
-			//return;
-
-			if (declPath == null) {
-				declPath = "\"\"";				
-			}
-			if (petrinetPath == null) {
-				petrinetPath = "\" \"";
-			}
-		}
-
 		//Write prefix to file and then pass it
 
 		BufferedWriter writer = new BufferedWriter(new FileWriter(currentPath + "/prefix.txt"));
@@ -617,16 +599,9 @@ public class InitialController {
 		commandStrings.add("-jar");
 		commandStrings.add(currentPath+"/"+framedAutonomyJar);
 		
-		//if (modelTabelView.getItems().size() < 2){
-		//	System.out.println("Error: Number of input files not matching");
-			//return;
-		//}
-		//else{
-			commandStrings.add(declPath);
-			commandStrings.add("\""+currentPath+"/prefix.txt"+"\"");
-			commandStrings.add(petrinetPath);
-		//}
-
+		commandStrings.add(declPath);
+		commandStrings.add("\""+currentPath+"/prefix.txt"+"\"");
+		commandStrings.add(petrinetPath);
 
 		System.out.println(commandStrings.toString());
 
@@ -638,6 +613,7 @@ public class InitialController {
 			AlertUtils.showError("Generating PDDL failed");
 			setUiBusy(false);
 		});
+		
 		generatePDDLTask.setOnSucceeded(pddlTaskEvent -> {
 			
 			File f = new File(currentPath+"/fast-downward/fast-downward.py");
