@@ -64,7 +64,7 @@ public class TranslationUtils {
 				
 			} catch (Exception e) {
 				// TODO: handle exception
-				System.out.println(e.getMessage());
+				System.out.println(e.getStackTrace()[0].getLineNumber() + "\n" +e.getMessage());
 			}
 			
 		}

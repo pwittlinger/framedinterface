@@ -32,7 +32,7 @@ public class FileUtils {
 			while (s.hasNextLine()) {
 				String line = s.nextLine();
 				if (line.matches("^\\[t=\\d+\\.\\d+[smh],\\s\\d+\\s[KMG]B\\]\\sSolution\\sfound!$")){
-					System.out.println("Solution found!: " + line);
+					//System.out.println("Solution found!: " + line);
 					addLineIntoPlan = true;
 				}
 				if (line.matches("^\\[t=\\d+\\.\\d+[smh],\\s\\d+\\s[KMG]B\\]\\sPlan\\slength:\\s\\d+\\sstep\\(s\\)\\.$")){

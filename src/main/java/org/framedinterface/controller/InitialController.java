@@ -469,7 +469,7 @@ public class InitialController {
 						sem.initialize(dataPetriNet.getTransitions(), dataPetriNet.getInitialMarking());
 						finMarking = dataPetriNet.getFinalMarkings()[0].toString();
 						labelFinalMarking.setText(finMarking);
-						System.out.println(finMarking);
+						System.out.println("Petrinet Final Marking found by file:" + finMarking);
 						} catch (Exception e) {
 							// TODO: handle exception
 							System.out.println("Use Petri Net with Final Marking!");
@@ -562,7 +562,7 @@ public class InitialController {
 			declPath = declModelChoice.getSelectionModel().getSelectedItem().getFilePath();
 		} catch (Exception e) {
 			// TODO: handle exception
-			System.out.println(e.toString());
+			//System.out.println(e.toString());
 			System.out.println("declPath could not be set (because model is empty)");
 			declPath = "\"\"";
 		}
@@ -571,13 +571,13 @@ public class InitialController {
 			petrinetPath = pnModelChoice.getSelectionModel().getSelectedItem().getFilePath(); 
 		} catch (Exception e) {
 			// TODO: handle exception
-			System.out.println(e.toString());
+			//System.out.println(e.toString());
 			System.out.println("petrinetPath could not be set (because model is empty)");
 			petrinetPath = "\" \"";
 		}
 		
-		System.out.println(declPath);
-		System.out.println(petrinetPath);
+		System.out.println("DECLARE path:"+declPath + "\tPetrinet path:" + petrinetPath);
+		//System.out.println(petrinetPath);
 
 		//Write prefix to file and then pass it
 
@@ -592,7 +592,7 @@ public class InitialController {
 			prefixString = prefixString.replace(",", "");
 			prefixString = prefixString.replace("[", "");
 			prefixString = prefixString.replace("]", "");
-			System.out.println(prefixString);
+			System.out.println("Prefix:\t" + prefixString);
 			writer.write(prefixString);
 		}
 
@@ -608,6 +608,7 @@ public class InitialController {
 		commandStrings.add("\""+currentPath+"/prefix.txt"+"\"");
 		commandStrings.add(petrinetPath);
 
+		System.out.println("Command Strings passed to GeneratePDDLTask:");
 		System.out.println(commandStrings.toString());
 
 		//Run the Framed Autonomy Tool Jar
@@ -647,7 +648,7 @@ public class InitialController {
 				for (String action : generatedPlan) {
 					
 					String[] steps = action.split(" ");
-					System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+					//System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
 					
 					int actInd = steps.length-2;
 					if (steps[0].contains("sync")) {
@@ -668,7 +669,10 @@ public class InitialController {
 					
 					
 				}
+				System.out.println("Parsed Action Plan:");
+				System.out.println("----------------------------------");
 				System.out.println(onlyActions);
+				System.out.println("----------------------------------");
 				modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
 				updateplanListView(onlyActions);
 				updateTimelineControls(onlyActions);
@@ -966,7 +970,7 @@ public class InitialController {
 		for (int i = 0; i < activities.size(); i++) {
 			//eventDataList.add(new EventData(i+1, activities.get(i)));
 			String[] planAction = activities.get(i).split(";");
-			System.out.println("planAction"+activities.get(i));
+			//System.out.println("planAction"+activities.get(i));
 			if (planAction.length == 1) {
 				eventDataList.add(new EventData(i+1, activities.get(i)));
 			} else{

@@ -99,7 +99,7 @@ public class PnModel extends AbstractModel  {
 				// Update the colour of the previously enabled transition
 				// Note the colour of the new transition + place
 				// Update Violation somewhere
-				System.out.println(currentlyEnabledTransitions.toString() + " does not contain " + act);
+				System.out.println("Enabled Transitions:"+ currentlyEnabledTransitions.toString() + " does not contain " + act);
 				this.violatedFirings.add(act);
 				this.violatedFiringsKeep.add(act);
 				this.violationCount.put(act, this.violationCount.get(act)+1);
@@ -209,7 +209,7 @@ public class PnModel extends AbstractModel  {
 		    		//System.out.println(initialMarking.toArray()[0].toString());
 		    		
 		    		//System.out.println("Initial Marking: " + initialPlaceLabel);
-		    		System.out.println("Final Marking: " + finalMarkingLabel);
+		    		//System.out.println("Final Marking: " + finalMarkingLabel);
 		    		
 		    		sb.append("node [shape=doublecircle, fillcolor=white]; ");
 		    		sb.append(finalMarkingLabel+" [label=\""+finalMarkingLabel+"\"]; ");
@@ -433,7 +433,7 @@ public class PnModel extends AbstractModel  {
 		    		//System.out.println(initialMarking.toArray()[0].toString());
 		    		
 		    		//System.out.println("Initial Marking: " + initialPlaceLabel);
-		    		System.out.println("Final Marking: " + finalMarkingLabel);
+		    		//System.out.println("Final Marking: " + finalMarkingLabel);
 		    		
 		    		sb.append("node [shape=doublecircle, fillcolor=white]; ");
 		    		sb.append(finalMarkingLabel+" [label=\""+finalMarkingLabel+"\"]; ");
