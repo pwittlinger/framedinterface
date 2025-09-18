@@ -101,6 +101,16 @@
                               <CheckBox fx:id="buttonResetYes" mnemonicParsing="false" onAction="#onClickResetYes" />
                            </children>
                         </HBox>
+                        <HBox alignment="CENTER_LEFT" styleClass="single-parameter">
+                           <children>
+                              <Label styleClass="single-parameter__title" text="Permanent Violation" HBox.hgrow="ALWAYS">
+                                 <font>
+                                    <Font size="24.0" />
+                                 </font>
+                              </Label>
+                              <CheckBox fx:id="buttonStayViolated" mnemonicParsing="false" onAction="#onClickViolationPermanent" />
+                           </children>
+                        </HBox>
                         <HBox alignment="CENTER_RIGHT" styleClass="buttons-group--primary">
                            <children>
                               <Button fx:id="toolTipButtonRunPlan" mnemonicParsing="false" onAction="#onClickToolTipRunPlan" styleClass="standard-button" text="Help" />

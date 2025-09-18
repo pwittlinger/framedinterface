@@ -24,6 +24,7 @@ import org.framedinterface.task.RunPlannerTask;
 import org.framedinterface.utils.AlertUtils;
 import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ModelUtils;
+import org.framedinterface.utils.TranslationUtils;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -41,6 +42,7 @@ import org.w3c.dom.events.EventTarget;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
+import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.animation.Animation.Status;
 import javafx.beans.InvalidationListener;
@@ -203,6 +205,8 @@ public class InitialController {
     private Label selectedPN;
     @FXML
     private CheckBox buttonResetYes;
+	@FXML
+    private CheckBox buttonStayViolated;
 
     @FXML
     private Pane paneStatus;
@@ -247,6 +251,7 @@ public class InitialController {
 	private String currentPath;
 	private String finMarking;
 	private boolean resetDomain;
+	private boolean violatedDomain;
 	private boolean displayViolations;
 	private static String framedAutonomyJar = "FramedAutonomyTool.jar";
 	private ArrayList<String> currentPlan;
@@ -617,8 +622,17 @@ public class InitialController {
 		generatePDDLTask.setOnSucceeded(pddlTaskEvent -> {
 			
 			File f = new File(currentPath+"/fast-downward/fast-downward.py");
+
+			if (violatedDomain) {
+				try {
+					TranslationUtils.translateProblemToViolated();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
 			
-			RunPlannerTask runPlannerTask = new RunPlannerTask(currentPath, resetDomain, f.exists());
+			RunPlannerTask runPlannerTask = new RunPlannerTask(currentPath, resetDomain, f.exists(), violatedDomain);
 			runPlannerTask.setOnFailed(plannerTaskEvent -> {
 				// Ensure that any errors do not lead to the system crashing
 				AlertUtils.showError("Running the planner failed");
@@ -708,6 +722,17 @@ public class InitialController {
     void onClickResetYes(ActionEvent event) {
 		// Toggle the Domain
 		resetDomain = buttonResetYes.isSelected();
+		
+		buttonStayViolated.setSelected(false);
+		violatedDomain = false;
+    }
+	@FXML
+    void onClickViolationPermanent(ActionEvent event) {
+		// Toggle the Domain
+		//resetDomain = buttonStayViolated.isSelected();
+		violatedDomain = buttonStayViolated.isSelected();
+		buttonResetYes.setSelected(false);
+		resetDomain = false;
 		
     }
 
