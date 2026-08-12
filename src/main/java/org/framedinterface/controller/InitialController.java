@@ -617,7 +617,20 @@ public class InitialController {
 		generatePDDLTask.setOnFailed(taskEvent -> {
 			// Ensure that any errors do not lead to the system crashing
 			AlertUtils.showError("Generating PDDL failed");
-			setUiBusy(false);
+			// modelTabelView.getItems() were already reset (see above) in preparation for the new plan,
+			// so we need to bring the models, timeline and plan list back into a consistent state
+			// instead of leaving them wiped/stale (which caused a later ChoiceBox selection to index
+			// into a visStrings list shorter than the stale currentEventIndex).
+			// setUiBusy(false) must run no matter what happens above, otherwise mainContents stays
+			// disabled and the progress overlay stays up, blocking all further interaction.
+			try {
+				planPresent = false;
+				updatePrefix(null);
+			} catch (Exception e) {
+				e.printStackTrace();
+			} finally {
+				setUiBusy(false);
+			}
 		});
 		
 		generatePDDLTask.setOnSucceeded(pddlTaskEvent -> {
@@ -637,7 +650,14 @@ public class InitialController {
 			runPlannerTask.setOnFailed(plannerTaskEvent -> {
 				// Ensure that any errors do not lead to the system crashing
 				AlertUtils.showError("Running the planner failed");
-				setUiBusy(false);
+				try {
+					planPresent = false;
+					updatePrefix(null);
+				} catch (Exception e) {
+					e.printStackTrace();
+				} finally {
+					setUiBusy(false);
+				}
 			});
 			runPlannerTask.setOnSucceeded(plannerTaskEvent -> {
 				ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
