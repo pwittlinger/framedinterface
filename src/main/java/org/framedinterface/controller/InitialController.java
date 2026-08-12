@@ -24,6 +24,7 @@ import org.framedinterface.task.RunPlannerTask;
 import org.framedinterface.utils.AlertUtils;
 import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ModelUtils;
+import org.framedinterface.utils.TranslationUtils;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -41,6 +42,7 @@ import org.w3c.dom.events.EventTarget;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
+import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.animation.Animation.Status;
 import javafx.beans.InvalidationListener;
@@ -203,6 +205,8 @@ public class InitialController {
     private Label selectedPN;
     @FXML
     private CheckBox buttonResetYes;
+	@FXML
+    private CheckBox buttonStayViolated;
 
     @FXML
     private Pane paneStatus;
@@ -247,6 +251,7 @@ public class InitialController {
 	private String currentPath;
 	private String finMarking;
 	private boolean resetDomain;
+	private boolean violatedDomain;
 	private boolean displayViolations;
 	private static String framedAutonomyJar = "FramedAutonomyTool.jar";
 	private ArrayList<String> currentPlan;
@@ -305,7 +310,8 @@ public class InitialController {
 
 				setGraphic(removeButton);
 				removeButton.setOnAction(
-						event -> getTableView().getItems().remove(item)
+						event -> {getTableView().getItems().remove(item);
+						updateSelectedModelVisualizations();}
 						);
 			}
 		});
@@ -463,7 +469,7 @@ public class InitialController {
 						sem.initialize(dataPetriNet.getTransitions(), dataPetriNet.getInitialMarking());
 						finMarking = dataPetriNet.getFinalMarkings()[0].toString();
 						labelFinalMarking.setText(finMarking);
-						System.out.println(finMarking);
+						System.out.println("Petrinet Final Marking found by file:" + finMarking);
 						} catch (Exception e) {
 							// TODO: handle exception
 							System.out.println("Use Petri Net with Final Marking!");
@@ -552,15 +558,26 @@ public class InitialController {
 
 		modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
 
-		if ((modelTabelView.getItems().size() < 2)|| (declPath == null) || (petrinetPath == null)){
-			// This check alone could cause issues if someone uploaded multiple petri nets
-			// Then deleted all of them
-			// then uploaded multiple declare models
-			// then tried to run the planner.
-			System.out.println("Error: Number of input files not matching");
-			setUiBusy(false);
-			return;
+		try {
+			declPath = declModelChoice.getSelectionModel().getSelectedItem().getFilePath();
+		} catch (Exception e) {
+			// TODO: handle exception
+			//System.out.println(e.toString());
+			System.out.println("declPath could not be set (because model is empty)");
+			declPath = "\"\"";
 		}
+		
+		try {
+			petrinetPath = pnModelChoice.getSelectionModel().getSelectedItem().getFilePath(); 
+		} catch (Exception e) {
+			// TODO: handle exception
+			//System.out.println(e.toString());
+			System.out.println("petrinetPath could not be set (because model is empty)");
+			petrinetPath = "\" \"";
+		}
+		
+		System.out.println("DECLARE path:"+declPath + "\tPetrinet path:" + petrinetPath);
+		//System.out.println(petrinetPath);
 
 		//Write prefix to file and then pass it
 
@@ -575,7 +592,7 @@ public class InitialController {
 			prefixString = prefixString.replace(",", "");
 			prefixString = prefixString.replace("[", "");
 			prefixString = prefixString.replace("]", "");
-			System.out.println(prefixString);
+			System.out.println("Prefix:\t" + prefixString);
 			writer.write(prefixString);
 		}
 
@@ -585,19 +602,14 @@ public class InitialController {
 		ArrayList<String> commandStrings = new ArrayList<String>();
 		commandStrings.add("java");
 		commandStrings.add("-jar");
-		//commandStrings.add(currentPath+"/"+framedAutonomyJar);
 		commandStrings.add(currentPath+"/"+framedAutonomyJar);
 		
-		if (modelTabelView.getItems().size() < 2){
-			System.out.println("Error: Number of input files not matching");
-			return;
-		}
-		else{
-			commandStrings.add(declPath);
-			commandStrings.add("\""+currentPath+"/prefix.txt"+"\"");
-			commandStrings.add(petrinetPath);
-		}
+		commandStrings.add(declPath);
+		commandStrings.add("\""+currentPath+"/prefix.txt"+"\"");
+		commandStrings.add(petrinetPath);
 
+		System.out.println("Command Strings passed to GeneratePDDLTask:");
+		System.out.println(commandStrings.toString());
 
 		//Run the Framed Autonomy Tool Jar
 		// Assumed to be located in the project repository
@@ -607,11 +619,21 @@ public class InitialController {
 			AlertUtils.showError("Generating PDDL failed");
 			setUiBusy(false);
 		});
+		
 		generatePDDLTask.setOnSucceeded(pddlTaskEvent -> {
 			
 			File f = new File(currentPath+"/fast-downward/fast-downward.py");
+
+			if (violatedDomain) {
+				try {
+					TranslationUtils.translateProblemToViolated();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
 			
-			RunPlannerTask runPlannerTask = new RunPlannerTask(currentPath, resetDomain, f.exists());
+			RunPlannerTask runPlannerTask = new RunPlannerTask(currentPath, resetDomain, f.exists(), violatedDomain);
 			runPlannerTask.setOnFailed(plannerTaskEvent -> {
 				// Ensure that any errors do not lead to the system crashing
 				AlertUtils.showError("Running the planner failed");
@@ -626,7 +648,7 @@ public class InitialController {
 				for (String action : generatedPlan) {
 					
 					String[] steps = action.split(" ");
-					System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
+					//System.out.println(steps[0] + " "+ " " + steps[steps.length-2]);
 					
 					int actInd = steps.length-2;
 					if (steps[0].contains("sync")) {
@@ -647,7 +669,10 @@ public class InitialController {
 					
 					
 				}
+				System.out.println("Parsed Action Plan:");
+				System.out.println("----------------------------------");
 				System.out.println(onlyActions);
+				System.out.println("----------------------------------");
 				modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
 				updateplanListView(onlyActions);
 				updateTimelineControls(onlyActions);
@@ -665,12 +690,22 @@ public class InitialController {
 				
 		prefixOnlyLabel.setVisible(false);
 		prefixOnlyLabel.setManaged(false);
-		selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
-		selectedDecl.setVisible(true);
-		selectedDecl.setManaged(true);
-		selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
-		selectedPN.setVisible(true);
-		selectedPN.setManaged(true);
+		try {
+			selectedDecl.setText(declModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+			selectedDecl.setVisible(true);
+			selectedDecl.setManaged(true);
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		
+		try {
+			selectedPN.setText(pnModelChoice.getSelectionModel().getSelectedItem().getModelName().toString());
+			selectedPN.setVisible(true);
+			selectedPN.setManaged(true);
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		
 	}
 	
 	private void setUiBusy(boolean disable) { 
@@ -691,6 +726,17 @@ public class InitialController {
     void onClickResetYes(ActionEvent event) {
 		// Toggle the Domain
 		resetDomain = buttonResetYes.isSelected();
+		
+		buttonStayViolated.setSelected(false);
+		violatedDomain = false;
+    }
+	@FXML
+    void onClickViolationPermanent(ActionEvent event) {
+		// Toggle the Domain
+		//resetDomain = buttonStayViolated.isSelected();
+		violatedDomain = buttonStayViolated.isSelected();
+		buttonResetYes.setSelected(false);
+		resetDomain = false;
 		
     }
 
@@ -716,7 +762,8 @@ public class InitialController {
 	}
 
 	
-	private void updatePrefix(Integer selectIndex) { //TODO: Allow building prefix event-by-event, without resetting after each event
+	private void updatePrefix(Integer selectIndex) { 
+		//TODO: Allow building prefix event-by-event, without resetting after each event
 		tracePrefix = new ArrayList<String>(); //Resetting to empty trace
 
 		if (!currentPrefix.isEmpty()) {
@@ -923,7 +970,7 @@ public class InitialController {
 		for (int i = 0; i < activities.size(); i++) {
 			//eventDataList.add(new EventData(i+1, activities.get(i)));
 			String[] planAction = activities.get(i).split(";");
-			System.out.println("planAction"+activities.get(i));
+			//System.out.println("planAction"+activities.get(i));
 			if (planAction.length == 1) {
 				eventDataList.add(new EventData(i+1, activities.get(i)));
 			} else{
@@ -994,6 +1041,10 @@ public class InitialController {
 
 	//Called when the user clicks on graph elements
 	private void addToTracePrefix(String modelId, String activityEncoding) {
+		if (planPresent) {
+			return;
+		}
+		
 		String activityName = null;
 		for (AbstractModel abstractModel : modelTabelView.getItems()) {
 			if (abstractModel.getModelId().equals(modelId)) {
@@ -1022,9 +1073,22 @@ public class InitialController {
 
 	//Convenience method for when both visualizations need to be updated
 	private void updateSelectedModelVisualizations() {
-		updateVisualization(declWebView, declModelChoice.getSelectionModel().getSelectedItem(), ModelType.DECLARE);
-		updateVisualization(pnWebView, pnModelChoice.getSelectionModel().getSelectedItem(), ModelType.PN);
+		//modelTabelView.getItems().forEach(null);
+		try {
+			updateVisualization(declWebView, declModelChoice.getSelectionModel().getSelectedItem(), ModelType.DECLARE);
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		
+		try {
+			updateVisualization(pnWebView, pnModelChoice.getSelectionModel().getSelectedItem(), ModelType.PN);
 
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		
+		//declPath = declModelChoice.getSelectionModel().getSelectedItem().getFilePath();
+		//petrinetPath = pnModelChoice.getSelectionModel().getSelectedItem().getFilePath();
 	}
 
 
@@ -1115,7 +1179,9 @@ public class InitialController {
 
 	@FXML
 	private void onClickToolTip() {
-
+	/*
+	 * This function is used to show the tooltip for the DECLARE visualizer.
+	 */
 	Popup legendPopup = new Popup();
 
 	VBox legendBox = new VBox(10);
@@ -1144,7 +1210,6 @@ public class InitialController {
 
 			// Show slightly below the button
 			legendPopup.show(toolTipButton, screenX, screenY + toolTipButton.getHeight());
-			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
 		} else {
 			legendPopup.hide();
 		}
@@ -1165,7 +1230,7 @@ public class InitialController {
 		return item;
 	}
 
-		@FXML
+	@FXML
 	private void onClickToolTipPN() {
 
 	Popup legendPopup = new Popup();
@@ -1196,14 +1261,13 @@ public class InitialController {
 
 			// Show slightly below the button
 			legendPopup.show(toolTipButtonPN, screenX, screenY + toolTipButtonPN.getHeight());
-			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
 		} else {
 			legendPopup.hide();
 		}
 	});
 	}
 
-		@FXML
+	@FXML
 	private void onClickToolTipRunPlan() {
 
 	Popup legendPopup = new Popup();
@@ -1230,7 +1294,6 @@ public class InitialController {
 
 			// Show slightly below the button
 			legendPopup.show(toolTipButtonRunPlan, screenX, screenY + toolTipButtonRunPlan.getHeight());
-			//legendPopup.show(toolTipButton, declWebView.getLayoutX(), declWebView.getLayoutY());
 		} else {
 			legendPopup.hide();
 		}

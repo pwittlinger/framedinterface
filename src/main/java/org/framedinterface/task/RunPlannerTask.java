@@ -10,11 +10,13 @@ public class RunPlannerTask extends Task<Integer> {
 	private String currentPath;
 	private boolean domainReset;
 	private boolean download;
+	private boolean domainViolated;
 
-	public RunPlannerTask(String currentPath, boolean domainReset, boolean download) {
+	public RunPlannerTask(String currentPath, boolean domainReset, boolean download, boolean domainViolated) {
 		this.currentPath = currentPath;
 		this.domainReset = domainReset;
 		this.download = download;
+		this.domainViolated = domainViolated;
 	}
 
 	@Override
@@ -43,6 +45,10 @@ public class RunPlannerTask extends Task<Integer> {
 		String problemPath = currentPath+"/problem.pddl";
 		if (domainReset){
 			domainPath = currentPath+"/domain_with_reset.pddl";
+		}
+		else if (domainViolated){
+			domainPath = currentPath +"/domain_violated.pddl";
+			problemPath = currentPath+"/problem_violated.pddl";
 		}
 		else{
 			domainPath = currentPath+"/domain_no_reset.pddl";
@@ -77,11 +83,14 @@ public class RunPlannerTask extends Task<Integer> {
 		//String problemPath = currentPath+"/problem.pddl";
 		String problemPath = "problem.pddl";
 		if (domainReset){
-			//domainPath = currentPath+"/domain_with_reset.pddl";
-			domainPath = "domain_with_reset.pddl";
+			domainPath = currentPath+"/domain_with_reset.pddl";
+		}
+		else if (domainViolated){
+			domainPath = currentPath +"/domain_violated.pddl";
+			problemPath = currentPath+"/problem_violated.pddl";
 		}
 		else{
-			domainPath = "domain_no_reset.pddl";
+			domainPath = currentPath+"/domain_no_reset.pddl";
 		}
 
 		//commandFastDownward.add(pythonPath);
