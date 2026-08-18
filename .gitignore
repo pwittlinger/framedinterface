@@ -8,3 +8,6 @@
 apptainer/*
 /apptainer/**
 fast-downward.sif
+problem.pddl
+prefix.txt
+results.txt
