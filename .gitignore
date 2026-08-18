@@ -5,3 +5,6 @@
 /sas_plan
 /fast-downward*
 /target
+apptainer/*
+/apptainer/**
+fast-downward.sif
