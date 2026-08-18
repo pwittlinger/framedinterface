@@ -1,4 +1,7 @@
-package org.framedinterface.controller;
+package org.framedinterface.controller.dataagnostic;
+
+import org.framedinterface.controller.ProgressLayerController;
+import org.framedinterface.controller.common.AbstractController;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedWriter;
@@ -77,7 +80,6 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.web.WebView;
 import javafx.stage.Popup;
-import javafx.stage.Stage;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
 import netscape.javascript.JSObject;
@@ -93,7 +95,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 
-public class InitialController {
+public class DataAgnosticController extends AbstractController {
 	
 	@FXML 
 	private StackPane rootElement;
@@ -243,7 +245,6 @@ public class InitialController {
 
 
 	List<VBox> resultsList;
-    private Stage stage;
 	private ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 	private int defaultViolationCost = 3;
 	private String declPath;
@@ -257,10 +258,6 @@ public class InitialController {
 	private ArrayList<String> currentPlan;
 	private ArrayList<String> currentPrefix;
 	private boolean planPresent;
-
-	public void setStage(Stage stage) {
-		this.stage = stage;
-	}
 
 	@FXML
 	private void initialize() {
@@ -443,7 +440,7 @@ public class InitialController {
     void onButtonClickedUploadModel(ActionEvent event) {
 		// When uploading a model I immediately save the path to the model.
 		// In this way I can later pass it to the Framed Autonomy Tool easier.
-		List<File> modelFiles = FileUtils.showModelOpenDialog(stage);
+		List<File> modelFiles = FileUtils.showModelOpenDialog(getStage());
 		if (modelFiles != null) {
 			List<AbstractModel> abstractModels = new ArrayList<AbstractModel>();
 			for (File modelFile : modelFiles) {
@@ -867,7 +864,7 @@ public class InitialController {
 			@Override
 			public void changed(ObservableValue<? extends Worker.State> observable, Worker.State oldValue, Worker.State newValue) {
 				if(newValue == Worker.State.SUCCEEDED) {
-					((JSObject)visualizationWebView.getEngine().executeScript("window")).setMember("app", InitialController.this);
+					((JSObject)visualizationWebView.getEngine().executeScript("window")).setMember("app", DataAgnosticController.this);
 					if (modelType == ModelType.DECLARE) { //A hack to load the pnWebView only after declWebView is already loaded
 						setupWebView(pnWebView, ModelType.PN, pnZoomSlider, pnZoomSliderValueObject, pnZoomValueField, pnWebViewZoomObject);
 					}

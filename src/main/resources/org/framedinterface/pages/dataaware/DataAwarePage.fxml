@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.StackPane?>
+
+<StackPane fx:id="rootRegion" styleClass="standard-bg-color" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.framedinterface.controller.dataaware.DataAwareController">
+   <children>
+      <Label styleClass="page-intro-label" text="Data-aware planning is coming soon." wrapText="true" />
+   </children>
+</StackPane>

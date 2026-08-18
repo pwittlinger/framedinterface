@@ -13,7 +13,7 @@ import javafx.stage.WindowEvent;
 import java.io.IOException;
 import java.util.Locale;
 
-import org.framedinterface.controller.InitialController;
+import org.framedinterface.controller.common.RootLayoutController;
 
 /**
  * JavaFX App
@@ -25,9 +25,11 @@ public class App extends Application {
     @Override
     public void start(Stage stage) throws IOException {
 
-        FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/org/framedinterface/maininterface.fxml"));
+        FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/org/framedinterface/pages/common/RootLayout.fxml"));
 		Parent parent = fxmlLoader.load();
-        ((InitialController)fxmlLoader.getController()).setStage(stage);
+        RootLayoutController rootLayoutController = fxmlLoader.getController();
+        rootLayoutController.setStage(stage);
+        rootLayoutController.showDefaultPage();
         Locale.setDefault(Locale.UK);
         scene = new Scene(parent);
         scene.getStylesheets().add(getClass().getResource("/org/framedinterface/main.css").toString());
