@@ -23,6 +23,8 @@ public class NavigationSidebarController extends AbstractController {
 	@FXML
 	private Button dataAwareButton;
 	@FXML
+	private Button processFrameOverviewButton;
+	@FXML
 	private FontIcon minimizeIcon;
 
 	private boolean isMinimized;
@@ -42,6 +44,11 @@ public class NavigationSidebarController extends AbstractController {
 	@FXML
 	private void openDataAware() {
 		handleNavigation(PageType.DATA_AWARE);
+	}
+
+	@FXML
+	private void openProcessFrameOverview() {
+		handleNavigation(PageType.PROCESS_FRAME_OVERVIEW);
 	}
 
 	private void handleNavigation(PageType pageType) {
@@ -64,6 +71,10 @@ public class NavigationSidebarController extends AbstractController {
 		case DATA_AWARE:
 			dataAwareButton.pseudoClassStateChanged(highlightedClass, true);
 			currentlyHighlighted = dataAwareButton;
+			break;
+		case PROCESS_FRAME_OVERVIEW:
+			processFrameOverviewButton.pseudoClassStateChanged(highlightedClass, true);
+			currentlyHighlighted = processFrameOverviewButton;
 			break;
 		default:
 			break;

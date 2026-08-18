@@ -123,23 +123,28 @@ public class DeclareModel extends AbstractModel  {
 
 	@Override
 	public String getVisualisationString(int activityIndex, boolean displayViolations) {
+		return getVisualisationString(activityIndex, displayViolations, false);
+	}
+
+	//Data conditions (e.g. "[A.grade > 4]") are only meaningful for Declare models, so this overload lives here rather than on AbstractModel
+	public String getVisualisationString(int activityIndex, boolean displayViolations, boolean showDataConditions) {
 		StringBuilder sb = new StringBuilder("digraph \"\" {");
 		sb.append("id = \"graphRoot_" + getModelId() + "\"");
 		sb.append("ranksep = \".6\"");
 		sb.append("nodesep = \".5\"");
 		sb.append("node [style=\"filled\", shape=box, fontsize=\"8\", fontname=\"Helvetica\"]");
 		sb.append("edge [fontsize=\"8\", fontname=\"Helvetica\" arrowsize=\".8\"]");
-		
+
 		for (String activity : this.getActivities()) {
-			sb.append(GraphGenerator.buildDeclNodeString(this.getActivityEncoding(activity), activity, monitoringStates.get(activityIndex), activityToUnaryMap.get(activity)));
+			sb.append(GraphGenerator.buildDeclNodeString(this.getActivityEncoding(activity), activity, monitoringStates.get(activityIndex), activityToUnaryMap.get(activity), showDataConditions));
 		}
-		
+
 		for (DeclareConstraint declareConstraint : declareConstraints) {
 			if (declareConstraint.getTemplate().getIsBinary()) {
-				sb.append(GraphGenerator.buildDeclEdgeString(declareConstraint, monitoringStates.get(activityIndex).get(declareConstraint), this.getActivityToEncodingMap()));
+				sb.append(GraphGenerator.buildDeclEdgeString(declareConstraint, monitoringStates.get(activityIndex).get(declareConstraint), this.getActivityToEncodingMap(), showDataConditions));
 			}
 		}
-		
+
 		sb.append("}");
 
 		//System.out.println(sb.toString());

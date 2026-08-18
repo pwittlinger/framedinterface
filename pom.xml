@@ -29,16 +29,19 @@
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>13</version>
+            <classifier>${javafx.platform}</classifier>
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
             <version>13</version>
+            <classifier>${javafx.platform}</classifier>
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-web</artifactId>
             <version>15.0.1</version>
+            <classifier>${javafx.platform}</classifier>
        </dependency>
     <dependency>
         <groupId>org.processmining</groupId>
@@ -149,6 +152,12 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-collections4</artifactId>
         <version>4.5.0</version>
+    </dependency>
+    <!-- Provides the ToggleSwitch control used by RuM (styled via the existing .toggle-switch rules in main.css) -->
+    <dependency>
+        <groupId>org.controlsfx</groupId>
+        <artifactId>controlsfx</artifactId>
+        <version>11.1.2</version>
     </dependency>
     </dependencies>
 
@@ -385,7 +394,37 @@
                 </configuration>
             </execution>
             </executions>
-          </plugin>  
+          </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>javafx-windows</id>
+            <activation>
+                <os><family>windows</family></os>
+            </activation>
+            <properties>
+                <javafx.platform>win</javafx.platform>
+            </properties>
+        </profile>
+        <profile>
+            <id>javafx-mac</id>
+            <activation>
+                <os><family>mac</family></os>
+            </activation>
+            <properties>
+                <javafx.platform>mac</javafx.platform>
+            </properties>
+        </profile>
+        <profile>
+            <id>javafx-linux</id>
+            <activation>
+                <os><family>unix</family></os>
+            </activation>
+            <properties>
+                <javafx.platform>linux</javafx.platform>
+            </properties>
+        </profile>
+    </profiles>
 </project>

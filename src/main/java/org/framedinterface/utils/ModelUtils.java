@@ -90,7 +90,7 @@ public class ModelUtils {
 		LinkedHashSet<DeclareConstraint> declareConstraints = new LinkedHashSet<DeclareConstraint>(); //To remove duplicates, while retaining predictable iteration order
 
 		Scanner sc = new Scanner(declareModelPath);
-		Pattern constraintPattern = Pattern.compile("\\w+(\\[.*\\]) \\|");
+		Pattern constraintPattern = Pattern.compile("\\w+\\[.*\\]"); //Trailing " |conditions" is optional
 
 		while(sc.hasNextLine()) {
 			String line = sc.nextLine();
@@ -113,14 +113,19 @@ public class ModelUtils {
 		return declareConstraints;
 	}
 
-	//Creates a Declare constraint object from a single Declare constraint string (removed reading of data conditions)
+	//Creates a Declare constraint object from a single Declare constraint string
 	private static DeclareConstraint readConstraintString(String constraintString) {
 		DeclareTemplate template = null;
 		String activationActivity = "";
 		String targetActivity = "";
+		String activationCondition = "";
+		String targetCondition = "";
+		String timeCondition = "";
 
-		Matcher mBinary = Pattern.compile("(.*)\\[(.*), (.*)\\] \\|(.*) \\|(.*) \\|(.*)").matcher(constraintString);
-		Matcher mUnary = Pattern.compile(".*\\[(.*)\\] \\|(.*) \\|(.*)").matcher(constraintString);
+		//The trailing " |activationCondition |targetCondition |timeCondition" section is optional -
+		//some exports omit it entirely when a constraint has no data/time conditions
+		Matcher mBinary = Pattern.compile("(.*)\\[(.*), (.*)\\](?: \\|(.*) \\|(.*) \\|(.*))?").matcher(constraintString);
+		Matcher mUnary = Pattern.compile(".*\\[(.*)\\](?: \\|(.*) \\|(.*))?").matcher(constraintString);
 
 		//Processing the constraint
 		if(mBinary.find()) { //Binary constraints
@@ -133,13 +138,23 @@ public class ModelUtils {
 				activationActivity = mBinary.group(2);
 				targetActivity = mBinary.group(3);
 			}
+			activationCondition = trimOrEmpty(mBinary.group(4));
+			targetCondition = trimOrEmpty(mBinary.group(5));
+			timeCondition = trimOrEmpty(mBinary.group(6));
 		} else if(mUnary.find()) { //Unary constraints
 			template = DeclareTemplate.getByTemplateName(mUnary.group(0).substring(0, mUnary.group(0).indexOf("["))); //TODO: Should be done more intelligently
 			activationActivity = mUnary.group(1);
+			activationCondition = trimOrEmpty(mUnary.group(2));
+			timeCondition = trimOrEmpty(mUnary.group(3));
 		}
 
-		//return new DeclareConstraint(constraintString, template, activationActivity, targetActivity);
-		return new DeclareConstraint(constraintString, template, activationActivity.toLowerCase(), targetActivity.toLowerCase());
+		return new DeclareConstraint(constraintString, template, activationActivity.toLowerCase(), targetActivity.toLowerCase(),
+				activationCondition, targetCondition, timeCondition);
+	}
+
+	//Regex groups for the optional trailing condition section are null when that section is absent entirely
+	private static String trimOrEmpty(String s) {
+		return s == null ? "" : s.trim();
 	}
 
 

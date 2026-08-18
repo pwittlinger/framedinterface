@@ -11,16 +11,23 @@ public class DeclareConstraint {
 	private DeclareTemplate template;
 	private String activationActivity;
 	private String targetActivity;
-	
+	private String activationCondition;
+	private String targetCondition;
+	private String timeCondition;
+
 	private ExecutableAutomaton constraintAutomaton; //Attaching the automata directly to constraint object, might be more convenient in this case
 
-	public DeclareConstraint(String constraintString, DeclareTemplate template, String activationActivity, String targetActivity) {
+	public DeclareConstraint(String constraintString, DeclareTemplate template, String activationActivity, String targetActivity,
+			String activationCondition, String targetCondition, String timeCondition) {
 		super();
 		this.constraintString = constraintString;
 		this.template = template;
 		this.activationActivity = activationActivity;
 		this.targetActivity = targetActivity;
-		
+		this.activationCondition = activationCondition;
+		this.targetCondition = targetCondition;
+		this.timeCondition = timeCondition;
+
 		constraintAutomaton = AutomatonUtils.createConstraintAutomaton(this);
 	}
 
@@ -39,8 +46,20 @@ public class DeclareConstraint {
 	public String getTargetActivity() {
 		return targetActivity;
 	}
-	
-	
+
+	public String getActivationCondition() {
+		return activationCondition;
+	}
+
+	public String getTargetCondition() {
+		return targetCondition;
+	}
+
+	public String getTimeCondition() {
+		return timeCondition;
+	}
+
+
 	//Methods for trace replay
 	public MonitoringState resetAutomaton() {
 		constraintAutomaton.ini();

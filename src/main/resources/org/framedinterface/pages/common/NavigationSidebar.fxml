@@ -42,6 +42,15 @@
             <String fx:value="primary-nav__button--menu" />
          </styleClass>
       </Button>
+      <Button fx:id="processFrameOverviewButton" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#openProcessFrameOverview" text="Process Frame Overview">
+         <graphic>
+            <FontIcon iconLiteral="fa-eye" styleClass="primary-nav__icon" wrappingWidth="35.0" />
+         </graphic>
+         <styleClass>
+            <String fx:value="primary-nav__button" />
+            <String fx:value="primary-nav__button--menu" />
+         </styleClass>
+      </Button>
       <Region VBox.vgrow="ALWAYS" />
       <Button maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#toggleMinimize" text="Minimize">
          <graphic>
