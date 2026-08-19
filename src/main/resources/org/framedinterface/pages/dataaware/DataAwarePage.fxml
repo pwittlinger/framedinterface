@@ -13,6 +13,7 @@
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.TitledPane?>
 <?import javafx.scene.layout.FlowPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
@@ -30,29 +31,29 @@
                <children>
                   <VBox styleClass="section-box section-box--main-parameters">
                      <children>
-                        <HBox styleClass="single-parameter">
-                           <children>
-                              <Label styleClass="single-parameter__title" text="Process Specifications" HBox.hgrow="ALWAYS">
-                                 <font>
-                                    <Font size="24.0" />
-                                 </font>
-                              </Label>
-                           </children>
-                        </HBox>
-                        <TableView fx:id="modelTabelView" editable="true" VBox.vgrow="ALWAYS">
-                          <columns>
-                            <TableColumn fx:id="modelSelectColumn" maxWidth="30.0" minWidth="30.0" prefWidth="30.0" resizable="false" sortable="false" />
-                            <TableColumn fx:id="modelNameColumn" prefWidth="175.0" resizable="false" text="Model Name" />
-                            <TableColumn fx:id="modelTypeColumn" maxWidth="60.0" minWidth="60.0" prefWidth="60.0" resizable="false" text="Type" />
-                          </columns>
-                           <columnResizePolicy>
-                              <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
-                           </columnResizePolicy>
-                           <styleClass>
-                              <String fx:value="table-padding" />
-                              <String fx:value="hidden-scroll-bar--horizontal" />
-                           </styleClass>
-                        </TableView>
+                        <TitledPane fx:id="modelRegistryPane" animated="false" expanded="true" styleClass="parameters-pane" text="Process Specifications" VBox.vgrow="ALWAYS">
+                           <content>
+                              <TableView fx:id="modelTabelView" editable="true">
+                                <columns>
+                                  <TableColumn fx:id="modelSelectColumn" maxWidth="30.0" minWidth="30.0" prefWidth="30.0" resizable="false" sortable="false" />
+                                  <TableColumn fx:id="modelNameColumn" prefWidth="175.0" resizable="false" text="Model Name" />
+                                  <TableColumn fx:id="modelTypeColumn" maxWidth="60.0" minWidth="60.0" prefWidth="60.0" resizable="false" text="Type" />
+                                </columns>
+                                 <columnResizePolicy>
+                                    <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
+                                 </columnResizePolicy>
+                                 <styleClass>
+                                    <String fx:value="table-padding" />
+                                    <String fx:value="hidden-scroll-bar--horizontal" />
+                                 </styleClass>
+                              </TableView>
+                           </content>
+                        </TitledPane>
+                        <TitledPane fx:id="activitiesAttributesPane" animated="false" expanded="true" styleClass="parameters-pane" text="Activities &amp; Attributes" VBox.vgrow="ALWAYS">
+                           <content>
+                              <VBox fx:id="activitiesAttributesContent" />
+                           </content>
+                        </TitledPane>
                      </children>
                      <padding>
                         <Insets left="5.0" />
