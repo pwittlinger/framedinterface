@@ -16,12 +16,19 @@ public class DeclareModel extends AbstractModel  {
 	
 	private LinkedHashSet<DeclareConstraint> declareConstraints;
 	private Map<String, List<DeclareConstraint>> activityToUnaryMap;
+	private Map<String, LinkedHashSet<String>> activityToAttributesMap; //Bindings are only present in Declare models
 	private List<Map<DeclareConstraint, MonitoringState>> monitoringStates; //First index is the initial state and last index is the final state
 
-	public DeclareModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, LinkedHashSet<DeclareConstraint> declareConstraints, Map<String, List<DeclareConstraint>> activityToUnaryMap) {
+	public DeclareModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, LinkedHashSet<DeclareConstraint> declareConstraints, Map<String, List<DeclareConstraint>> activityToUnaryMap, Map<String, LinkedHashSet<String>> activityToAttributesMap) {
 		super(modelId, modelName, activities, activityToEncodingMap, ModelType.DECLARE);
 		this.declareConstraints = declareConstraints;
 		this.activityToUnaryMap = activityToUnaryMap;
+		this.activityToAttributesMap = activityToAttributesMap;
+	}
+
+	//Attribute names (lowercased) bound to the given activity (lowercased), or an empty set if none are bound
+	public LinkedHashSet<String> getAttributesForActivity(String activity) {
+		return activityToAttributesMap.getOrDefault(activity, new LinkedHashSet<String>());
 	}
 	
 	public Map<MonitoringState, Integer> getMonitoringStateCounts(int activityIndex) {

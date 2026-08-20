@@ -4,6 +4,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
 import org.framedinterface.controller.common.AbstractController;
 import org.framedinterface.event.EventCell;
@@ -16,6 +19,7 @@ import org.framedinterface.model.PlannerSession;
 import org.framedinterface.model.PnModel;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
+import org.controlsfx.control.ToggleSwitch;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -51,6 +55,8 @@ import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TreeItem;
+import javafx.scene.control.TreeView;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
@@ -81,6 +87,9 @@ public class DataAwareController extends AbstractController {
 	private Map<AbstractModel, BooleanProperty> modelSelectionState = new HashMap<AbstractModel, BooleanProperty>();
 
 	@FXML
+	private TreeView<String> activitiesTreeView;
+
+	@FXML
 	private SplitPane resultsSplitPane;
 
 	@FXML
@@ -93,6 +102,8 @@ public class DataAwareController extends AbstractController {
 	private TextField declZoomValueField;
 	@FXML
 	private Button toolTipButton;
+	@FXML
+	private ToggleSwitch dataConditionsToggle;
 
 	@FXML
 	private ChoiceBox<AbstractModel> pnModelChoice;
@@ -154,6 +165,7 @@ public class DataAwareController extends AbstractController {
 	private boolean animationInProgress;
 	private SimpleIntegerProperty currentEventIndex = new SimpleIntegerProperty(0);
 	private FontIcon pauseFontIcon = new FontIcon("fa-pause");
+	private boolean showDataConditions = false;
 
 	@FXML
 	private void initialize() {
@@ -165,6 +177,10 @@ public class DataAwareController extends AbstractController {
 		modelTypeColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelType().toString()));
 		modelSelectColumn.setCellValueFactory(data -> getModelSelectedProperty(data.getValue()));
 		modelSelectColumn.setCellFactory(CheckBoxTableCell.forTableColumn(modelSelectColumn));
+
+		//Activities & Attributes panel: view-only tree of unique activity labels (with their bound attributes, if any) across the currently selected process specifications
+		activitiesTreeView.setShowRoot(false);
+		updateActivitiesListView();
 
 		//Selecting a row switches the visualized model, same as Process Frame Overview
 		modelTabelView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
@@ -186,6 +202,7 @@ public class DataAwareController extends AbstractController {
 			public void invalidated(Observable observable) {
 				resultsSplitPane.setDisable(ModelRegistry.getInstance().getModels().isEmpty());
 				timelineControls.setDisable(ModelRegistry.getInstance().getModels().isEmpty());
+				updateActivitiesListView();
 			}
 		});
 
@@ -255,6 +272,11 @@ public class DataAwareController extends AbstractController {
 			updateplanListViewStatistics(newValue, planListView.getItems());
 		});
 
+		dataConditionsToggle.selectedProperty().addListener((observable, oldValue, newValue) -> {
+			showDataConditions = newValue;
+			updateVisualization(declWebView, declModelChoice.getSelectionModel().getSelectedItem(), ModelType.DECLARE);
+		});
+
 		//Timeline setup
 		setupTimelineControls();
 
@@ -279,7 +301,41 @@ public class DataAwareController extends AbstractController {
 	}
 
 	private BooleanProperty getModelSelectedProperty(AbstractModel model) {
-		return modelSelectionState.computeIfAbsent(model, m -> new SimpleBooleanProperty(false));
+		return modelSelectionState.computeIfAbsent(model, m -> {
+			BooleanProperty selected = new SimpleBooleanProperty(false);
+			selected.addListener((observable, oldValue, newValue) -> updateActivitiesListView());
+			return selected;
+		});
+	}
+
+	//Refreshes the Activities & Attributes panel with the unique (case-insensitive) activity labels, and their bound attributes (Declare models only), of the currently selected process specifications
+	private void updateActivitiesListView() {
+		Map<String, Set<String>> activityToAttributes = new TreeMap<String, Set<String>>();
+		for (AbstractModel model : getSelectedModels()) {
+			for (String activity : model.getActivities()) {
+				String activityLabel = activity.toLowerCase();
+				Set<String> attributes = activityToAttributes.computeIfAbsent(activityLabel, a -> new TreeSet<String>());
+				if (model instanceof DeclareModel) {
+					for (String attribute : ((DeclareModel) model).getAttributesForActivity(activityLabel)) {
+						attributes.add(attribute.toLowerCase());
+					}
+				}
+			}
+		}
+
+		TreeItem<String> activitiesRoot = new TreeItem<String>();
+		if (activityToAttributes.isEmpty()) {
+			activitiesRoot.getChildren().add(new TreeItem<String>("No process specifications selected")); //TreeView has no built-in placeholder support, unlike ListView/TableView
+		}
+		for (Map.Entry<String, Set<String>> entry : activityToAttributes.entrySet()) {
+			TreeItem<String> activityItem = new TreeItem<String>(entry.getKey());
+			activityItem.setExpanded(true);
+			for (String attribute : entry.getValue()) {
+				activityItem.getChildren().add(new TreeItem<String>(attribute));
+			}
+			activitiesRoot.getChildren().add(activityItem);
+		}
+		activitiesTreeView.setRoot(activitiesRoot);
 	}
 
 	//Process specifications checked in modelTabelView, to be handed to the data-aware planner
@@ -612,7 +668,9 @@ public class DataAwareController extends AbstractController {
 			if (modelType == ModelType.PN) {initialPnWebViewScript = "";}
 			visualizationWebView.getEngine().executeScript("clearModel()");
 		} else {
-			visualizationString = abstractModel.getVisualisationString(currentEventIndex.get(), PlannerSession.getInstance().isDisplayViolations());
+			visualizationString = abstractModel instanceof DeclareModel
+					? ((DeclareModel) abstractModel).getVisualisationString(currentEventIndex.get(), PlannerSession.getInstance().isDisplayViolations(), showDataConditions)
+					: abstractModel.getVisualisationString(currentEventIndex.get(), PlannerSession.getInstance().isDisplayViolations());
 			if (visualizationString != null) {
 				script = "setModel('" + visualizationString + "')";
 				if (visualizationWebView.getEngine().getLoadWorker().stateProperty().get() == Worker.State.SUCCEEDED) {

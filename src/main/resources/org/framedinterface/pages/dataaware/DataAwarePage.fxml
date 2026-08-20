@@ -14,6 +14,7 @@
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.TitledPane?>
+<?import javafx.scene.control.TreeView?>
 <?import javafx.scene.layout.FlowPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
@@ -21,6 +22,7 @@
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Font?>
 <?import javafx.scene.web.WebView?>
+<?import org.controlsfx.control.ToggleSwitch?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <StackPane fx:id="rootRegion" styleClass="standard-bg-color" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.framedinterface.controller.dataaware.DataAwareController">
@@ -51,7 +53,7 @@
                         </TitledPane>
                         <TitledPane fx:id="activitiesAttributesPane" animated="false" expanded="true" styleClass="parameters-pane" text="Activities &amp; Attributes" VBox.vgrow="ALWAYS">
                            <content>
-                              <VBox fx:id="activitiesAttributesContent" />
+                              <TreeView fx:id="activitiesTreeView" />
                            </content>
                         </TitledPane>
                      </children>
@@ -94,6 +96,12 @@
                                              <children>
                                                 <Region maxWidth="20.0" />
                                                 <Button fx:id="toolTipButton" mnemonicParsing="false" onAction="#onClickToolTip" styleClass="standard-button" text="Help" />
+                                             </children>
+                                          </HBox>
+                                          <HBox>
+                                             <children>
+                                                <Region maxWidth="20.0" />
+                                                <ToggleSwitch fx:id="dataConditionsToggle" text="Data conditions" />
                                              </children>
                                           </HBox>
                                        </children>

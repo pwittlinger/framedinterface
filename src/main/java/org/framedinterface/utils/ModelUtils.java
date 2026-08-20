@@ -40,9 +40,10 @@ public class ModelUtils {
 		LinkedHashSet<String> activities = createActivityNamesSet(modelPath);
 		BidiMap<String, String> activityToEncodingMap = createActivityToEncodingMap(activities);
 		LinkedHashSet<DeclareConstraint> declareConstrains = readConstraints(modelPath);
-		Map<String, List<DeclareConstraint>> activityToUnaryMap = createActivityToUnaryMap(activities, declareConstrains); 
+		Map<String, List<DeclareConstraint>> activityToUnaryMap = createActivityToUnaryMap(activities, declareConstrains);
+		Map<String, LinkedHashSet<String>> activityToAttributesMap = readActivityAttributeBindings(modelPath);
 
-		DeclareModel declareModel = new DeclareModel(modelId, modelName, activities, activityToEncodingMap, declareConstrains, activityToUnaryMap);
+		DeclareModel declareModel = new DeclareModel(modelId, modelName, activities, activityToEncodingMap, declareConstrains, activityToUnaryMap, activityToAttributesMap);
 		declareModel.setFilePath(modelPath.toAbsolutePath().toString());
 		return declareModel;
 	}
@@ -85,6 +86,28 @@ public class ModelUtils {
 		return activityToUnaryMap;
 	}
 	
+	//Finds "bind ActivityName: attr1, attr2" lines and creates a map of activity name to its bound attribute names
+	private static Map<String, LinkedHashSet<String>> readActivityAttributeBindings(Path modelPath) throws IOException {
+		Map<String, LinkedHashSet<String>> activityToAttributesMap = new HashMap<String, LinkedHashSet<String>>();
+
+		Scanner sc = new Scanner(modelPath);
+		while(sc.hasNextLine()) {
+			String line = sc.nextLine();
+			if(line.startsWith("bind") && line.length() > 7 && line.substring(6).contains(":")) {
+				String activity = line.substring(4, line.indexOf(':')).trim().toLowerCase();
+				LinkedHashSet<String> attributes = activityToAttributesMap.computeIfAbsent(activity, a -> new LinkedHashSet<String>());
+				for (String attributeName : line.substring(line.indexOf(':') + 1).split(",")) {
+					if (!attributeName.trim().isEmpty()) {
+						attributes.add(attributeName.trim().toLowerCase());
+					}
+				}
+			}
+		}
+		sc.close();
+
+		return activityToAttributesMap;
+	}
+
 	//Finds constraint strings in the Declare model and creates a list of Declare constraint objects
 	private static LinkedHashSet<DeclareConstraint> readConstraints(Path declareModelPath) throws IOException {
 		LinkedHashSet<DeclareConstraint> declareConstraints = new LinkedHashSet<DeclareConstraint>(); //To remove duplicates, while retaining predictable iteration order
