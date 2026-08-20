@@ -42,6 +42,7 @@ public class ModelUtils {
 		LinkedHashSet<DeclareConstraint> declareConstrains = readConstraints(modelPath);
 		Map<String, List<DeclareConstraint>> activityToUnaryMap = createActivityToUnaryMap(activities, declareConstrains);
 		Map<String, LinkedHashSet<String>> activityToAttributesMap = readActivityAttributeBindings(modelPath);
+		addAttributesFromConditions(activityToAttributesMap, declareConstrains);
 
 		DeclareModel declareModel = new DeclareModel(modelId, modelName, activities, activityToEncodingMap, declareConstrains, activityToUnaryMap, activityToAttributesMap);
 		declareModel.setFilePath(modelPath.toAbsolutePath().toString());
@@ -106,6 +107,30 @@ public class ModelUtils {
 		sc.close();
 
 		return activityToAttributesMap;
+	}
+
+	//Data conditions (e.g. "A.categorical is c2") also reveal attribute-activity associations, which "bind" lines don't always fully capture
+	private static final Pattern CONDITION_ATTRIBUTE_PATTERN = Pattern.compile("\\b([AT])\\.(\\w+)");
+
+	private static void addAttributesFromConditions(Map<String, LinkedHashSet<String>> activityToAttributesMap, LinkedHashSet<DeclareConstraint> declareConstraints) {
+		for (DeclareConstraint declareConstraint : declareConstraints) {
+			addAttributesFromCondition(activityToAttributesMap, declareConstraint, declareConstraint.getActivationCondition());
+			addAttributesFromCondition(activityToAttributesMap, declareConstraint, declareConstraint.getTargetCondition());
+		}
+	}
+
+	//"A." refers to the constraint's activation activity and "T." to its target activity, regardless of which condition string the token appears in
+	private static void addAttributesFromCondition(Map<String, LinkedHashSet<String>> activityToAttributesMap, DeclareConstraint declareConstraint, String condition) {
+		if (condition == null || condition.isEmpty()) {
+			return;
+		}
+		Matcher matcher = CONDITION_ATTRIBUTE_PATTERN.matcher(condition);
+		while (matcher.find()) {
+			String activity = "A".equals(matcher.group(1)) ? declareConstraint.getActivationActivity() : declareConstraint.getTargetActivity();
+			if (activity != null && !activity.isEmpty()) {
+				activityToAttributesMap.computeIfAbsent(activity.toLowerCase(), a -> new LinkedHashSet<String>()).add(matcher.group(2).toLowerCase());
+			}
+		}
 	}
 
 	//Finds constraint strings in the Declare model and creates a list of Declare constraint objects

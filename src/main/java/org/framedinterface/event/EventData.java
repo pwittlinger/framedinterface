@@ -9,7 +9,8 @@ public class EventData {
 	private String activityName;
 	private Map<MonitoringState, Integer> declMonitoringStateCounts;
 	private String plannerAction;
-	
+	private Map<String, String> attributeValues; //Attribute name -> value, manually attached by the user; only populated for editable (prefix, no plan present) events
+
 	private boolean isStart;
 	private boolean isEnd;
 	
@@ -46,6 +47,14 @@ public class EventData {
 
 	public String getPlanAction() {
 		return this.plannerAction;
+	}
+
+	public void setAttributeValues(Map<String, String> attributeValues) {
+		this.attributeValues = attributeValues;
+	}
+
+	public Map<String, String> getAttributeValues() {
+		return attributeValues;
 	}
 	
 	public void setDeclMonitoringStateCounts(Map<MonitoringState, Integer> declMonitoringStateCounts) {

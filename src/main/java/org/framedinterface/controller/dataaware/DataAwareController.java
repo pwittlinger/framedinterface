@@ -1,6 +1,7 @@
 package org.framedinterface.controller.dataaware;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,6 +89,9 @@ public class DataAwareController extends AbstractController {
 
 	@FXML
 	private TreeView<String> activitiesTreeView;
+
+	//Unique (case-insensitive) activity labels, and their bound attributes (Declare models only), of the currently selected process specifications; refreshed by updateActivitiesListView()
+	private Map<String, Set<String>> activityToAttributes = new TreeMap<String, Set<String>>();
 
 	@FXML
 	private SplitPane resultsSplitPane;
@@ -292,7 +296,7 @@ public class DataAwareController extends AbstractController {
 				handleplanListViewSelection(planListView.getSelectionModel().selectedIndexProperty().intValue());
 			}
 		});
-		planListView.setCellFactory(value -> new EventCell(selectionCallback));
+		planListView.setCellFactory(value -> new EventCell(selectionCallback, this::getAttributesForActivity, this::deletePrefixEvent));
 
 		bttnDisplayViolations.setSelected(PlannerSession.getInstance().isDisplayViolations());
 
@@ -310,7 +314,7 @@ public class DataAwareController extends AbstractController {
 
 	//Refreshes the Activities & Attributes panel with the unique (case-insensitive) activity labels, and their bound attributes (Declare models only), of the currently selected process specifications
 	private void updateActivitiesListView() {
-		Map<String, Set<String>> activityToAttributes = new TreeMap<String, Set<String>>();
+		activityToAttributes.clear();
 		for (AbstractModel model : getSelectedModels()) {
 			for (String activity : model.getActivities()) {
 				String activityLabel = activity.toLowerCase();
@@ -336,6 +340,13 @@ public class DataAwareController extends AbstractController {
 			activitiesRoot.getChildren().add(activityItem);
 		}
 		activitiesTreeView.setRoot(activitiesRoot);
+
+		planListView.refresh(); //Already-rendered prefix events need to re-check attribute availability now that the selected models (and thus known attributes) may have changed
+	}
+
+	//Attribute names bound to the given activity (from the currently selected Declare models), for the planListView attribute editor
+	private Set<String> getAttributesForActivity(String activityName) {
+		return activityToAttributes.getOrDefault(activityName == null ? "" : activityName.toLowerCase(), Collections.emptySet());
 	}
 
 	//Process specifications checked in modelTabelView, to be handed to the data-aware planner
@@ -354,10 +365,18 @@ public class DataAwareController extends AbstractController {
 		PlannerSession.getInstance().setPlanPresent(false);
 		ModelRegistry.getInstance().getModels().forEach(abstractModel -> abstractModel.resetModel());
 		PlannerSession.getInstance().getCurrentPrefix().clear();
+		PlannerSession.getInstance().clearPrefixAttributeValues();
 
 		updateTrace(null);
 		updateSelectedModelVisualizations();
 		labelCost.setText("");
+	}
+
+	//Removes a single event from the manually-built prefix (only reachable while no plan is present)
+	private void deletePrefixEvent(int eventNumber) {
+		PlannerSession.getInstance().removePrefixEvent(eventNumber);
+		updateTrace(null);
+		updateSelectedModelVisualizations();
 	}
 
 	//Called from JavaScript when the user clicks on a graph element, extends the manually-built prefix
@@ -577,15 +596,18 @@ public class DataAwareController extends AbstractController {
 	//Updates the planListView to match the trace and the currently selected models
 	private void updateplanListView(List<String> activities) {
 
+		boolean editable = !PlannerSession.getInstance().isPlanPresent(); //Attribute values can only be attached to a manually-built prefix, not a planner-produced continuation
 		List<EventData> eventDataList = new ArrayList<EventData>();
 		eventDataList.add(EventData.createStartEvent());
 		for (int i = 0; i < activities.size(); i++) {
 			String[] planAction = activities.get(i).split(";");
-			if (planAction.length == 1) {
-				eventDataList.add(new EventData(i+1, activities.get(i)));
-			} else {
-				eventDataList.add(new EventData(i+1, planAction[1], planAction[0]));
+			EventData eventData = planAction.length == 1
+					? new EventData(i+1, activities.get(i))
+					: new EventData(i+1, planAction[1], planAction[0]);
+			if (editable) {
+				eventData.setAttributeValues(PlannerSession.getInstance().getPrefixAttributeValues(i+1));
 			}
+			eventDataList.add(eventData);
 		}
 		eventDataList.add(EventData.createEndEvent(activities.size()+1));
 		updateplanListViewStatistics(declModelChoice.getSelectionModel().getSelectedItem(), eventDataList);
