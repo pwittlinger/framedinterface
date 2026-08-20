@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,6 +25,7 @@ import org.processmining.datapetrinets.io.DataPetriNetImporter;
 import org.processmining.models.graphbased.AttributeMap;
 import org.processmining.models.graphbased.directed.petrinet.elements.Transition;
 
+import org.framedinterface.model.AttributeDomain;
 import org.framedinterface.model.DeclareModel;
 import org.framedinterface.model.PnModel;
 import org.framedinterface.utils.enums.DeclareTemplate;
@@ -43,8 +45,9 @@ public class ModelUtils {
 		Map<String, List<DeclareConstraint>> activityToUnaryMap = createActivityToUnaryMap(activities, declareConstrains);
 		Map<String, LinkedHashSet<String>> activityToAttributesMap = readActivityAttributeBindings(modelPath);
 		addAttributesFromConditions(activityToAttributesMap, declareConstrains);
+		Map<String, AttributeDomain> attributeDomains = readAttributeDomains(modelPath);
 
-		DeclareModel declareModel = new DeclareModel(modelId, modelName, activities, activityToEncodingMap, declareConstrains, activityToUnaryMap, activityToAttributesMap);
+		DeclareModel declareModel = new DeclareModel(modelId, modelName, activities, activityToEncodingMap, declareConstrains, activityToUnaryMap, activityToAttributesMap, attributeDomains);
 		declareModel.setFilePath(modelPath.toAbsolutePath().toString());
 		return declareModel;
 	}
@@ -131,6 +134,43 @@ public class ModelUtils {
 				activityToAttributesMap.computeIfAbsent(activity.toLowerCase(), a -> new LinkedHashSet<String>()).add(matcher.group(2).toLowerCase());
 			}
 		}
+	}
+
+	//Matches attribute domain declaration lines, e.g. "integer: integer between 0 and 100" or "categorical: c1, c2, c3"
+	//(these are the only remaining colon-lines once "activity X" and "bind X: ..." lines are excluded, since neither has a bare "word:" prefix)
+	private static final Pattern DOMAIN_LINE_PATTERN = Pattern.compile("^(\\w+):\\s*(.*)$");
+	private static final Pattern NUMERIC_DOMAIN_PATTERN = Pattern.compile("(?i)(integer|float)\\s+between\\s+(\\S+)\\s+and\\s+(\\S+)");
+
+	//Finds attribute domain declarations and creates a map of attribute name to its declared value range/set
+	private static Map<String, AttributeDomain> readAttributeDomains(Path modelPath) throws IOException {
+		Map<String, AttributeDomain> attributeDomains = new HashMap<String, AttributeDomain>();
+
+		Scanner sc = new Scanner(modelPath);
+		while (sc.hasNextLine()) {
+			Matcher domainMatcher = DOMAIN_LINE_PATTERN.matcher(sc.nextLine());
+			if (domainMatcher.matches()) {
+				String attributeName = domainMatcher.group(1).toLowerCase();
+				String description = domainMatcher.group(2).trim();
+				Matcher numericMatcher = NUMERIC_DOMAIN_PATTERN.matcher(description);
+				if (numericMatcher.find()) {
+					AttributeDomain.Type type = "float".equalsIgnoreCase(numericMatcher.group(1)) ? AttributeDomain.Type.FLOAT : AttributeDomain.Type.INTEGER;
+					attributeDomains.put(attributeName, AttributeDomain.numeric(type, Double.parseDouble(numericMatcher.group(2)), Double.parseDouble(numericMatcher.group(3))));
+				} else if (!description.isEmpty()) {
+					Set<String> values = new TreeSet<String>();
+					for (String value : description.split(",")) {
+						if (!value.trim().isEmpty()) {
+							values.add(value.trim());
+						}
+					}
+					if (!values.isEmpty()) {
+						attributeDomains.put(attributeName, AttributeDomain.categorical(values));
+					}
+				}
+			}
+		}
+		sc.close();
+
+		return attributeDomains;
 	}
 
 	//Finds constraint strings in the Declare model and creates a list of Declare constraint objects

@@ -51,9 +51,14 @@
                               </TableView>
                            </content>
                         </TitledPane>
-                        <TitledPane fx:id="activitiesAttributesPane" animated="false" expanded="true" styleClass="parameters-pane" text="Activities &amp; Attributes" VBox.vgrow="ALWAYS">
+                        <TitledPane fx:id="activitiesAttributesPane" animated="false" expanded="true" styleClass="parameters-pane" text="Activities" VBox.vgrow="ALWAYS">
                            <content>
                               <TreeView fx:id="activitiesTreeView" />
+                           </content>
+                        </TitledPane>
+                        <TitledPane fx:id="attributesPane" animated="false" expanded="true" styleClass="parameters-pane" text="Attributes" VBox.vgrow="ALWAYS">
+                           <content>
+                              <TreeView fx:id="attributesTreeView" />
                            </content>
                         </TitledPane>
                      </children>

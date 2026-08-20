@@ -13,6 +13,7 @@ import org.framedinterface.controller.common.AbstractController;
 import org.framedinterface.event.EventCell;
 import org.framedinterface.event.EventData;
 import org.framedinterface.model.AbstractModel;
+import org.framedinterface.model.AttributeDomain;
 import org.framedinterface.model.DeclareModel;
 import org.framedinterface.model.ModelRegistry;
 import org.framedinterface.model.ModelType;
@@ -89,6 +90,8 @@ public class DataAwareController extends AbstractController {
 
 	@FXML
 	private TreeView<String> activitiesTreeView;
+	@FXML
+	private TreeView<String> attributesTreeView;
 
 	//Unique (case-insensitive) activity labels, and their bound attributes (Declare models only), of the currently selected process specifications; refreshed by updateActivitiesListView()
 	private Map<String, Set<String>> activityToAttributes = new TreeMap<String, Set<String>>();
@@ -184,6 +187,7 @@ public class DataAwareController extends AbstractController {
 
 		//Activities & Attributes panel: view-only tree of unique activity labels (with their bound attributes, if any) across the currently selected process specifications
 		activitiesTreeView.setShowRoot(false);
+		attributesTreeView.setShowRoot(false);
 		updateActivitiesListView();
 
 		//Selecting a row switches the visualized model, same as Process Frame Overview
@@ -342,6 +346,31 @@ public class DataAwareController extends AbstractController {
 		activitiesTreeView.setRoot(activitiesRoot);
 
 		planListView.refresh(); //Already-rendered prefix events need to re-check attribute availability now that the selected models (and thus known attributes) may have changed
+		updateAttributesTreeView();
+	}
+
+	//Refreshes the Attributes panel with the declared value range/set of each attribute, merged (widest range / union of values) across the currently selected Declare models
+	private void updateAttributesTreeView() {
+		Map<String, AttributeDomain> mergedDomains = new TreeMap<String, AttributeDomain>();
+		for (AbstractModel model : getSelectedModels()) {
+			if (model instanceof DeclareModel) {
+				for (Map.Entry<String, AttributeDomain> entry : ((DeclareModel) model).getAttributeDomains().entrySet()) {
+					mergedDomains.merge(entry.getKey(), entry.getValue(), AttributeDomain::merge);
+				}
+			}
+		}
+
+		TreeItem<String> attributesRoot = new TreeItem<String>();
+		if (mergedDomains.isEmpty()) {
+			attributesRoot.getChildren().add(new TreeItem<String>("No process specifications selected"));
+		}
+		for (Map.Entry<String, AttributeDomain> entry : mergedDomains.entrySet()) {
+			TreeItem<String> attributeItem = new TreeItem<String>(entry.getKey());
+			attributeItem.setExpanded(true);
+			attributeItem.getChildren().add(new TreeItem<String>(entry.getValue().describe()));
+			attributesRoot.getChildren().add(attributeItem);
+		}
+		attributesTreeView.setRoot(attributesRoot);
 	}
 
 	//Attribute names bound to the given activity (from the currently selected Declare models), for the planListView attribute editor
