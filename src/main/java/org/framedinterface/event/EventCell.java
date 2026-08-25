@@ -43,18 +43,20 @@ public class EventCell extends ListCell<EventData> {
 	private Consumer<Integer> selectionCallback;
 	private Function<String, Set<String>> activityAttributesLookup; //Attribute names bound to a given activity; null if this list doesn't support attribute editing (e.g. Data-Agnostic)
 	private Consumer<Integer> deleteCallback; //Removes this event from the prefix; null if this list doesn't support deleting events (e.g. Data-Agnostic)
+	private Consumer<Integer> attributeChangeCallback; //Re-replays the trace after an attribute value is confirmed; null if this list doesn't support attribute editing (e.g. Data-Agnostic)
 	private FXMLLoader loader;
 	private Popup attributesPopup;
 
 
 	public EventCell(Consumer<Integer> selectionCallback) {
-		this(selectionCallback, null, null);
+		this(selectionCallback, null, null, null);
 	}
 
-	public EventCell(Consumer<Integer> selectionCallback, Function<String, Set<String>> activityAttributesLookup, Consumer<Integer> deleteCallback) {
+	public EventCell(Consumer<Integer> selectionCallback, Function<String, Set<String>> activityAttributesLookup, Consumer<Integer> deleteCallback, Consumer<Integer> attributeChangeCallback) {
 		this.selectionCallback = selectionCallback;
 		this.activityAttributesLookup = activityAttributesLookup;
 		this.deleteCallback = deleteCallback;
+		this.attributeChangeCallback = attributeChangeCallback;
 	}
 
 	@FXML
@@ -162,7 +164,12 @@ public class EventCell extends ListCell<EventData> {
 			FontIcon confirmIcon = new FontIcon("fa-check");
 			confirmIcon.getStyleClass().add("small-button__icon");
 			confirmButton.setGraphic(confirmIcon);
-			Runnable confirmValue = () -> values.put(attribute, valueField.getText());
+			Runnable confirmValue = () -> {
+				values.put(attribute, valueField.getText());
+				if (attributeChangeCallback != null) {
+					attributeChangeCallback.accept(item.getEventNumber());
+				}
+			};
 			confirmButton.setOnAction(event -> confirmValue.run());
 			valueField.setOnAction(event -> confirmValue.run()); //Enter key also confirms
 			row.getChildren().addAll(new Label(attribute + ":"), valueField, confirmButton);

@@ -1,8 +1,11 @@
 package org.framedinterface.model;
 
+import java.util.Map;
+
 import org.processmining.plugins.declareminer.ExecutableAutomaton;
 
 import org.framedinterface.utils.AutomatonUtils;
+import org.framedinterface.utils.DataConditionEvaluator;
 import org.framedinterface.utils.enums.DeclareTemplate;
 import org.framedinterface.utils.enums.MonitoringState;
 
@@ -74,14 +77,31 @@ public class DeclareConstraint {
 		constraintAutomaton.next(getAutomataLabel(activityName));
 		return AutomatonUtils.getMonitoringState(constraintAutomaton);
 	}
-	
+
+	//Data-Aware page only: an occurrence only counts as an activation/target if its attribute values also satisfy the
+	//corresponding data condition - otherwise it is treated as an arbitrary (data-irrelevant) occurrence, same as "Z"
+	public MonitoringState executeNextActivity(String activityName, Map<String, String> attributeValues) {
+		constraintAutomaton.next(getAutomataLabel(activityName, attributeValues));
+		return AutomatonUtils.getMonitoringState(constraintAutomaton);
+	}
+
 	private String getAutomataLabel(String activityName) {
 		if (activityName.equals(activationActivity)) {
-			return template.getReverseActivationTarget() ? "B" : "A"; 
+			return template.getReverseActivationTarget() ? "B" : "A";
 		} else if (activityName.equals(targetActivity)) {
-			return template.getReverseActivationTarget() ? "A" : "B"; 
+			return template.getReverseActivationTarget() ? "A" : "B";
 		} else {
 			return "Z"; //Arbitrary activities are still relevant for chain constraints
+		}
+	}
+
+	private String getAutomataLabel(String activityName, Map<String, String> attributeValues) {
+		if (activityName.equals(activationActivity) && DataConditionEvaluator.evaluate(activationCondition, attributeValues)) {
+			return template.getReverseActivationTarget() ? "B" : "A";
+		} else if (activityName.equals(targetActivity) && DataConditionEvaluator.evaluate(targetCondition, attributeValues)) {
+			return template.getReverseActivationTarget() ? "A" : "B";
+		} else {
+			return "Z"; //Arbitrary activities, and activities whose data condition wasn't satisfied, are still relevant for chain constraints
 		}
 	}
 	

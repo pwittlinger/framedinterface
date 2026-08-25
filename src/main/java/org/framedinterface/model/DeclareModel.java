@@ -1,6 +1,7 @@
 package org.framedinterface.model;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -124,6 +125,70 @@ public class DeclareModel extends AbstractModel  {
 		}
 		
 		//Adding final monitoring states  (constraint states when the trace terminates)
+		Map<DeclareConstraint, MonitoringState> finalStates = new HashMap<DeclareConstraint, MonitoringState>();
+		declareConstraints.forEach(declareConstraint -> {
+			MonitoringState monitoringState = declareConstraint.getMonitoringState();
+			if (monitoringState == MonitoringState.POSS_SAT) { monitoringState = MonitoringState.SAT;}
+			else if (monitoringState == MonitoringState.POSS_VIOL) { monitoringState = MonitoringState.VIOL;}
+			finalStates.put(declareConstraint, monitoringState);
+		});
+		monitoringStates.add(finalStates);
+	}
+
+	//Data-Aware page only: like updateMonitoringStates, but each constraint's activation/target data condition is checked against the
+	//attribute values attached to the occurring event before counting it as an activation/target occurrence. The Data-Agnostic page
+	//intentionally ignores data conditions and keeps using updateMonitoringStates.
+	//attributeValuesPerEvent is parallel to activities (attributeValuesPerEvent.get(i) holds the attribute values for activities.get(i)).
+	public void updateMonitoringStatesWithData(List<String> activities, List<Map<String, String>> attributeValuesPerEvent, boolean displayViolations) {
+		Map<DeclareConstraint, MonitoringState> initialStates = new HashMap<DeclareConstraint, MonitoringState>();
+		declareConstraints.forEach(declareConstraint -> initialStates.put(declareConstraint, declareConstraint.resetAutomaton()));
+		monitoringStates = new ArrayList<Map<DeclareConstraint,MonitoringState>>();
+		monitoringStates.add(initialStates);
+
+		for (int i = 0; i < activities.size(); i++) {
+			String[] planAction = activities.get(i).split(";");
+			String activity;
+
+			if (planAction.length == 2) {
+				activity = planAction[1];
+			}
+			else{
+				activity = planAction[0];
+			}
+
+			//Check if the action is reset-petrinet
+			if (activity.startsWith("reset") && !activity.equals("reset-petrinet")) {
+				String resetAct = activity.substring(6);
+
+				for (DeclareConstraint dc : declareConstraints) {
+					String templateName_ = dc.getTemplate().getTemplateName().toLowerCase();
+					templateName_ = templateName_.replace(" ", "_");
+					String activ_;
+					if (dc.getTemplate().getReverseActivationTarget()) {
+						activ_ = dc.getTargetActivity();
+					} else {activ_ = dc.getActivationActivity();}
+
+					if (resetAct.contains(templateName_) && (resetAct.contains(activ_.toLowerCase()))) {
+						String target_;
+						if (dc.getTemplate().getReverseActivationTarget()) {
+								target_ = dc.getActivationActivity();
+						} else {target_ = dc.getTargetActivity();}
+
+						if (!(target_.isBlank())&&(!resetAct.contains(target_.toLowerCase()))){
+							continue;
+						}
+						dc.resetAutomaton();
+					}
+				}
+			}
+
+			Map<String, String> attributeValues = i < attributeValuesPerEvent.size() ? attributeValuesPerEvent.get(i) : Collections.emptyMap();
+			Map<DeclareConstraint, MonitoringState> monitoringState = new HashMap<DeclareConstraint, MonitoringState>();
+			declareConstraints.forEach(declareConstraint -> monitoringState.put(declareConstraint, declareConstraint.executeNextActivity(activity.toLowerCase(), attributeValues)));
+			monitoringStates.add(monitoringState);
+		}
+
+		//Adding final monitoring states (constraint states when the trace terminates)
 		Map<DeclareConstraint, MonitoringState> finalStates = new HashMap<DeclareConstraint, MonitoringState>();
 		declareConstraints.forEach(declareConstraint -> {
 			MonitoringState monitoringState = declareConstraint.getMonitoringState();

@@ -57,12 +57,14 @@ import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TitledPane;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
@@ -89,9 +91,15 @@ public class DataAwareController extends AbstractController {
 	private Map<AbstractModel, BooleanProperty> modelSelectionState = new HashMap<AbstractModel, BooleanProperty>();
 
 	@FXML
+	private TitledPane modelRegistryPane;
+	@FXML
 	private TreeView<String> activitiesTreeView;
 	@FXML
+	private TitledPane activitiesAttributesPane;
+	@FXML
 	private TreeView<String> attributesTreeView;
+	@FXML
+	private TitledPane attributesPane;
 
 	//Unique (case-insensitive) activity labels, and their bound attributes (Declare models only), of the currently selected process specifications; refreshed by updateActivitiesListView()
 	private Map<String, Set<String>> activityToAttributes = new TreeMap<String, Set<String>>();
@@ -134,7 +142,11 @@ public class DataAwareController extends AbstractController {
 	@FXML
 	private Label selectedPN;
 	@FXML
+	private TitledPane prefixPane;
+	@FXML
 	private ListView<EventData> planListView;
+	@FXML
+	private TitledPane continuationPane;
 	@FXML
 	private Label labelCost;
 	@FXML
@@ -189,6 +201,11 @@ public class DataAwareController extends AbstractController {
 		activitiesTreeView.setShowRoot(false);
 		attributesTreeView.setShowRoot(false);
 		updateActivitiesListView();
+
+		//Collapsed panes should only take up their title bar's height, not keep claiming a share of the column's growable space
+		for (TitledPane pane : new TitledPane[] {modelRegistryPane, activitiesAttributesPane, attributesPane, prefixPane, continuationPane}) {
+			bindPaneGrowToExpanded(pane);
+		}
 
 		//Selecting a row switches the visualized model, same as Process Frame Overview
 		modelTabelView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
@@ -259,7 +276,7 @@ public class DataAwareController extends AbstractController {
 				List<String> activeTrace = PlannerSession.getInstance().getActiveTrace();
 				if (!activeTrace.isEmpty()) {
 					newValue.resetModel();
-					newValue.updateMonitoringStates(activeTrace, PlannerSession.getInstance().isDisplayViolations());
+					((DeclareModel) newValue).updateMonitoringStatesWithData(activeTrace, buildAttributeValuesPerEvent(activeTrace), PlannerSession.getInstance().isDisplayViolations());
 				}
 			}
 			updateVisualization(declWebView, newValue, ModelType.DECLARE);
@@ -300,12 +317,18 @@ public class DataAwareController extends AbstractController {
 				handleplanListViewSelection(planListView.getSelectionModel().selectedIndexProperty().intValue());
 			}
 		});
-		planListView.setCellFactory(value -> new EventCell(selectionCallback, this::getAttributesForActivity, this::deletePrefixEvent));
+		planListView.setCellFactory(value -> new EventCell(selectionCallback, this::getAttributesForActivity, this::deletePrefixEvent, this::onAttributeValueChanged));
 
 		bttnDisplayViolations.setSelected(PlannerSession.getInstance().isDisplayViolations());
 
 		//Reflect whatever trace/plan is already active in PlannerSession (e.g. carried over from Data-Agnostic)
 		updateTrace(null);
+	}
+
+	//A collapsed TitledPane should only take up its title bar's height; only an expanded pane should compete for the column's leftover growable space
+	private void bindPaneGrowToExpanded(TitledPane pane) {
+		VBox.setVgrow(pane, pane.isExpanded() ? Priority.ALWAYS : Priority.NEVER);
+		pane.expandedProperty().addListener((observable, oldValue, expanded) -> VBox.setVgrow(pane, expanded ? Priority.ALWAYS : Priority.NEVER));
 	}
 
 	private BooleanProperty getModelSelectedProperty(AbstractModel model) {
@@ -408,6 +431,12 @@ public class DataAwareController extends AbstractController {
 		updateSelectedModelVisualizations();
 	}
 
+	//Re-replays the trace after an attribute value is confirmed in planListView's attribute editor popup, since the
+	//constraint automata need to be re-run with the new value rather than waiting for the next prefix event to trigger a replay
+	private void onAttributeValueChanged(int eventNumber) {
+		updateTrace(currentEventIndex.get());
+	}
+
 	//Called from JavaScript when the user clicks on a graph element, extends the manually-built prefix
 	private void addToTracePrefix(String modelId, String activityEncoding) {
 		if (PlannerSession.getInstance().isPlanPresent()) {
@@ -427,12 +456,31 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	//Attribute values (attribute name -> value) attached to each event of the given trace, in order; only the manually-built prefix carries
+	//attribute values (a planner-produced continuation has none), so those events get an empty map
+	private List<Map<String, String>> buildAttributeValuesPerEvent(List<String> activeTrace) {
+		boolean editable = !PlannerSession.getInstance().isPlanPresent();
+		List<Map<String, String>> attributeValuesPerEvent = new ArrayList<Map<String, String>>();
+		for (int i = 0; i < activeTrace.size(); i++) {
+			attributeValuesPerEvent.add(editable ? PlannerSession.getInstance().getPrefixAttributeValues(i + 1) : Collections.emptyMap());
+		}
+		return attributeValuesPerEvent;
+	}
+
 	//Resets all models against whatever trace is currently active (plan continuation if present, otherwise the manually-built prefix) and refreshes the plan list / timeline
+	//Declare models replay data conditions against attribute values here (Data-Aware page only); Petri net models have no data conditions to consider
 	private void updateTrace(Integer selectIndex) {
 		List<String> activeTrace = PlannerSession.getInstance().getActiveTrace();
+		List<Map<String, String>> attributeValuesPerEvent = buildAttributeValuesPerEvent(activeTrace);
 
 		ModelRegistry.getInstance().getModels().forEach(abstractModel -> abstractModel.resetModel());
-		ModelRegistry.getInstance().getModels().forEach(abstractModel -> abstractModel.updateMonitoringStates(activeTrace, PlannerSession.getInstance().isDisplayViolations()));
+		ModelRegistry.getInstance().getModels().forEach(abstractModel -> {
+			if (abstractModel instanceof DeclareModel) {
+				((DeclareModel) abstractModel).updateMonitoringStatesWithData(activeTrace, attributeValuesPerEvent, PlannerSession.getInstance().isDisplayViolations());
+			} else {
+				abstractModel.updateMonitoringStates(activeTrace, PlannerSession.getInstance().isDisplayViolations());
+			}
+		});
 		updateplanListView(activeTrace);
 		updateTimelineControls(activeTrace);
 

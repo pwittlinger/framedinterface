@@ -33,9 +33,9 @@
                <children>
                   <VBox styleClass="section-box section-box--main-parameters">
                      <children>
-                        <TitledPane fx:id="modelRegistryPane" animated="false" expanded="true" styleClass="parameters-pane" text="Process Specifications" VBox.vgrow="ALWAYS">
+                        <TitledPane fx:id="modelRegistryPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Process Specifications" VBox.vgrow="ALWAYS">
                            <content>
-                              <TableView fx:id="modelTabelView" editable="true">
+                              <TableView fx:id="modelTabelView" editable="true" maxHeight="1.7976931348623157E308">
                                 <columns>
                                   <TableColumn fx:id="modelSelectColumn" maxWidth="30.0" minWidth="30.0" prefWidth="30.0" resizable="false" sortable="false" />
                                   <TableColumn fx:id="modelNameColumn" prefWidth="175.0" resizable="false" text="Model Name" />
@@ -51,14 +51,14 @@
                               </TableView>
                            </content>
                         </TitledPane>
-                        <TitledPane fx:id="activitiesAttributesPane" animated="false" expanded="true" styleClass="parameters-pane" text="Activities" VBox.vgrow="ALWAYS">
+                        <TitledPane fx:id="activitiesAttributesPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Activities" VBox.vgrow="ALWAYS">
                            <content>
-                              <TreeView fx:id="activitiesTreeView" />
+                              <TreeView fx:id="activitiesTreeView" maxHeight="1.7976931348623157E308" />
                            </content>
                         </TitledPane>
-                        <TitledPane fx:id="attributesPane" animated="false" expanded="true" styleClass="parameters-pane" text="Attributes" VBox.vgrow="ALWAYS">
+                        <TitledPane fx:id="attributesPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Attributes" VBox.vgrow="ALWAYS">
                            <content>
-                              <TreeView fx:id="attributesTreeView" />
+                              <TreeView fx:id="attributesTreeView" maxHeight="1.7976931348623157E308" />
                            </content>
                         </TitledPane>
                      </children>
@@ -192,7 +192,16 @@
                                     </HBox>
                                  </children>
                               </VBox>
-                              <ListView fx:id="planListView" snapToPixel="false" styleClass="monitor-events-list" VBox.vgrow="ALWAYS" />
+                              <TitledPane fx:id="prefixPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Prefix" VBox.vgrow="ALWAYS">
+                                 <content>
+                                    <ListView fx:id="planListView" maxHeight="1.7976931348623157E308" snapToPixel="false" styleClass="monitor-events-list" />
+                                 </content>
+                              </TitledPane>
+                              <TitledPane fx:id="continuationPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Continuation" VBox.vgrow="ALWAYS">
+                                 <content>
+                                    <ListView fx:id="continuationListView" maxHeight="1.7976931348623157E308" snapToPixel="false" styleClass="monitor-events-list" />
+                                 </content>
+                              </TitledPane>
                               <HBox alignment="CENTER" VBox.vgrow="SOMETIMES">
                                  <children>
                                     <HBox alignment="CENTER">
