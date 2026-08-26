@@ -37,7 +37,19 @@ public class DeclareModel extends AbstractModel  {
 	public Map<String, AttributeDomain> getAttributeDomains() {
 		return attributeDomains;
 	}
-	
+
+	//Whether any constraint in this model declares a time condition (e.g. "ActivityP,0,100,h/ActivityG,2,5,h") -
+	//used by the Data-Aware page to decide whether prefix events need a "timestamp" attribute
+	public boolean hasTimeConditions() {
+		for (DeclareConstraint declareConstraint : declareConstraints) {
+			String timeCondition = declareConstraint.getTimeCondition();
+			if (timeCondition != null && !timeCondition.isBlank()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public Map<MonitoringState, Integer> getMonitoringStateCounts(int activityIndex) {
 		Map<MonitoringState, Integer> monitoringStateCounts = new HashMap<MonitoringState, Integer>();
 		monitoringStateCounts.put(MonitoringState.SAT, 0);

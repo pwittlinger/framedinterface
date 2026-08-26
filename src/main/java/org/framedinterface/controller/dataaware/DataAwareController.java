@@ -185,6 +185,7 @@ public class DataAwareController extends AbstractController {
 	private SimpleIntegerProperty currentEventIndex = new SimpleIntegerProperty(0);
 	private FontIcon pauseFontIcon = new FontIcon("fa-pause");
 	private boolean showDataConditions = false;
+	private boolean timestampFieldVisible = false; //Whether any SELECTED Declare model has a constraint with a time condition, exposed to EventCell's attribute editor
 
 	@FXML
 	private void initialize() {
@@ -317,7 +318,7 @@ public class DataAwareController extends AbstractController {
 				handleplanListViewSelection(planListView.getSelectionModel().selectedIndexProperty().intValue());
 			}
 		});
-		planListView.setCellFactory(value -> new EventCell(selectionCallback, this::getAttributesForActivity, this::deletePrefixEvent, this::onAttributeValueChanged));
+		planListView.setCellFactory(value -> new EventCell(selectionCallback, this::getAttributesForActivity, this::deletePrefixEvent, this::onAttributeValueChanged, () -> timestampFieldVisible));
 
 		bttnDisplayViolations.setSelected(PlannerSession.getInstance().isDisplayViolations());
 
@@ -342,6 +343,7 @@ public class DataAwareController extends AbstractController {
 	//Refreshes the Activities & Attributes panel with the unique (case-insensitive) activity labels, and their bound attributes (Declare models only), of the currently selected process specifications
 	private void updateActivitiesListView() {
 		activityToAttributes.clear();
+		timestampFieldVisible = false;
 		for (AbstractModel model : getSelectedModels()) {
 			for (String activity : model.getActivities()) {
 				String activityLabel = activity.toLowerCase();
@@ -351,6 +353,9 @@ public class DataAwareController extends AbstractController {
 						attributes.add(attribute.toLowerCase());
 					}
 				}
+			}
+			if (model instanceof DeclareModel && ((DeclareModel) model).hasTimeConditions()) {
+				timestampFieldVisible = true;
 			}
 		}
 

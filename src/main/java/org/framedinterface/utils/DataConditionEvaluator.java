@@ -16,6 +16,12 @@ public class DataConditionEvaluator {
 	//"is not" must be tried before "is" in the alternation, otherwise "is" would match first and leave a dangling " not"
 	private static final Pattern CLAUSE_PATTERN = Pattern.compile("\\b[AT]\\.(\\w+)\\s*(>=|<=|!=|=|>|<|is not|is)\\s*(\\S+)", Pattern.CASE_INSENSITIVE);
 
+	//Some Declare exports emit a stray trailing delimiter (e.g. "|") for constraints with no conditions at all
+	//(the "|"-separated activationCondition/targetCondition/timeCondition sections in the .decl source can end up
+	//with one extra "|" that the field-splitting regex has nowhere else to put), so such punctuation/whitespace-only
+	//content must not be mistaken for an actual (and therefore unsatisfiable) condition
+	private static final Pattern MEANINGFUL_CONTENT_PATTERN = Pattern.compile("[A-Za-z0-9]");
+
 	//A blank/absent condition is vacuously satisfied. Multiple clauses (as in "A.x > 1 and A.y is c2") are all required to hold.
 	public static boolean evaluate(String condition, Map<String, String> attributeValues) {
 		if (condition == null || condition.isBlank()) {
@@ -30,7 +36,12 @@ public class DataConditionEvaluator {
 				return false;
 			}
 		}
-		return matchedAnyClause; //A non-blank condition that couldn't be parsed at all is treated as unsatisfied rather than silently ignored
+		if (matchedAnyClause) {
+			return true;
+		}
+		//No clause was recognized - vacuously true if it's just stray delimiter/whitespace noise, otherwise treated as
+		//an unsatisfied (unparseable) condition rather than silently ignored
+		return !MEANINGFUL_CONTENT_PATTERN.matcher(condition).find();
 	}
 
 	private static boolean evaluateClause(String attributeName, String operator, String expectedValue, Map<String, String> attributeValues) {
