@@ -42,6 +42,8 @@ import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Worker;
 import javafx.event.ActionEvent;
@@ -144,6 +146,12 @@ public class DataAwareController extends AbstractController {
 	@FXML
 	private TitledPane prefixPane;
 	@FXML
+	private ChoiceBox<PrefixEntry> prefixChoice;
+	@FXML
+	private Button addPrefixButton;
+	@FXML
+	private Button removePrefixButton;
+	@FXML
 	private ListView<EventData> planListView;
 	@FXML
 	private TitledPane continuationPane;
@@ -186,6 +194,17 @@ public class DataAwareController extends AbstractController {
 	private FontIcon pauseFontIcon = new FontIcon("fa-pause");
 	private boolean showDataConditions = false;
 	private boolean timestampFieldVisible = false; //Whether any SELECTED Declare model has a constraint with a time condition, exposed to EventCell's attribute editor
+
+	//The manually-built prefixes offered by prefixChoice; only the selected entry's prefix/continuation is actually live in PlannerSession at any time (see syncOutToEntry/syncInFromEntry)
+	private ObservableList<PrefixEntry> prefixes = FXCollections.observableArrayList();
+
+	//One prefix's worth of PlannerSession state: its manually-built events, their attribute values, and whatever planner continuation was generated from it
+	private static class PrefixEntry {
+		private List<String> prefixEvents = new ArrayList<String>();
+		private Map<Integer, Map<String, String>> attributeValues = new HashMap<Integer, Map<String, String>>();
+		private List<String> plan = new ArrayList<String>();
+		private boolean planPresent = false;
+	}
 
 	@FXML
 	private void initialize() {
@@ -322,8 +341,80 @@ public class DataAwareController extends AbstractController {
 
 		bttnDisplayViolations.setSelected(PlannerSession.getInstance().isDisplayViolations());
 
-		//Reflect whatever trace/plan is already active in PlannerSession (e.g. carried over from Data-Agnostic)
-		updateTrace(null);
+		//Sets up the prefix selector with a single initial entry; this also reflects whatever trace/plan is already active in
+		//PlannerSession (e.g. carried over from Data-Agnostic), same as the updateTrace(null) it used to do here directly
+		setupPrefixSelector();
+	}
+
+	//Wires up prefixChoice to switch which prefix's data (events, attribute values, planner continuation) is live in PlannerSession
+	private void setupPrefixSelector() {
+		prefixChoice.setItems(prefixes);
+		prefixChoice.setConverter(new StringConverter<PrefixEntry>() {
+			@Override
+			public String toString(PrefixEntry entry) {
+				int index = prefixes.indexOf(entry);
+				return index == -1 ? "" : "Prefix " + (index + 1);
+			}
+			@Override
+			public PrefixEntry fromString(String string) {
+				return null;
+			}
+		});
+		removePrefixButton.disableProperty().bind(Bindings.size(prefixes).lessThanOrEqualTo(1));
+
+		//The first entry picks up whatever PlannerSession already holds, so a trace/plan carried over from Data-Agnostic still shows up
+		PrefixEntry initialEntry = new PrefixEntry();
+		syncOutToEntry(initialEntry);
+		prefixes.add(initialEntry);
+
+		prefixChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldEntry, newEntry) -> {
+			if (newEntry == null || newEntry == oldEntry) {
+				return; //Transient clear while prefixes are being added/removed; the explicit select() below always follows up with a real selection
+			}
+			if (oldEntry != null) {
+				syncOutToEntry(oldEntry);
+			}
+			syncInFromEntry(newEntry);
+			updateTrace(null);
+			updateSelectedModelVisualizations();
+		});
+		prefixChoice.getSelectionModel().select(initialEntry);
+	}
+
+	//Captures whatever prefix/continuation is currently live in PlannerSession into the given (about to be deselected) entry
+	private void syncOutToEntry(PrefixEntry entry) {
+		entry.prefixEvents = PlannerSession.getInstance().getCurrentPrefix();
+		entry.attributeValues = PlannerSession.getInstance().getPrefixAttributeValuesMap();
+		entry.plan = PlannerSession.getInstance().getCurrentPlan();
+		entry.planPresent = PlannerSession.getInstance().isPlanPresent();
+	}
+
+	//Makes the given (newly selected) entry's prefix/continuation the one live in PlannerSession
+	private void syncInFromEntry(PrefixEntry entry) {
+		PlannerSession.getInstance().setCurrentPrefix(entry.prefixEvents);
+		PlannerSession.getInstance().setPrefixAttributeValuesMap(entry.attributeValues);
+		PlannerSession.getInstance().setCurrentPlan(entry.plan);
+		PlannerSession.getInstance().setPlanPresent(entry.planPresent);
+	}
+
+	//Adds a new, empty prefix and selects it, always leaving the previously selected prefix untouched in the list
+	@FXML
+	private void onClickAddPrefix() {
+		PrefixEntry newEntry = new PrefixEntry();
+		prefixes.add(newEntry);
+		prefixChoice.getSelectionModel().select(newEntry);
+	}
+
+	//Removes the currently selected prefix (at least one must always remain) and selects a neighboring one
+	@FXML
+	private void onClickRemovePrefix() {
+		PrefixEntry current = prefixChoice.getSelectionModel().getSelectedItem();
+		if (current == null || prefixes.size() <= 1) {
+			return;
+		}
+		int index = prefixes.indexOf(current);
+		prefixes.remove(current);
+		prefixChoice.getSelectionModel().select(prefixes.get(Math.max(0, index - 1)));
 	}
 
 	//A collapsed TitledPane should only take up its title bar's height; only an expanded pane should compete for the column's leftover growable space

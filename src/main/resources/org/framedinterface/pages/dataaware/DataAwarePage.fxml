@@ -194,7 +194,18 @@
                               </VBox>
                               <TitledPane fx:id="prefixPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Prefix" VBox.vgrow="ALWAYS">
                                  <content>
-                                    <ListView fx:id="planListView" maxHeight="1.7976931348623157E308" snapToPixel="false" styleClass="monitor-events-list" />
+                                    <VBox spacing="4.0">
+                                       <children>
+                                          <HBox alignment="CENTER_LEFT" spacing="4.0">
+                                             <children>
+                                                <ChoiceBox fx:id="prefixChoice" prefWidth="110.0" styleClass="standard-choice-box" />
+                                                <Button fx:id="addPrefixButton" mnemonicParsing="false" onAction="#onClickAddPrefix" styleClass="small-button" text="+" />
+                                                <Button fx:id="removePrefixButton" mnemonicParsing="false" onAction="#onClickRemovePrefix" styleClass="small-button" text="-" />
+                                             </children>
+                                          </HBox>
+                                          <ListView fx:id="planListView" maxHeight="1.7976931348623157E308" snapToPixel="false" styleClass="monitor-events-list" VBox.vgrow="ALWAYS" />
+                                       </children>
+                                    </VBox>
                                  </content>
                               </TitledPane>
                               <TitledPane fx:id="continuationPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Continuation" VBox.vgrow="ALWAYS">

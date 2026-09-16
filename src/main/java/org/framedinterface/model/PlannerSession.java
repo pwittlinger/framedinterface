@@ -70,6 +70,15 @@ public class PlannerSession {
 		prefixAttributeValues.clear();
 	}
 
+	//The full attribute-values map backing getPrefixAttributeValues(), exposed so callers can swap it out wholesale (e.g. Data-Aware's per-prefix switching)
+	public Map<Integer, Map<String, String>> getPrefixAttributeValuesMap() {
+		return prefixAttributeValues;
+	}
+
+	public void setPrefixAttributeValuesMap(Map<Integer, Map<String, String>> prefixAttributeValues) {
+		this.prefixAttributeValues = prefixAttributeValues;
+	}
+
 	//Removes the prefix event at the given (1-based) position, re-indexing attribute values so they stay attached to their (now renumbered) events
 	public void removePrefixEvent(int eventNumber) {
 		int index = eventNumber - 1;
