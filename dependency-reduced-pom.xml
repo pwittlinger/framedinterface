@@ -195,26 +195,6 @@
       </plugin>
     </plugins>
   </build>
-  <profiles>
-    <profile>
-      <id>javafx-windows</id>
-      <properties>
-        <javafx.platform>win</javafx.platform>
-      </properties>
-    </profile>
-    <profile>
-      <id>javafx-mac</id>
-      <properties>
-        <javafx.platform>mac</javafx.platform>
-      </properties>
-    </profile>
-    <profile>
-      <id>javafx-linux</id>
-      <properties>
-        <javafx.platform>linux</javafx.platform>
-      </properties>
-    </profile>
-  </profiles>
   <repositories>
     <repository>
       <id>deckfour</id>
@@ -238,9 +218,9 @@
     </repository>
   </repositories>
   <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.target>17</maven.compiler.target>
     <main.class>org.framedinterface.Main</main.class>
     <maven.compiler.source>17</maven.compiler.source>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 </project>

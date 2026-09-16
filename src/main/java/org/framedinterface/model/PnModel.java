@@ -77,6 +77,7 @@ public class PnModel extends AbstractModel  {
 			if (planAction.length == 2) {
 				act = planAction[1];
 			}
+			act = act.toLowerCase(); //firedTransitions/violatedFirings/violationCount are all keyed lowercase (see resetModel()); activities coming from outside the graph-click flow (e.g. an imported XES trace) aren't pre-lowercased
 
 			if (getTransitionViaLabel(this.dataPetriNet.getTransitions(), act) == null) {
 				// Transition is not in PetriNet, cannot be fired.

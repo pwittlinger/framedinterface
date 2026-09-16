@@ -17,6 +17,7 @@ public class FileUtils {
 
 	//Extension filters for models
 	private static ExtensionFilter modelExtensionFilter = new ExtensionFilter("Process specification", Arrays.asList("*.decl", "*.pnml"));
+	private static ExtensionFilter xesExtensionFilter = new ExtensionFilter("XES event log", Arrays.asList("*.xes"));
 
 	
 	// Private constructor to avoid unnecessary instantiation of the class
@@ -99,6 +100,22 @@ public class FileUtils {
 		}
 
 		return chosenFiles;
+	}
+
+	public static File showXesOpenDialog(Stage stage) {
+		FileChooser fileChooser = new FileChooser();
+		if (previousDirectory != null && previousDirectory.exists()) {
+			fileChooser.setInitialDirectory(previousDirectory);
+		}
+
+		fileChooser.getExtensionFilters().add(xesExtensionFilter);
+		File chosenFile = fileChooser.showOpenDialog(stage);
+
+		if (chosenFile != null) {
+			previousDirectory = chosenFile.getParentFile();
+		}
+
+		return chosenFile;
 	}
 
 }

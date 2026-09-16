@@ -187,6 +187,7 @@
                                                 <Label fx:id="selectedPN" maxWidth="1.7976931348623157E308" text="PN MODEL" textAlignment="CENTER" />
                                              </children>
                                           </VBox>
+                                          <Button fx:id="importPrefixButton" mnemonicParsing="false" onAction="#onClickImportPrefix" styleClass="standard-button" text="Import" />
                                           <Button fx:id="toolTipButtonPlan" mnemonicParsing="false" onAction="#onClickToolTipPlan" styleClass="standard-button" text="Help" />
                                        </children>
                                     </HBox>

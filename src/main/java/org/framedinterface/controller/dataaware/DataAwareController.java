@@ -1,8 +1,14 @@
 package org.framedinterface.controller.dataaware;
 
+import java.io.File;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -19,9 +25,22 @@ import org.framedinterface.model.ModelRegistry;
 import org.framedinterface.model.ModelType;
 import org.framedinterface.model.PlannerSession;
 import org.framedinterface.model.PnModel;
+import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
 import org.controlsfx.control.ToggleSwitch;
+import org.deckfour.xes.extension.std.XConceptExtension;
+import org.deckfour.xes.extension.std.XLifecycleExtension;
+import org.deckfour.xes.extension.std.XTimeExtension;
+import org.deckfour.xes.in.XesXmlParser;
+import org.deckfour.xes.model.XAttribute;
+import org.deckfour.xes.model.XAttributeBoolean;
+import org.deckfour.xes.model.XAttributeContinuous;
+import org.deckfour.xes.model.XAttributeDiscrete;
+import org.deckfour.xes.model.XAttributeLiteral;
+import org.deckfour.xes.model.XEvent;
+import org.deckfour.xes.model.XLog;
+import org.deckfour.xes.model.XTrace;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -160,6 +179,8 @@ public class DataAwareController extends AbstractController {
 	@FXML
 	private Button buttonPrefix;
 	@FXML
+	private Button importPrefixButton;
+	@FXML
 	private Button toolTipButtonPlan;
 
 	@FXML
@@ -180,6 +201,7 @@ public class DataAwareController extends AbstractController {
 	private Slider eventSlider;
 
 	private static String precentageFormat = "%.1f";
+	private static final DateTimeFormatter XES_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"); //Matches the "timestamp" attribute format EventCell's editor expects
 	private String initialDeclWebViewScript;
 	private String initialPnWebViewScript;
 
@@ -415,6 +437,80 @@ public class DataAwareController extends AbstractController {
 		int index = prefixes.indexOf(current);
 		prefixes.remove(current);
 		prefixChoice.getSelectionModel().select(prefixes.get(Math.max(0, index - 1)));
+	}
+
+	//Replaces the current set of prefixes with one manually-built prefix per trace of an imported XES log, each carrying the trace's event attribute values
+	@FXML
+	private void onClickImportPrefix() {
+		File file = FileUtils.showXesOpenDialog(getStage());
+		if (file == null) {
+			return;
+		}
+
+		List<PrefixEntry> importedEntries;
+		try {
+			importedEntries = parseXesTracesAsPrefixes(file);
+		} catch (Exception e) {
+			System.err.println("Could not parse XES log: " + e.getMessage());
+			e.printStackTrace();
+			return;
+		}
+		if (importedEntries.isEmpty()) {
+			return;
+		}
+
+		prefixes.setAll(importedEntries);
+		prefixChoice.getSelectionModel().select(0);
+	}
+
+	//One PrefixEntry per trace of the log's first process (each event's activity as a prefix step, its non-concept/lifecycle attributes as that step's attribute values)
+	private List<PrefixEntry> parseXesTracesAsPrefixes(File file) throws Exception {
+		List<XLog> logs = new XesXmlParser().parse(file);
+		List<PrefixEntry> entries = new ArrayList<PrefixEntry>();
+		if (logs.isEmpty()) {
+			return entries;
+		}
+
+		for (XTrace trace : logs.get(0)) {
+			PrefixEntry entry = new PrefixEntry();
+			for (int i = 0; i < trace.size(); i++) {
+				XEvent event = trace.get(i);
+				entry.prefixEvents.add(XConceptExtension.instance().extractName(event));
+
+				Map<String, String> eventAttributeValues = new LinkedHashMap<String, String>();
+				for (XAttribute attribute : event.getAttributes().values()) {
+					String key = attribute.getKey();
+					if (key.equals(XConceptExtension.KEY_NAME) || key.equals(XLifecycleExtension.KEY_TRANSITION)) {
+						continue;
+					} else if (key.equals(XTimeExtension.KEY_TIMESTAMP)) {
+						Instant timestamp = XTimeExtension.instance().extractTimestamp(event).toInstant();
+						eventAttributeValues.put("timestamp", XES_TIMESTAMP_FORMATTER.format(LocalDateTime.ofInstant(timestamp, ZoneId.systemDefault())));
+					} else {
+						eventAttributeValues.put(key, extractAttributeValueString(attribute));
+					}
+				}
+				if (!eventAttributeValues.isEmpty()) {
+					entry.attributeValues.put(i + 1, eventAttributeValues);
+				}
+			}
+			entries.add(entry);
+		}
+		return entries;
+	}
+
+	//Renders a XES attribute's value the same way it would be typed into the attribute editor popup (e.g. "6" rather than "6.0" for a whole-numbered float)
+	private static String extractAttributeValueString(XAttribute attribute) {
+		if (attribute instanceof XAttributeLiteral) {
+			return ((XAttributeLiteral) attribute).getValue();
+		} else if (attribute instanceof XAttributeDiscrete) {
+			return Long.toString(((XAttributeDiscrete) attribute).getValue());
+		} else if (attribute instanceof XAttributeContinuous) {
+			double value = ((XAttributeContinuous) attribute).getValue();
+			return value == Math.rint(value) ? Long.toString((long) value) : Double.toString(value);
+		} else if (attribute instanceof XAttributeBoolean) {
+			return Boolean.toString(((XAttributeBoolean) attribute).getValue());
+		}
+		return attribute.toString();
 	}
 
 	//A collapsed TitledPane should only take up its title bar's height; only an expanded pane should compete for the column's leftover growable space
