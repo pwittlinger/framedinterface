@@ -8,10 +8,33 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.lang.ProcessBuilder.Redirect;
 import java.util.ArrayList;
+import java.util.List;
 
 
 public class RunnerUtils {
-    
+
+	/**
+	 * Runs the given command to completion from the given working directory, with stdout and stderr both going to
+	 * outputFile (or to this process' console if outputFile is null). If the calling thread is interrupted
+	 * (e.g. a cancelled Task), the external process is destroyed rather than left running in the background.
+	 * @return the exit code of the process
+	 */
+	public static int runProcess(List<String> command, File workingDirectory, File outputFile) throws IOException, InterruptedException {
+		System.out.println(command);
+		ProcessBuilder pb = new ProcessBuilder(command);
+		pb.directory(workingDirectory);
+		pb.redirectErrorStream(true);
+		pb.redirectOutput(outputFile == null ? Redirect.INHERIT : Redirect.to(outputFile));
+
+		Process process = pb.start();
+		try {
+			return process.waitFor();
+		} catch (InterruptedException e) {
+			process.destroyForcibly();
+			throw e;
+		}
+	}
+
 
     public static int generatePDDL(ArrayList<String> commandStrings, String finMarking, boolean reset) throws IOException, InterruptedException{
         String domain = "n";

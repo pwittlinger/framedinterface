@@ -1,10 +1,17 @@
 package org.framedinterface.controller.dataaware;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -15,16 +22,22 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+import org.framedinterface.controller.ProgressLayerController;
 import org.framedinterface.controller.common.AbstractController;
 import org.framedinterface.event.EventCell;
 import org.framedinterface.event.EventData;
 import org.framedinterface.model.AbstractModel;
 import org.framedinterface.model.AttributeDomain;
+import org.framedinterface.model.DeclareConstraint;
 import org.framedinterface.model.DeclareModel;
 import org.framedinterface.model.ModelRegistry;
 import org.framedinterface.model.ModelType;
 import org.framedinterface.model.PlannerSession;
 import org.framedinterface.model.PnModel;
+import org.framedinterface.task.GenerateDataAwarePDDLTask;
+import org.framedinterface.task.RunEnhspTask;
+import org.framedinterface.utils.AlertUtils;
+import org.framedinterface.utils.EnhspPlanParser;
 import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
@@ -51,6 +64,7 @@ import javafx.animation.Animation.Status;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
+import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
 import javafx.beans.binding.Bindings;
@@ -64,9 +78,11 @@ import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
+import javafx.concurrent.Task;
 import javafx.concurrent.Worker;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.geometry.Bounds;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
@@ -86,6 +102,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
@@ -95,7 +112,10 @@ import javafx.util.Duration;
 import javafx.util.StringConverter;
 import netscape.javascript.JSObject;
 
-import java.util.function.Consumer;
+
+import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamWriter;
 
 public class DataAwareController extends AbstractController {
 
@@ -175,11 +195,17 @@ public class DataAwareController extends AbstractController {
 	@FXML
 	private TitledPane continuationPane;
 	@FXML
+	private ListView<EventData> continuationListView;
+	@FXML
 	private Label labelCost;
 	@FXML
 	private Button buttonPrefix;
 	@FXML
+	private Button buttonRunPlanner;
+	@FXML
 	private Button importPrefixButton;
+	@FXML
+	private VBox mainContents;
 	@FXML
 	private Button toolTipButtonPlan;
 
@@ -202,6 +228,8 @@ public class DataAwareController extends AbstractController {
 
 	private static String precentageFormat = "%.1f";
 	private static final DateTimeFormatter XES_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"); //Matches the "timestamp" attribute format EventCell's editor expects
+	private static final String PREFIX_OUTPUT_FOLDER = "output/prefixes"; //Where the prefixes handed to the planner are exported as XES
+	private static final DateTimeFormatter PREFIX_FILE_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 	private String initialDeclWebViewScript;
 	private String initialPnWebViewScript;
 
@@ -217,8 +245,14 @@ public class DataAwareController extends AbstractController {
 	private boolean showDataConditions = false;
 	private boolean timestampFieldVisible = false; //Whether any SELECTED Declare model has a constraint with a time condition, exposed to EventCell's attribute editor
 
+	private String currentPath = Paths.get(".").toAbsolutePath().normalize().toString(); //Project root; dependencies/ and output/ are resolved against it
+	private javafx.scene.Node progressLayer;
+	private ProgressLayerController progressLayerController;
+	private Task<?> runningPlannerTask; //Whichever planner step (PDDL generation or ENHSP) is currently executing, so the progress layer's cancel button can stop it
+
 	//The manually-built prefixes offered by prefixChoice; only the selected entry's prefix/continuation is actually live in PlannerSession at any time (see syncOutToEntry/syncInFromEntry)
 	private ObservableList<PrefixEntry> prefixes = FXCollections.observableArrayList();
+	private PrefixEntry selectedEntry; //prefixChoice's current selection, whose prefix/continuation is the one live in PlannerSession
 
 	//One prefix's worth of PlannerSession state: its manually-built events, their attribute values, and whatever planner continuation was generated from it
 	private static class PrefixEntry {
@@ -226,6 +260,11 @@ public class DataAwareController extends AbstractController {
 		private Map<Integer, Map<String, String>> attributeValues = new HashMap<Integer, Map<String, String>>();
 		private List<String> plan = new ArrayList<String>();
 		private boolean planPresent = false;
+		//Only set for plans loaded from the data-aware planner (not for a plan carried over from Data-Agnostic)
+		private List<Map<String, String>> planAttributeValues; //Parallel to plan
+		private List<Integer> planPrefixSteps; //Prefix event (0-based) -> the (1-based) plan step that replayed it, or -1
+		private String planCost = "";
+		private ZonedDateTime exportStartTime; //The time the plan's time offsets are relative to (the first event's timestamp as last exported for the planner)
 	}
 
 	@FXML
@@ -322,7 +361,7 @@ public class DataAwareController extends AbstractController {
 				}
 			}
 			updateVisualization(declWebView, newValue, ModelType.DECLARE);
-			updateplanListViewStatistics(newValue, planListView.getItems());
+			refreshListStatistics();
 		});
 		pnModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
 			if (newValue != null) {
@@ -336,7 +375,6 @@ public class DataAwareController extends AbstractController {
 				}
 			}
 			updateVisualization(pnWebView, newValue, ModelType.PN);
-			updateplanListViewStatistics(newValue, planListView.getItems());
 		});
 
 		dataConditionsToggle.selectedProperty().addListener((observable, oldValue, newValue) -> {
@@ -347,19 +385,12 @@ public class DataAwareController extends AbstractController {
 		//Timeline setup
 		setupTimelineControls();
 
-		//Callback to handle clicking on events in planListView
-		Consumer<Integer> selectionCallback = new Consumer<Integer>() {
-			@Override
-			public void accept(Integer selectedIndex) {
-				handleplanListViewSelection(selectedIndex);
-			}
-		};
-		planListView.setOnKeyReleased((event) -> {
-			if(event.getCode() == KeyCode.UP || event.getCode() == KeyCode.KP_UP || event.getCode() == KeyCode.DOWN || event.getCode() == KeyCode.KP_DOWN) {
-				handleplanListViewSelection(planListView.getSelectionModel().selectedIndexProperty().intValue());
-			}
-		});
-		planListView.setCellFactory(value -> new EventCell(selectionCallback, this::getAttributesForActivity, this::deletePrefixEvent, this::onAttributeValueChanged, () -> timestampFieldVisible));
+		//Clicking (or arrowing to) an event in either list jumps the timeline to where that event is replayed
+		setupTimelineListView(planListView);
+		setupTimelineListView(continuationListView);
+		planListView.setCellFactory(value -> new EventCell(eventNumber -> handleplanListViewSelection(getTimelineIndex(planListView, eventNumber)), this::getAttributesForActivity, this::deletePrefixEvent, this::onAttributeValueChanged, () -> timestampFieldVisible));
+		continuationListView.setCellFactory(value -> new EventCell(eventNumber -> handleplanListViewSelection(getTimelineIndex(continuationListView, eventNumber))));
+		continuationListView.setPlaceholder(new Label("No plan for this prefix yet (Run Planner)"));
 
 		bttnDisplayViolations.setSelected(PlannerSession.getInstance().isDisplayViolations());
 
@@ -396,6 +427,7 @@ public class DataAwareController extends AbstractController {
 			if (oldEntry != null) {
 				syncOutToEntry(oldEntry);
 			}
+			selectedEntry = newEntry;
 			syncInFromEntry(newEntry);
 			updateTrace(null);
 			updateSelectedModelVisualizations();
@@ -513,6 +545,328 @@ public class DataAwareController extends AbstractController {
 		return attribute.toString();
 	}
 
+	//Exports all prefixes to an XES log (output/prefixes/prefixes_<timestamp>.xes), generates one PDDL problem per prefix (output/pddl/problem<i>.pddl) with the
+	//data-aware PDDL generator, then runs ENHSP on each of them (output/plans/plan<i>.txt)
+	@FXML
+	private void onClickPlanner() {
+		List<AbstractModel> plannedModels = getSelectedModels(); //In this order, as the generator names its (Petri net) constraints by position
+		List<String> declPaths = new ArrayList<String>();
+		List<String> pnPaths = new ArrayList<String>();
+		for (AbstractModel model : plannedModels) {
+			if (model.getModelType() == ModelType.DECLARE) {
+				declPaths.add(model.getFilePath());
+			} else if (model.getModelType() == ModelType.PN) {
+				pnPaths.add(model.getFilePath());
+			}
+		}
+		if (declPaths.isEmpty()) {
+			AlertUtils.showWarning("Select at least one Declare model under Process Specifications before running the planner.");
+			return;
+		}
+
+		//The selected prefix's latest edits only live in PlannerSession until it is synced back into its entry
+		if (selectedEntry != null) {
+			syncOutToEntry(selectedEntry);
+		}
+		int prefixCount = prefixes.size();
+
+		//Kept (timestamped, never overwritten) so that this set of prefixes can be re-imported later via the Import button
+		File prefixFolder = new File(currentPath, PREFIX_OUTPUT_FOLDER);
+		File logFile = new File(prefixFolder, "prefixes_" + LocalDateTime.now().format(PREFIX_FILE_TIMESTAMP_FORMATTER) + ".xes");
+		try {
+			if (!prefixFolder.isDirectory() && !prefixFolder.mkdirs()) {
+				throw new IOException("Could not create folder " + prefixFolder.getAbsolutePath());
+			}
+			writePrefixesAsXes(logFile);
+		} catch (IOException e) {
+			e.printStackTrace();
+			AlertUtils.showError("Could not export the prefixes to XES: " + e.getMessage());
+			return;
+		}
+		System.out.println("Prefixes exported to: " + logFile.getAbsolutePath());
+
+		loadProgressLayer();
+		setUiBusy(true, "Generating PDDL...");
+
+		GenerateDataAwarePDDLTask generatePDDLTask = new GenerateDataAwarePDDLTask(currentPath, declPaths, pnPaths, logFile.getAbsolutePath());
+		generatePDDLTask.setOnCancelled(taskEvent -> setUiBusy(false, null));
+		generatePDDLTask.setOnFailed(taskEvent -> {
+			setUiBusy(false, null);
+			AlertUtils.showError("Generating PDDL failed: " + generatePDDLTask.getException().getMessage());
+		});
+		generatePDDLTask.setOnSucceeded(taskEvent -> {
+			RunEnhspTask runEnhspTask = new RunEnhspTask(currentPath, prefixCount);
+			if (progressLayerController != null) {
+				progressLayerController.getProgressTextLabel().textProperty().bind(runEnhspTask.messageProperty());
+			}
+			runEnhspTask.setOnCancelled(plannerTaskEvent -> setUiBusy(false, null));
+			runEnhspTask.setOnFailed(plannerTaskEvent -> {
+				setUiBusy(false, null);
+				AlertUtils.showError("Running the planner failed: " + runEnhspTask.getException().getMessage());
+			});
+			runEnhspTask.setOnSucceeded(plannerTaskEvent -> {
+				setUiBusy(false, null);
+				String planLoadError = null;
+				try {
+					loadPlans(plannedModels);
+				} catch (Exception e) {
+					e.printStackTrace();
+					planLoadError = e.getMessage();
+				}
+				List<Integer> unsolved = runEnhspTask.getValue();
+				String planFolder = new File(currentPath, RunEnhspTask.PLAN_OUTPUT_FOLDER).getAbsolutePath();
+				if (planLoadError != null) {
+					AlertUtils.showError("The plans could not be loaded: " + planLoadError + "\nPlanner output: " + planFolder);
+				} else if (unsolved.isEmpty()) {
+					AlertUtils.showSuccess("Plans found for all " + prefixCount + " prefix(es).\nPlanner output: " + planFolder);
+				} else {
+					AlertUtils.showWarning("No plan found for prefix(es) " + unsolved + " (out of " + prefixCount + ").\nPlanner output: " + planFolder);
+				}
+			});
+			startPlannerTask(runEnhspTask);
+		});
+		startPlannerTask(generatePDDLTask);
+	}
+
+	//Replaces every prefix's continuation with its plan from output/plans/plan<i>.txt (prefix i), decoded with the generator's encodings,
+	//and replays the selected prefix's plan. Prefixes without a (solved) plan are left without a continuation.
+	private void loadPlans(List<AbstractModel> plannedModels) throws IOException {
+		Map<String, String> resetTargets = assignPlannerConstraintNames(plannedModels);
+		Set<String> categoricalAttributes = new TreeSet<String>();
+		for (AbstractModel model : plannedModels) {
+			if (model instanceof DeclareModel) {
+				((DeclareModel) model).getAttributeDomains().forEach((attribute, domain) -> {
+					if (domain.getType() == AttributeDomain.Type.CATEGORICAL) {
+						categoricalAttributes.add(attribute.toLowerCase());
+					}
+				});
+			}
+		}
+		EnhspPlanParser planParser = new EnhspPlanParser(new File(currentPath, GenerateDataAwarePDDLTask.OUTPUT_FOLDER), new File(currentPath, GenerateDataAwarePDDLTask.VARIABLE_VALUES_FILE),
+				GenerateDataAwarePDDLTask.ACTIVITY_MAPPING_FILE_PATTERN, categoricalAttributes, resetTargets);
+
+		for (int i = 0; i < prefixes.size(); i++) {
+			PrefixEntry entry = prefixes.get(i);
+			File planFile = new File(currentPath, RunEnhspTask.PLAN_OUTPUT_FOLDER + "/plan" + (i + 1) + ".txt");
+			EnhspPlanParser.ParsedPlan parsedPlan = planFile.isFile()
+					? planParser.parse(planFile, entry.prefixEvents, entry.attributeValues, entry.exportStartTime != null ? entry.exportStartTime : ZonedDateTime.now())
+					: null;
+			if (parsedPlan != null && parsedPlan.isSolved()) {
+				entry.plan = parsedPlan.getSteps();
+				entry.planAttributeValues = parsedPlan.getAttributeValues();
+				entry.planPrefixSteps = parsedPlan.getPrefixEventSteps();
+				entry.planCost = parsedPlan.getCost();
+				entry.planPresent = true;
+			} else {
+				clearPlan(entry);
+			}
+		}
+
+		if (selectedEntry != null) {
+			syncInFromEntry(selectedEntry);
+		}
+		updateTrace(null);
+		updateSelectedModelVisualizations();
+	}
+
+	private static void clearPlan(PrefixEntry entry) {
+		entry.plan = new ArrayList<String>();
+		entry.planAttributeValues = null;
+		entry.planPrefixSteps = null;
+		entry.planCost = "";
+		entry.planPresent = false;
+	}
+
+	//Gives every Declare constraint the name the PDDL generator uses for it: "<template>_<activation>[_<target>]" (spaces as "_"), with repeated
+	//names numbered "_2", "_3", ... across all Declare models passed to it, in order. Petri nets are named "pn" (single net) or "pn1", "pn2", ...
+	//(in the order passed). Returns, for the Petri nets, the reset activity their plan resets should replay (the Declare names are replayed as is).
+	private Map<String, String> assignPlannerConstraintNames(List<AbstractModel> plannedModels) {
+		Map<String, Integer> nameCounts = new HashMap<String, Integer>();
+		List<PnModel> petriNets = new ArrayList<PnModel>();
+		for (AbstractModel model : ModelRegistry.getInstance().getModels()) {
+			if (model instanceof DeclareModel && !plannedModels.contains(model)) {
+				((DeclareModel) model).setPlannerConstraintNames(new HashMap<String, DeclareConstraint>()); //Its constraints weren't part of the plan
+			}
+		}
+		for (AbstractModel model : plannedModels) {
+			if (model instanceof DeclareModel) {
+				Map<String, DeclareConstraint> plannerNames = new HashMap<String, DeclareConstraint>();
+				for (DeclareConstraint constraint : ((DeclareModel) model).getDeclareConstraints()) {
+					String name = constraint.getTemplate().getTemplateName().replace(" ", "_") + "_" + constraint.getActivationActivity()
+							+ (constraint.getTargetActivity() == null || constraint.getTargetActivity().isBlank() ? "" : "_" + constraint.getTargetActivity());
+					name = name.toLowerCase();
+					int count = nameCounts.merge(name, 1, Integer::sum);
+					plannerNames.put(count > 1 ? name + "_" + count : name, constraint);
+				}
+				((DeclareModel) model).setPlannerConstraintNames(plannerNames);
+			} else if (model instanceof PnModel) {
+				petriNets.add((PnModel) model);
+			}
+		}
+
+		Map<String, String> resetTargets = new HashMap<String, String>();
+		for (int i = 0; i < petriNets.size(); i++) {
+			resetTargets.put(petriNets.size() == 1 ? "pn" : "pn" + (i + 1), petriNets.get(i).getResetActivity());
+		}
+		return resetTargets;
+	}
+
+	private void startPlannerTask(Task<?> task) {
+		runningPlannerTask = task;
+		Thread thread = new Thread(task);
+		thread.setDaemon(true); //Must not keep the application alive if it is closed mid-run
+		thread.start();
+	}
+
+	private void loadProgressLayer() {
+		if (progressLayer != null) {
+			return;
+		}
+		try {
+			FXMLLoader loader = new FXMLLoader(getClass().getResource("/org/framedinterface/ProgressLayer.fxml"));
+			progressLayer = loader.load();
+			progressLayerController = loader.getController();
+			progressLayerController.getCancelButton().setOnAction(e -> {
+				if (runningPlannerTask != null) {
+					runningPlannerTask.cancel(true); //Interrupting the task also destroys the external process it is waiting on (see RunnerUtils.runProcess)
+				}
+			});
+		} catch (Exception e) {
+			System.out.println("Cannot load progress layer");
+			e.printStackTrace();
+		}
+	}
+
+	private void setUiBusy(boolean busy, String progressText) {
+		Platform.runLater(() -> mainContents.setDisable(busy));
+
+		if (progressLayer != null) {
+			StackPane rootElement = (StackPane) getRootRegion();
+			if (busy) {
+				progressLayerController.getProgressTextLabel().textProperty().unbind();
+				progressLayerController.getProgressTextLabel().setText(progressText);
+				if (!rootElement.getChildren().contains(progressLayer)) {
+					rootElement.getChildren().add(progressLayer);
+				}
+			} else {
+				progressLayerController.getProgressTextLabel().textProperty().unbind();
+				rootElement.getChildren().remove(progressLayer);
+			}
+		}
+	}
+
+	//Writes every prefix as one trace (in prefixChoice order, so prefix <i> becomes problem<i>.pddl) of an XES log that the data-aware PDDL generator can read.
+	//The generator computes each event's time relative to the trace's first event and needs a timestamp on every event, so events without a
+	//(valid) "timestamp" attribute reuse the previous event's timestamp (or the trace's first known one / the export time, if there is none before them)
+	//Written with StAX rather than OpenXES' XesXmlSerializer, since the latter depends on the Spex library, which is not bundled with this application
+	private void writePrefixesAsXes(File file) throws IOException {
+		ZonedDateTime exportTime = ZonedDateTime.now().truncatedTo(ChronoUnit.SECONDS);
+
+		try (OutputStream out = new FileOutputStream(file)) {
+			XMLStreamWriter xml = XMLOutputFactory.newInstance().createXMLStreamWriter(out, "UTF-8");
+			xml.writeStartDocument("UTF-8", "1.0");
+			xml.writeStartElement("log");
+			xml.writeAttribute("xes.version", "1.0");
+			writeXesExtension(xml, "Concept", "concept", "http://www.xes-standard.org/concept.xesext");
+			writeXesExtension(xml, "Lifecycle", "lifecycle", "http://www.xes-standard.org/lifecycle.xesext");
+			writeXesExtension(xml, "Time", "time", "http://www.xes-standard.org/time.xesext");
+
+			for (int p = 0; p < prefixes.size(); p++) {
+				PrefixEntry entry = prefixes.get(p);
+				xml.writeStartElement("trace");
+				writeXesAttribute(xml, "string", XConceptExtension.KEY_NAME, "Prefix " + (p + 1));
+
+				ZonedDateTime previousTimestamp = null;
+				for (int i = 0; i < entry.prefixEvents.size() && previousTimestamp == null; i++) {
+					previousTimestamp = parseTimestamp(entry.attributeValues.getOrDefault(i + 1, Collections.emptyMap()).get("timestamp"));
+				}
+				if (previousTimestamp == null) {
+					previousTimestamp = exportTime;
+				}
+				entry.exportStartTime = previousTimestamp; //The generator times events relative to the first one, so this is what plan times are relative to
+
+				for (int i = 0; i < entry.prefixEvents.size(); i++) {
+					Map<String, String> eventAttributeValues = entry.attributeValues.getOrDefault(i + 1, Collections.emptyMap());
+					ZonedDateTime timestamp = parseTimestamp(eventAttributeValues.get("timestamp"));
+					if (timestamp == null) {
+						timestamp = previousTimestamp;
+					}
+					previousTimestamp = timestamp;
+
+					xml.writeStartElement("event");
+					writeXesAttribute(xml, "string", XConceptExtension.KEY_NAME, getActivityNameAsDefined(entry.prefixEvents.get(i)));
+					writeXesAttribute(xml, "string", XLifecycleExtension.KEY_TRANSITION, "complete");
+					writeXesAttribute(xml, "date", XTimeExtension.KEY_TIMESTAMP, timestamp.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+					for (Map.Entry<String, String> attributeValue : eventAttributeValues.entrySet()) {
+						String value = attributeValue.getValue() == null ? "" : attributeValue.getValue().strip();
+						if (!attributeValue.getKey().equals("timestamp") && !value.isEmpty()) {
+							writeXesAttribute(xml, getXesAttributeType(value), attributeValue.getKey(), value);
+						}
+					}
+					xml.writeEndElement();
+				}
+				xml.writeEndElement();
+			}
+
+			xml.writeEndElement();
+			xml.writeEndDocument();
+			xml.close();
+		} catch (XMLStreamException e) {
+			throw new IOException(e);
+		}
+	}
+
+	//The activity's spelling in the first selected process model that contains it (case-insensitively), since the PDDL generator matches
+	//activities case-sensitively; prefixes may carry other casings (e.g. lowercase from Data-Agnostic, or an imported XES log)
+	//TODO: Warn the user when selected models spell the same activity with different casing
+	private String getActivityNameAsDefined(String activityName) {
+		for (AbstractModel model : getSelectedModels()) {
+			String nameAsDefined = model.getActivityNameAsDefined(activityName);
+			if (nameAsDefined != null) {
+				return nameAsDefined;
+			}
+		}
+		return activityName;
+	}
+
+	private static void writeXesExtension(XMLStreamWriter xml, String name, String prefix, String uri) throws XMLStreamException {
+		xml.writeEmptyElement("extension");
+		xml.writeAttribute("name", name);
+		xml.writeAttribute("prefix", prefix);
+		xml.writeAttribute("uri", uri);
+	}
+
+	private static void writeXesAttribute(XMLStreamWriter xml, String type, String key, String value) throws XMLStreamException {
+		xml.writeEmptyElement(type);
+		xml.writeAttribute("key", key);
+		xml.writeAttribute("value", value);
+	}
+
+	//Parses a value in the "timestamp" attribute format EventCell's editor expects, or returns null if it is missing/invalid
+	private static ZonedDateTime parseTimestamp(String value) {
+		if (value == null || value.isBlank()) {
+			return null;
+		}
+		try {
+			return LocalDateTime.parse(value.strip(), XES_TIMESTAMP_FORMATTER).atZone(ZoneId.systemDefault());
+		} catch (DateTimeParseException e) {
+			System.err.println("Ignoring invalid timestamp: " + value);
+			return null;
+		}
+	}
+
+	//Inverse of extractAttributeValueString: the XES attribute type (element name) matching how the value was typed in
+	private static String getXesAttributeType(String value) {
+		if (value.matches("[-+]?\\d+")) {
+			return "int";
+		} else if (value.matches("[-+]?(\\d+\\.?\\d*|\\.\\d+)([eE][-+]?\\d+)?")) {
+			return "float";
+		} else if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false")) {
+			return "boolean";
+		}
+		return "string";
+	}
+
 	//A collapsed TitledPane should only take up its title bar's height; only an expanded pane should compete for the column's leftover growable space
 	private void bindPaneGrowToExpanded(TitledPane pane) {
 		VBox.setVgrow(pane, pane.isExpanded() ? Priority.ALWAYS : Priority.NEVER);
@@ -604,16 +958,23 @@ public class DataAwareController extends AbstractController {
 		return selectedModels;
 	}
 
+	//Discards the selected prefix's continuation if it has one (making the prefix editable again), otherwise clears the prefix itself
 	@FXML
 	void onClickPrefix(ActionEvent event) {
-		PlannerSession.getInstance().setPlanPresent(false);
+		if (PlannerSession.getInstance().isPlanPresent()) {
+			if (selectedEntry != null) {
+				clearPlan(selectedEntry);
+			}
+			PlannerSession.getInstance().setCurrentPlan(new ArrayList<String>());
+			PlannerSession.getInstance().setPlanPresent(false);
+		} else {
+			PlannerSession.getInstance().getCurrentPrefix().clear();
+			PlannerSession.getInstance().clearPrefixAttributeValues();
+		}
 		ModelRegistry.getInstance().getModels().forEach(abstractModel -> abstractModel.resetModel());
-		PlannerSession.getInstance().getCurrentPrefix().clear();
-		PlannerSession.getInstance().clearPrefixAttributeValues();
 
 		updateTrace(null);
 		updateSelectedModelVisualizations();
-		labelCost.setText("");
 	}
 
 	//Removes a single event from the manually-built prefix (only reachable while no plan is present)
@@ -639,6 +1000,10 @@ public class DataAwareController extends AbstractController {
 		for (AbstractModel abstractModel : ModelRegistry.getInstance().getModels()) {
 			if (abstractModel.getModelId().equals(modelId)) {
 				activityName = abstractModel.getActivityByEncoding(activityEncoding);
+				//The PDDL generator matches activities case-sensitively, so the prefix uses the model file's spelling rather than the internal lowercase name
+				if (abstractModel.getActivityNameAsDefined(activityName) != null) {
+					activityName = abstractModel.getActivityNameAsDefined(activityName);
+				}
 				break;
 			}
 		}
@@ -648,13 +1013,20 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Attribute values (attribute name -> value) attached to each event of the given trace, in order; only the manually-built prefix carries
-	//attribute values (a planner-produced continuation has none), so those events get an empty map
+	//Attribute values (attribute name -> value) attached to each event of the given trace, in order: the manually-built prefix's, or the
+	//data-aware plan's (prefix events keep their values, added events carry the planner's); a plan carried over from Data-Agnostic has none
 	private List<Map<String, String>> buildAttributeValuesPerEvent(List<String> activeTrace) {
-		boolean editable = !PlannerSession.getInstance().isPlanPresent();
+		boolean planPresent = PlannerSession.getInstance().isPlanPresent();
+		List<Map<String, String>> planAttributeValues = planPresent && selectedEntry != null ? selectedEntry.planAttributeValues : null;
 		List<Map<String, String>> attributeValuesPerEvent = new ArrayList<Map<String, String>>();
 		for (int i = 0; i < activeTrace.size(); i++) {
-			attributeValuesPerEvent.add(editable ? PlannerSession.getInstance().getPrefixAttributeValues(i + 1) : Collections.emptyMap());
+			if (!planPresent) {
+				attributeValuesPerEvent.add(PlannerSession.getInstance().getPrefixAttributeValues(i + 1));
+			} else if (planAttributeValues != null && i < planAttributeValues.size()) {
+				attributeValuesPerEvent.add(planAttributeValues.get(i));
+			} else {
+				attributeValuesPerEvent.add(Collections.emptyMap());
+			}
 		}
 		return attributeValuesPerEvent;
 	}
@@ -673,7 +1045,11 @@ public class DataAwareController extends AbstractController {
 				abstractModel.updateMonitoringStates(activeTrace, PlannerSession.getInstance().isDisplayViolations());
 			}
 		});
-		updateplanListView(activeTrace);
+		updateplanListView(PlannerSession.getInstance().getCurrentPrefix());
+		updateContinuationListView();
+		refreshListStatistics();
+		selectTimelineIndex(0);
+		labelCost.setText(PlannerSession.getInstance().isPlanPresent() && selectedEntry != null ? selectedEntry.planCost : "");
 		updateTimelineControls(activeTrace);
 
 		if (selectIndex != null) {
@@ -683,7 +1059,50 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	//Clicking or arrowing to an event in a list moves the timeline to that event's replayed position
+	private void setupTimelineListView(ListView<EventData> listView) {
+		listView.setOnKeyReleased((event) -> {
+			if(event.getCode() == KeyCode.UP || event.getCode() == KeyCode.KP_UP || event.getCode() == KeyCode.DOWN || event.getCode() == KeyCode.KP_DOWN) {
+				EventData selected = listView.getSelectionModel().getSelectedItem();
+				if (selected != null) {
+					handleplanListViewSelection(selected.getTimelineIndex());
+				}
+			}
+		});
+	}
+
+	//Timeline position of the event with the given event number in the given list (0, the trace start, if it isn't found)
+	private static int getTimelineIndex(ListView<EventData> listView, int eventNumber) {
+		for (EventData eventData : listView.getItems()) {
+			if (eventData.getEventNumber() == eventNumber) {
+				return eventData.getTimelineIndex();
+			}
+		}
+		return 0;
+	}
+
+	//Highlights, in both lists, the event replayed at the given timeline position (a prefix event may have no position of its own while a plan is replayed)
+	private void selectTimelineIndex(int timelineIndex) {
+		for (ListView<EventData> listView : List.of(planListView, continuationListView)) {
+			int listIndex = -1;
+			for (int i = 0; i < listView.getItems().size() && listIndex == -1; i++) {
+				if (listView.getItems().get(i).getTimelineIndex() == timelineIndex) {
+					listIndex = i;
+				}
+			}
+			if (listIndex == -1) {
+				listView.getSelectionModel().clearSelection();
+			} else {
+				listView.scrollTo(listIndex);
+				listView.getSelectionModel().clearAndSelect(listIndex);
+			}
+		}
+	}
+
 	private void handleplanListViewSelection(int selectedIndex) {
+		if (selectedIndex < 0) {
+			return; //An event with no timeline position of its own (e.g. a prefix event a carried-over plan doesn't map back to)
+		}
 		if (animationInProgress) {
 			animationTimeline.stop();
 		}
@@ -855,57 +1274,106 @@ public class DataAwareController extends AbstractController {
 
 		currentEventIndex.addListener((observable, oldValue, newValue) -> {
 			updateSelectedModelVisualizations();
-			planListView.scrollTo(newValue.intValue());
-			planListView.getSelectionModel().clearAndSelect(newValue.intValue());
+			selectTimelineIndex(newValue.intValue());
 		});
 
 		stepBackwardButton.setDisable(true);
 	}
 
-	//Updates the planListView to match the trace and the currently selected models
-	private void updateplanListView(List<String> activities) {
+	//Updates the planListView (Prefix pane) to match the prefix. Without a plan, the prefix itself is replayed (and editable); with one, each
+	//prefix event points at (and is labelled with) the plan step that replayed it, and the trace end has no position of its own
+	private void updateplanListView(List<String> prefix) {
+		boolean planPresent = PlannerSession.getInstance().isPlanPresent();
+		List<Integer> planPrefixSteps = planPresent && selectedEntry != null ? selectedEntry.planPrefixSteps : null;
+		List<String> plan = PlannerSession.getInstance().getCurrentPlan();
 
-		boolean editable = !PlannerSession.getInstance().isPlanPresent(); //Attribute values can only be attached to a manually-built prefix, not a planner-produced continuation
 		List<EventData> eventDataList = new ArrayList<EventData>();
 		eventDataList.add(EventData.createStartEvent());
-		for (int i = 0; i < activities.size(); i++) {
-			String[] planAction = activities.get(i).split(";");
-			EventData eventData = planAction.length == 1
-					? new EventData(i+1, activities.get(i))
-					: new EventData(i+1, planAction[1], planAction[0]);
-			if (editable) {
-				eventData.setAttributeValues(PlannerSession.getInstance().getPrefixAttributeValues(i+1));
+		for (int i = 0; i < prefix.size(); i++) {
+			EventData eventData = new EventData(i+1, prefix.get(i));
+			if (!planPresent) {
+				eventData.setAttributeValues(PlannerSession.getInstance().getPrefixAttributeValues(i+1)); //Attribute values can only be attached while no plan is present
+			} else if (planPrefixSteps != null && i < planPrefixSteps.size() && planPrefixSteps.get(i) > 0) {
+				int step = planPrefixSteps.get(i);
+				eventData.setTimelineIndex(step);
+				eventData.setPlanAction(plan.get(step - 1).split(";", 2)[0]);
+			} else {
+				eventData.setTimelineIndex(-1);
 			}
 			eventDataList.add(eventData);
 		}
-		eventDataList.add(EventData.createEndEvent(activities.size()+1));
-		updateplanListViewStatistics(declModelChoice.getSelectionModel().getSelectedItem(), eventDataList);
-		updateplanListViewStatistics(pnModelChoice.getSelectionModel().getSelectedItem(), eventDataList);
+		EventData endEvent = EventData.createEndEvent(prefix.size()+1);
+		if (planPresent) {
+			endEvent.setTimelineIndex(-1);
+		}
+		eventDataList.add(endEvent);
 
-		planListView.getItems().clear();
-		planListView.getItems().addAll(eventDataList);
-		planListView.getSelectionModel().selectFirst();
+		planListView.getItems().setAll(eventDataList);
 	}
 
-	//Updates the statistics shown in the planListView
-	private void updateplanListViewStatistics(AbstractModel abstractModel, List<EventData> eventDataList) {
-		if ((abstractModel != null) && (abstractModel.getModelType() == ModelType.DECLARE) ) {
-			DeclareModel declareModel = (DeclareModel) abstractModel;
-			for (int i = 0; i < eventDataList.size(); i++) {
-				eventDataList.get(i).setDeclMonitoringStateCounts(declareModel.getMonitoringStateCounts(i));
+	//Updates the continuationListView (Continuation pane) to show the selected prefix's plan, one entry per replayed step
+	private void updateContinuationListView() {
+		List<EventData> eventDataList = new ArrayList<EventData>();
+		if (PlannerSession.getInstance().isPlanPresent()) {
+			List<String> plan = PlannerSession.getInstance().getCurrentPlan();
+			List<Map<String, String>> planAttributeValues = buildAttributeValuesPerEvent(plan);
+			eventDataList.add(EventData.createStartEvent());
+			for (int i = 0; i < plan.size(); i++) {
+				String[] planAction = plan.get(i).split(";", 2);
+				eventDataList.add(planAction.length == 1
+						? new EventData(i+1, plan.get(i))
+						: new EventData(i+1, getPlanStepDisplayName(planAction[0], planAction[1]), describePlanStep(planAction[0], planAttributeValues.get(i))));
+			}
+			eventDataList.add(EventData.createEndEvent(plan.size()+1));
+		}
+		continuationListView.getItems().setAll(eventDataList);
+	}
+
+	//Reset steps carry the violated constraint's PDDL name (or a Petri net's reset activity), shown as the constraint / net instead
+	private String getPlanStepDisplayName(String action, String activity) {
+		if (!action.equals(DeclareModel.RESET_CONSTRAINT_ACTION)) {
+			return activity;
+		}
+		for (AbstractModel model : ModelRegistry.getInstance().getModels()) {
+			if (model instanceof PnModel && ((PnModel) model).getResetActivity().equals(activity)) {
+				return "Petri net " + model.getModelName();
+			} else if (model instanceof DeclareModel && ((DeclareModel) model).getConstraintByPlannerName(activity) != null) {
+				String constraintString = ((DeclareModel) model).getConstraintByPlannerName(activity).getConstraintString();
+				return constraintString.contains(" |") ? constraintString.substring(0, constraintString.indexOf(" |")).trim() : constraintString.trim(); //Without its conditions
 			}
 		}
-		else if (abstractModel == null) {
-			for (EventData eventData : eventDataList) {
-				eventData.setDeclMonitoringStateCounts(Map.of(
-						MonitoringState.SAT, 0,
-						MonitoringState.POSS_SAT, 0,
-						MonitoringState.POSS_VIOL, 0,
-						MonitoringState.VIOL, 0
-						));
+		return activity;
+	}
+
+	//E.g. "add [integer=55, categorical=c3] @ 2023-08-07T12:00:00"
+	private static String describePlanStep(String action, Map<String, String> attributeValues) {
+		StringBuilder description = new StringBuilder(action);
+		List<String> values = new ArrayList<String>();
+		attributeValues.forEach((attribute, value) -> {
+			if (!attribute.equals("timestamp")) {
+				values.add(attribute + "=" + value);
 			}
+		});
+		if (!values.isEmpty()) {
+			description.append(" ").append(values);
 		}
-		planListView.refresh();
+		if (attributeValues.containsKey("timestamp")) {
+			description.append(" @ ").append(attributeValues.get("timestamp"));
+		}
+		return description.toString();
+	}
+
+	//Updates the constraint statistics shown for each event in both lists, from the selected Declare model's state at each event's timeline position
+	private void refreshListStatistics() {
+		AbstractModel declModel = declModelChoice.getSelectionModel().getSelectedItem();
+		for (ListView<EventData> listView : List.of(planListView, continuationListView)) {
+			for (EventData eventData : listView.getItems()) {
+				eventData.setDeclMonitoringStateCounts(declModel instanceof DeclareModel
+						? ((DeclareModel) declModel).getMonitoringStateCounts(eventData.getTimelineIndex())
+						: Map.of(MonitoringState.SAT, 0, MonitoringState.POSS_SAT, 0, MonitoringState.POSS_VIOL, 0, MonitoringState.VIOL, 0));
+			}
+			listView.refresh();
+		}
 	}
 
 	//Updates the TimelineControls to match the trace length and creates a matching slider animation
@@ -1102,15 +1570,16 @@ public class DataAwareController extends AbstractController {
 		legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
 
 		legendBox.getChildren().addAll(
-			new Label("Click on one of the Elements in the pane below to replay the prefix/trace onto the selected process models."),
+			new Label("Click on one of the Elements in the panes below to replay the prefix/trace onto the selected process models."),
 			new Label(""),
-			new Label("The first line shows the current activity in the plan."),
-			new Label("The next line shows the action that was taken by the planner (if a plan was generated on the Data-Agnostic page):"),
-			new Label("\t i) \tprefix_sync: Successfully replayed the activity of the prefix onto the process models"),
-			new Label("\t ii) \tprefix_violate_pn: Currently executed transition was in violation of the control flow of the Petri net"),
-			new Label("\t iii) \tprefix_violate_decl: Currently executed activity was in violation of the DECLARE model"),
-			new Label("\t iv) \treset: Reset the currently displayed frame component (constraint/petri net)"),
-			new Label("\t v) \tsync: Currently executed transition was successfully replayed on the process frame")
+			new Label("After running the planner, the Continuation pane shows the plan found for the selected prefix, which is then replayed instead of the prefix."),
+			new Label("The first line shows the activity (or reset constraint), the next line the action taken by the planner, its attribute values and its time:"),
+			new Label("\t i) \tsync: A prefix event, replayed as is"),
+			new Label("\t ii) \tskip: A prefix event that none of the process models refer to"),
+			new Label("\t iii) \tadd: An event added by the planner, with the attribute values it chose"),
+			new Label("\t iv) \treset constraint: The constraint (or Petri net) was violated and is reset to its initial state"),
+			new Label(""),
+			new Label("Reset discards the selected prefix's plan (making the prefix editable again); pressing it again clears the prefix.")
 		);
 
 		legendPopup.getContent().add(legendBox);

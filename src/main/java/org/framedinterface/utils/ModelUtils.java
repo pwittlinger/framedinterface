@@ -49,6 +49,7 @@ public class ModelUtils {
 
 		DeclareModel declareModel = new DeclareModel(modelId, modelName, activities, activityToEncodingMap, declareConstrains, activityToUnaryMap, activityToAttributesMap, attributeDomains);
 		declareModel.setFilePath(modelPath.toAbsolutePath().toString());
+		declareModel.setActivityNamesAsDefined(readActivityNamesAsDefined(modelPath));
 		return declareModel;
 	}
 
@@ -67,6 +68,22 @@ public class ModelUtils {
 		sc.close();
 
 		return activityNames;
+	}
+
+	//Maps each (lowercased, as in createActivityNamesSet) activity name of a Declare model to its original spelling in the model file
+	private static Map<String, String> readActivityNamesAsDefined(Path modelPath) throws IOException {
+		Map<String, String> activityNamesAsDefined = new HashMap<String, String>();
+
+		Scanner sc = new Scanner(modelPath);
+		while(sc.hasNextLine()) {
+			String line = sc.nextLine();
+			if(line.startsWith("activity ") && line.length() > 9) {
+				activityNamesAsDefined.putIfAbsent(line.substring(9).toLowerCase(), line.substring(9).trim());
+			}
+		}
+		sc.close();
+
+		return activityNamesAsDefined;
 	}
 	
 	
@@ -252,8 +269,12 @@ public class ModelUtils {
 		DataPetriNetImporter dataPetriNetImporter = new DataPetriNetImporter(); //There should be a version for regular Petri nets somewhere, but reusing the data Petri nets one will hopefully be fine
 		InputStream inputStream = new BufferedInputStream(new FileInputStream(modelPath.toString()));
 		DataPetriNetsWithMarkings dataPetriNet = dataPetriNetImporter.importFromStream(inputStream).getDPN();
-		
+
+		Map<String, String> activityNamesAsDefined = new HashMap<String, String>(); //Must be captured before the labels are lowercased below
 		for (Transition transition : dataPetriNet.getTransitions()) {
+			if (!transition.isInvisible()) {
+				activityNamesAsDefined.putIfAbsent(transition.getLabel().toLowerCase(), transition.getLabel());
+			}
 			transition.getAttributeMap().put(AttributeMap.LABEL, transition.getLabel().toLowerCase());
 		}
 		
@@ -264,6 +285,7 @@ public class ModelUtils {
 
 		PnModel dpnModel = new PnModel(modelId, modelName, activities, activityToEncodingMap, dataPetriNet);
 		dpnModel.setFilePath(modelPath.toAbsolutePath().toString());
+		dpnModel.setActivityNamesAsDefined(activityNamesAsDefined);
 		return dpnModel;
 	}
 

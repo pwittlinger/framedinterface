@@ -20,6 +20,10 @@ public class DeclareModel extends AbstractModel  {
 	private Map<String, LinkedHashSet<String>> activityToAttributesMap; //Bindings are only present in Declare models
 	private Map<String, AttributeDomain> attributeDomains; //Attribute name (lowercased) -> its declared value range/set
 	private List<Map<DeclareConstraint, MonitoringState>> monitoringStates; //First index is the initial state and last index is the final state
+	private Map<String, DeclareConstraint> plannerConstraintNames = new HashMap<String, DeclareConstraint>(); //Lowercased PDDL constraint object name (Data-Aware planner) -> constraint; see setPlannerConstraintNames
+
+	//Plan step action (Data-Aware plans, "reset constraint;<PDDL constraint name>") that resets a violated constraint instead of executing an activity
+	public static final String RESET_CONSTRAINT_ACTION = "reset constraint";
 
 	public DeclareModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, LinkedHashSet<DeclareConstraint> declareConstraints, Map<String, List<DeclareConstraint>> activityToUnaryMap, Map<String, LinkedHashSet<String>> activityToAttributesMap, Map<String, AttributeDomain> attributeDomains) {
 		super(modelId, modelName, activities, activityToEncodingMap, ModelType.DECLARE);
@@ -36,6 +40,19 @@ public class DeclareModel extends AbstractModel  {
 
 	public Map<String, AttributeDomain> getAttributeDomains() {
 		return attributeDomains;
+	}
+
+	public LinkedHashSet<DeclareConstraint> getDeclareConstraints() {
+		return declareConstraints;
+	}
+
+	//The names are assigned by the caller, since the PDDL generator numbers duplicate names across all Declare models it is given together
+	public void setPlannerConstraintNames(Map<String, DeclareConstraint> plannerConstraintNames) {
+		this.plannerConstraintNames = plannerConstraintNames;
+	}
+
+	public DeclareConstraint getConstraintByPlannerName(String plannerConstraintName) {
+		return plannerConstraintName == null ? null : plannerConstraintNames.get(plannerConstraintName.toLowerCase());
 	}
 
 	//Whether any constraint in this model declares a time condition (e.g. "ActivityP,0,100,h/ActivityG,2,5,h") -
@@ -56,7 +73,10 @@ public class DeclareModel extends AbstractModel  {
 		monitoringStateCounts.put(MonitoringState.POSS_SAT, 0);
 		monitoringStateCounts.put(MonitoringState.POSS_VIOL, 0);
 		monitoringStateCounts.put(MonitoringState.VIOL, 0);
-		
+		if (monitoringStates == null || activityIndex < 0 || activityIndex >= monitoringStates.size()) {
+			return monitoringStateCounts; //Not replayed (yet), or an index into a different trace
+		}
+
 		for (MonitoringState monitoringState : monitoringStates.get(activityIndex).values()) {
 			monitoringStateCounts.put(monitoringState, monitoringStateCounts.get(monitoringState) + 1);
 		}
@@ -166,6 +186,18 @@ public class DeclareModel extends AbstractModel  {
 			}
 			else{
 				activity = planAction[0];
+			}
+
+			//Data-Aware plan reset: only the named constraint returns to its initial state, and no activity is executed (which would otherwise advance e.g. chain constraints)
+			if (planAction.length == 2 && planAction[0].equals(RESET_CONSTRAINT_ACTION)) {
+				DeclareConstraint violatedConstraint = getConstraintByPlannerName(activity);
+				if (violatedConstraint != null) {
+					violatedConstraint.resetAutomaton();
+				}
+				Map<DeclareConstraint, MonitoringState> monitoringState = new HashMap<DeclareConstraint, MonitoringState>();
+				declareConstraints.forEach(declareConstraint -> monitoringState.put(declareConstraint, declareConstraint.getMonitoringState()));
+				monitoringStates.add(monitoringState);
+				continue;
 			}
 
 			//Check if the action is reset-petrinet

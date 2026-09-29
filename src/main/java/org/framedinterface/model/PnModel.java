@@ -33,6 +33,8 @@ public class PnModel extends AbstractModel  {
 	private ArrayList<String> violatedFiringsKeep;
 	private Map<String, Integer> violationCount;
 
+	public static final String RESET_PETRINET_ACTIVITY = "reset-petrinet";
+
 	public PnModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, DataPetriNetsWithMarkings dataPetriNet) {
 		super(modelId, modelName, activities, activityToEncodingMap, ModelType.PN); //TODO
 		this.dataPetriNet = dataPetriNet;
@@ -48,6 +50,11 @@ public class PnModel extends AbstractModel  {
 
 		this.petrinetSemantics = PetrinetSemanticsFactory.regularPetrinetSemantics(Petrinet.class);
 		this.petrinetSemantics.initialize(dataPetriNet.getTransitions(), dataPetriNet.getInitialMarking());
+	}
+
+	//Trace entry that resets only this net when replayed (see updateMonitoringStates)
+	public String getResetActivity() {
+		return RESET_PETRINET_ACTIVITY + "#" + getModelId();
 	}
 
 	@Override
@@ -81,7 +88,8 @@ public class PnModel extends AbstractModel  {
 
 			if (getTransitionViaLabel(this.dataPetriNet.getTransitions(), act) == null) {
 				// Transition is not in PetriNet, cannot be fired.
-				if (act.startsWith("reset-petrinet")){
+				//"reset-petrinet..." resets every net, except "reset-petrinet#<modelId>" (Data-Aware plans, which name each net's constraint separately) only resets that one
+				if (act.startsWith(RESET_PETRINET_ACTIVITY) && (!act.contains("#") || act.equals(getResetActivity().toLowerCase()))){
 					
 					this.petrinetSemantics.setCurrentState(this.dataPetriNet.getInitialMarking());
 					this.violatedFirings.clear();

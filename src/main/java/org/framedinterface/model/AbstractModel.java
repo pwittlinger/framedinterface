@@ -1,7 +1,9 @@
 package org.framedinterface.model;
 
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.collections4.BidiMap;
 
@@ -11,6 +13,7 @@ public abstract class AbstractModel {
 	private ModelType modelType;
 	private LinkedHashSet<String> activities; //For predictable iteration order
 	private BidiMap<String, String> activityToEncodingMap; //To allow lookup by both keys and values
+	private Map<String, String> activityNamesAsDefined = new HashMap<String, String>(); //Lowercase activity name (as used everywhere else in this class) -> the name as spelled in the model file
 	public String fullFilePath;
 	
 	public AbstractModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, ModelType modelType) {
@@ -47,6 +50,16 @@ public abstract class AbstractModel {
 	
 	public BidiMap<String, String> getActivityToEncodingMap() {
 		return activityToEncodingMap;
+	}
+
+	//Activities are handled in lowercase internally, but external tools (e.g. the data-aware PDDL generator) match them case-sensitively against the model file
+	//Returns the activity's name as spelled in the model file (case-insensitive lookup), or null if the model doesn't contain it
+	public String getActivityNameAsDefined(String activity) {
+		return activity == null ? null : activityNamesAsDefined.get(activity.toLowerCase());
+	}
+
+	public void setActivityNamesAsDefined(Map<String, String> activityNamesAsDefined) {
+		this.activityNamesAsDefined = activityNamesAsDefined;
 	}
 
 	public void setFilePath(String filePath) {

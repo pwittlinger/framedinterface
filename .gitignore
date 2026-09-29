@@ -11,3 +11,6 @@ fast-downward.sif
 problem.pddl
 prefix.txt
 results.txt
+dependencies/**
+/output
+*/prefixes/**

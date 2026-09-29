@@ -27,7 +27,7 @@
 
 <StackPane fx:id="rootRegion" styleClass="standard-bg-color" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.framedinterface.controller.dataaware.DataAwareController">
    <children>
-      <VBox styleClass="ui-root">
+      <VBox fx:id="mainContents" styleClass="ui-root">
         <children>
             <HBox VBox.vgrow="ALWAYS">
                <children>
@@ -214,15 +214,16 @@
                                     <ListView fx:id="continuationListView" maxHeight="1.7976931348623157E308" snapToPixel="false" styleClass="monitor-events-list" />
                                  </content>
                               </TitledPane>
-                              <HBox alignment="CENTER" VBox.vgrow="SOMETIMES">
+                              <HBox alignment="CENTER" spacing="4.0" VBox.vgrow="SOMETIMES">
                                  <children>
                                     <HBox alignment="CENTER">
                                        <children>
                                           <Label styleClass="single-parameter__title" text="Plan Cost:" />
-                                          <Label fx:id="labelCost" prefWidth="30.0" styleClass="single-parameter__title" />
+                                          <Label fx:id="labelCost" minWidth="30.0" styleClass="single-parameter__title" />
                                        </children>
                                     </HBox>
                                     <Region maxWidth="20.0" HBox.hgrow="ALWAYS" />
+                                    <Button fx:id="buttonRunPlanner" mnemonicParsing="false" onAction="#onClickPlanner" styleClass="standard-button" text="Run Planner" />
                                     <Button fx:id="buttonPrefix" mnemonicParsing="false" onAction="#onClickPrefix" styleClass="standard-button" text="Reset" />
                                  </children>
                               </HBox>
