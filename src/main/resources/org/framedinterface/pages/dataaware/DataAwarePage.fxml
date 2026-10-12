@@ -188,6 +188,7 @@
                                              </children>
                                           </VBox>
                                           <Button fx:id="importPrefixButton" mnemonicParsing="false" onAction="#onClickImportPrefix" styleClass="standard-button" text="Import" />
+                                          <Button fx:id="exportContinuationButton" disable="true" mnemonicParsing="false" onAction="#onClickExportContinuations" styleClass="standard-button" text="Export" />
                                           <Button fx:id="toolTipButtonPlan" mnemonicParsing="false" onAction="#onClickToolTipPlan" styleClass="standard-button" text="Help" />
                                        </children>
                                     </HBox>

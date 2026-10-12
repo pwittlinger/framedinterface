@@ -84,11 +84,16 @@ import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Bounds;
+import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Separator;
 import javafx.scene.control.Slider;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableColumn;
@@ -205,6 +210,8 @@ public class DataAwareController extends AbstractController {
 	@FXML
 	private Button importPrefixButton;
 	@FXML
+	private Button exportContinuationButton;
+	@FXML
 	private VBox mainContents;
 	@FXML
 	private Button toolTipButtonPlan;
@@ -229,6 +236,7 @@ public class DataAwareController extends AbstractController {
 	private static String precentageFormat = "%.1f";
 	private static final DateTimeFormatter XES_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"); //Matches the "timestamp" attribute format EventCell's editor expects
 	private static final String PREFIX_OUTPUT_FOLDER = "output/prefixes"; //Where the prefixes handed to the planner are exported as XES
+	private static final String CONTINUATION_OUTPUT_FOLDER = "output/continuations"; //Default folder for exported continuations
 	private static final DateTimeFormatter PREFIX_FILE_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 	private String initialDeclWebViewScript;
 	private String initialPnWebViewScript;
@@ -414,6 +422,7 @@ public class DataAwareController extends AbstractController {
 			}
 		});
 		removePrefixButton.disableProperty().bind(Bindings.size(prefixes).lessThanOrEqualTo(1));
+		prefixes.addListener((Observable observable) -> updateExportButton()); //Removing/importing prefixes may remove the last continuation
 
 		//The first entry picks up whatever PlannerSession already holds, so a trace/plan carried over from Data-Agnostic still shows up
 		PrefixEntry initialEntry = new PrefixEntry();
@@ -632,18 +641,8 @@ public class DataAwareController extends AbstractController {
 	//and replays the selected prefix's plan. Prefixes without a (solved) plan are left without a continuation.
 	private void loadPlans(List<AbstractModel> plannedModels) throws IOException {
 		Map<String, String> resetTargets = assignPlannerConstraintNames(plannedModels);
-		Set<String> categoricalAttributes = new TreeSet<String>();
-		for (AbstractModel model : plannedModels) {
-			if (model instanceof DeclareModel) {
-				((DeclareModel) model).getAttributeDomains().forEach((attribute, domain) -> {
-					if (domain.getType() == AttributeDomain.Type.CATEGORICAL) {
-						categoricalAttributes.add(attribute.toLowerCase());
-					}
-				});
-			}
-		}
 		EnhspPlanParser planParser = new EnhspPlanParser(new File(currentPath, GenerateDataAwarePDDLTask.OUTPUT_FOLDER), new File(currentPath, GenerateDataAwarePDDLTask.VARIABLE_VALUES_FILE),
-				GenerateDataAwarePDDLTask.ACTIVITY_MAPPING_FILE_PATTERN, categoricalAttributes, resetTargets);
+				GenerateDataAwarePDDLTask.ACTIVITY_MAPPING_FILE_PATTERN, getCategoricalAttributes(plannedModels), resetTargets);
 
 		for (int i = 0; i < prefixes.size(); i++) {
 			PrefixEntry entry = prefixes.get(i);
@@ -667,6 +666,21 @@ public class DataAwareController extends AbstractController {
 		}
 		updateTrace(null);
 		updateSelectedModelVisualizations();
+	}
+
+	//Lowercased names of the attributes declared categorical (e.g. "categorical: c1, c2, c3") by any of the given Declare models
+	private static Set<String> getCategoricalAttributes(List<AbstractModel> models) {
+		Set<String> categoricalAttributes = new TreeSet<String>();
+		for (AbstractModel model : models) {
+			if (model instanceof DeclareModel) {
+				((DeclareModel) model).getAttributeDomains().forEach((attribute, domain) -> {
+					if (domain.getType() == AttributeDomain.Type.CATEGORICAL) {
+						categoricalAttributes.add(attribute.toLowerCase());
+					}
+				});
+			}
+		}
+		return categoricalAttributes;
 	}
 
 	private static void clearPlan(PrefixEntry entry) {
@@ -758,23 +772,13 @@ public class DataAwareController extends AbstractController {
 	//Writes every prefix as one trace (in prefixChoice order, so prefix <i> becomes problem<i>.pddl) of an XES log that the data-aware PDDL generator can read.
 	//The generator computes each event's time relative to the trace's first event and needs a timestamp on every event, so events without a
 	//(valid) "timestamp" attribute reuse the previous event's timestamp (or the trace's first known one / the export time, if there is none before them)
-	//Written with StAX rather than OpenXES' XesXmlSerializer, since the latter depends on the Spex library, which is not bundled with this application
 	private void writePrefixesAsXes(File file) throws IOException {
 		ZonedDateTime exportTime = ZonedDateTime.now().truncatedTo(ChronoUnit.SECONDS);
 
-		try (OutputStream out = new FileOutputStream(file)) {
-			XMLStreamWriter xml = XMLOutputFactory.newInstance().createXMLStreamWriter(out, "UTF-8");
-			xml.writeStartDocument("UTF-8", "1.0");
-			xml.writeStartElement("log");
-			xml.writeAttribute("xes.version", "1.0");
-			writeXesExtension(xml, "Concept", "concept", "http://www.xes-standard.org/concept.xesext");
-			writeXesExtension(xml, "Lifecycle", "lifecycle", "http://www.xes-standard.org/lifecycle.xesext");
-			writeXesExtension(xml, "Time", "time", "http://www.xes-standard.org/time.xesext");
-
+		try (XesWriter xes = new XesWriter(file, "Prefixes")) {
 			for (int p = 0; p < prefixes.size(); p++) {
 				PrefixEntry entry = prefixes.get(p);
-				xml.writeStartElement("trace");
-				writeXesAttribute(xml, "string", XConceptExtension.KEY_NAME, "Prefix " + (p + 1));
+				xes.startTrace("Prefix " + (p + 1));
 
 				ZonedDateTime previousTimestamp = null;
 				for (int i = 0; i < entry.prefixEvents.size() && previousTimestamp == null; i++) {
@@ -793,24 +797,18 @@ public class DataAwareController extends AbstractController {
 					}
 					previousTimestamp = timestamp;
 
-					xml.writeStartElement("event");
-					writeXesAttribute(xml, "string", XConceptExtension.KEY_NAME, getActivityNameAsDefined(entry.prefixEvents.get(i)));
-					writeXesAttribute(xml, "string", XLifecycleExtension.KEY_TRANSITION, "complete");
-					writeXesAttribute(xml, "date", XTimeExtension.KEY_TIMESTAMP, timestamp.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+					xes.startEvent(getActivityNameAsDefined(entry.prefixEvents.get(i)));
 					for (Map.Entry<String, String> attributeValue : eventAttributeValues.entrySet()) {
 						String value = attributeValue.getValue() == null ? "" : attributeValue.getValue().strip();
 						if (!attributeValue.getKey().equals("timestamp") && !value.isEmpty()) {
-							writeXesAttribute(xml, getXesAttributeType(value), attributeValue.getKey(), value);
+							xes.writeAttribute(getXesAttributeType(value), attributeValue.getKey(), value);
 						}
 					}
-					xml.writeEndElement();
+					xes.writeTimestamp(timestamp);
+					xes.endElement();
 				}
-				xml.writeEndElement();
+				xes.endElement();
 			}
-
-			xml.writeEndElement();
-			xml.writeEndDocument();
-			xml.close();
 		} catch (XMLStreamException e) {
 			throw new IOException(e);
 		}
@@ -829,17 +827,105 @@ public class DataAwareController extends AbstractController {
 		return activityName;
 	}
 
-	private static void writeXesExtension(XMLStreamWriter xml, String name, String prefix, String uri) throws XMLStreamException {
-		xml.writeEmptyElement("extension");
-		xml.writeAttribute("name", name);
-		xml.writeAttribute("prefix", prefix);
-		xml.writeAttribute("uri", uri);
-	}
+	//Writes an XES log laid out like the logs OpenXES produces (one element per line, tab-indented, same log header), using StAX rather than
+	//OpenXES' XesXmlSerializer, since the latter depends on the Spex library, which is not bundled with this application
+	private static class XesWriter implements AutoCloseable {
+		private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"); //Local time, e.g. "2023-08-07T02:08:50"
 
-	private static void writeXesAttribute(XMLStreamWriter xml, String type, String key, String value) throws XMLStreamException {
-		xml.writeEmptyElement(type);
-		xml.writeAttribute("key", key);
-		xml.writeAttribute("value", value);
+		private final OutputStream out;
+		private final XMLStreamWriter xml;
+		private int depth = 0;
+
+		XesWriter(File file, String logName) throws IOException, XMLStreamException {
+			out = new FileOutputStream(file);
+			xml = XMLOutputFactory.newInstance().createXMLStreamWriter(out, "UTF-8");
+			xml.writeStartDocument("UTF-8", "1.0");
+			newLine();
+			xml.writeStartElement("log");
+			xml.writeAttribute("xes.version", "1.0");
+			xml.writeAttribute("xes.features", "nested-attributes");
+			xml.writeDefaultNamespace("http://www.xes-standard.org/");
+			depth++;
+			writeExtension("Time", "time", "http://www.xes-standard.org/time.xesext");
+			writeExtension("Lifecycle", "lifecycle", "http://www.xes-standard.org/lifecycle.xesext");
+			writeExtension("Concept", "concept", "http://www.xes-standard.org/concept.xesext");
+			for (String scope : new String[] {"trace", "event"}) {
+				startElement("global");
+				xml.writeAttribute("scope", scope);
+				writeAttribute("string", XConceptExtension.KEY_NAME, "__INVALID__");
+				endElement();
+			}
+			newLine();
+			xml.writeEmptyElement("classifier");
+			xml.writeAttribute("name", "Event Name");
+			xml.writeAttribute("keys", XConceptExtension.KEY_NAME);
+			writeAttribute("string", XConceptExtension.KEY_NAME, logName);
+			writeAttribute("string", "lifecycle:model", "standard");
+		}
+
+		void startTrace(String name) throws XMLStreamException {
+			startElement("trace");
+			writeAttribute("string", XConceptExtension.KEY_NAME, name);
+		}
+
+		//concept:name and lifecycle:transition; the caller adds further attributes and calls endElement()
+		void startEvent(String activity) throws XMLStreamException {
+			startElement("event");
+			writeAttribute("string", XConceptExtension.KEY_NAME, activity);
+			writeAttribute("string", XLifecycleExtension.KEY_TRANSITION, "complete");
+		}
+
+		void writeTimestamp(ZonedDateTime timestamp) throws XMLStreamException {
+			writeAttribute("date", XTimeExtension.KEY_TIMESTAMP, timestamp.withZoneSameInstant(ZoneId.systemDefault()).format(TIMESTAMP_FORMATTER));
+		}
+
+		void writeAttribute(String type, String key, String value) throws XMLStreamException {
+			newLine();
+			xml.writeEmptyElement(type);
+			xml.writeAttribute("key", key);
+			xml.writeAttribute("value", value);
+		}
+
+		void endElement() throws XMLStreamException {
+			depth--;
+			newLine();
+			xml.writeEndElement();
+		}
+
+		private void writeExtension(String name, String prefix, String uri) throws XMLStreamException {
+			newLine();
+			xml.writeEmptyElement("extension");
+			xml.writeAttribute("name", name);
+			xml.writeAttribute("prefix", prefix);
+			xml.writeAttribute("uri", uri);
+		}
+
+		private void startElement(String name) throws XMLStreamException {
+			newLine();
+			xml.writeStartElement(name);
+			depth++;
+		}
+
+		private void newLine() throws XMLStreamException {
+			xml.writeCharacters("\n" + "\t".repeat(depth));
+		}
+
+		//Closes the log element and the file
+		@Override
+		public void close() throws IOException {
+			try {
+				while (depth > 0) {
+					endElement();
+				}
+				xml.writeCharacters("\n");
+				xml.writeEndDocument();
+				xml.close();
+			} catch (XMLStreamException e) {
+				throw new IOException(e);
+			} finally {
+				out.close();
+			}
+		}
 	}
 
 	//Parses a value in the "timestamp" attribute format EventCell's editor expects, or returns null if it is missing/invalid
@@ -852,6 +938,146 @@ public class DataAwareController extends AbstractController {
 		} catch (DateTimeParseException e) {
 			System.err.println("Ignoring invalid timestamp: " + value);
 			return null;
+		}
+	}
+
+	//Prefixes whose continuation can be exported: only plans from the data-aware planner carry the attribute values (and times) an exported event needs,
+	//unlike a plan carried over from Data-Agnostic
+	private List<Integer> getExportableContinuationIndices() {
+		List<Integer> exportableIndices = new ArrayList<Integer>();
+		for (int i = 0; i < prefixes.size(); i++) {
+			if (prefixes.get(i).planPresent && prefixes.get(i).planAttributeValues != null) {
+				exportableIndices.add(i);
+			}
+		}
+		return exportableIndices;
+	}
+
+	//Export is only offered once the planner produced at least one continuation, and is withdrawn again when they are reset
+	private void updateExportButton() {
+		exportContinuationButton.setDisable(getExportableContinuationIndices().isEmpty());
+	}
+
+	//Whether a plan step ("action;activity") becomes an event of an exported continuation: only events of the models' alphabet (the Activities
+	//pane, i.e. the selected process specifications) are exported, which excludes resets; prefix events only if includePrefixEvents
+	private boolean isExportedPlanStep(String[] step, boolean includePrefixEvents) {
+		if (step.length < 2 || !activityToAttributes.containsKey(step[1].toLowerCase())) {
+			return false;
+		}
+		return step[0].equals(EnhspPlanParser.ADD_ACTION)
+				|| (includePrefixEvents && (step[0].equals(EnhspPlanParser.SYNC_ACTION) || step[0].equals(EnhspPlanParser.SKIP_ACTION)));
+	}
+
+	//Exports the continuations (plans) of the prefixes the user picks to an XES log, one trace per prefix
+	@FXML
+	private void onClickExportContinuations() {
+		if (selectedEntry != null) {
+			syncOutToEntry(selectedEntry);
+		}
+		List<Integer> exportableIndices = getExportableContinuationIndices();
+		if (exportableIndices.isEmpty()) { //The button is disabled in this case, see updateExportButton
+			return;
+		}
+		if (activityToAttributes.isEmpty()) {
+			AlertUtils.showWarning("Select the process specifications whose activities should be exported under Process Specifications.");
+			return;
+		}
+
+		Dialog<ButtonType> dialog = new Dialog<ButtonType>();
+		dialog.setTitle("Export Continuations");
+		dialog.setHeaderText("Select the continuations to export as XES");
+		dialog.initOwner(getStage());
+		dialog.getDialogPane().getStylesheets().add("/org/framedinterface/dialogPane.css");
+		dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+		CheckBox allCheckBox = new CheckBox("All continuations");
+		allCheckBox.setSelected(true);
+		List<CheckBox> prefixCheckBoxes = new ArrayList<CheckBox>();
+		for (int index : exportableIndices) {
+			long addedEvents = prefixes.get(index).plan.stream().filter(step -> isExportedPlanStep(step.split(";", 2), false)).count();
+			CheckBox prefixCheckBox = new CheckBox("Prefix " + (index + 1) + " (" + addedEvents + " added event" + (addedEvents == 1 ? "" : "s") + ")");
+			prefixCheckBox.setSelected(true);
+			prefixCheckBox.setOnAction(event -> allCheckBox.setSelected(prefixCheckBoxes.stream().allMatch(CheckBox::isSelected)));
+			prefixCheckBoxes.add(prefixCheckBox);
+		}
+		allCheckBox.setOnAction(event -> prefixCheckBoxes.forEach(prefixCheckBox -> prefixCheckBox.setSelected(allCheckBox.isSelected())));
+		CheckBox includePrefixCheckBox = new CheckBox("Include the prefix events (complete traces), not only the added events");
+		includePrefixCheckBox.setSelected(true);
+
+		VBox prefixList = new VBox(4);
+		prefixList.getChildren().addAll(prefixCheckBoxes);
+		ScrollPane prefixScrollPane = new ScrollPane(prefixList);
+		prefixScrollPane.setMaxHeight(300);
+		prefixScrollPane.setFitToWidth(true);
+		VBox content = new VBox(8, allCheckBox, new Separator(), prefixScrollPane, new Separator(), includePrefixCheckBox);
+		content.setPadding(new Insets(10));
+		dialog.getDialogPane().setContent(content);
+		dialog.getDialogPane().lookupButton(ButtonType.OK).disableProperty().bind(Bindings.createBooleanBinding(
+				() -> prefixCheckBoxes.stream().noneMatch(CheckBox::isSelected),
+				prefixCheckBoxes.stream().map(CheckBox::selectedProperty).toArray(Observable[]::new)));
+
+		if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+			return;
+		}
+		List<Integer> chosenIndices = new ArrayList<Integer>();
+		for (int i = 0; i < exportableIndices.size(); i++) {
+			if (prefixCheckBoxes.get(i).isSelected()) {
+				chosenIndices.add(exportableIndices.get(i));
+			}
+		}
+
+		File defaultFolder = new File(currentPath, CONTINUATION_OUTPUT_FOLDER);
+		defaultFolder.mkdirs();
+		File file = FileUtils.showXesSaveDialog(getStage(), defaultFolder, "continuations_" + LocalDateTime.now().format(PREFIX_FILE_TIMESTAMP_FORMATTER) + ".xes");
+		if (file == null) {
+			return;
+		}
+		try {
+			writeContinuationsAsXes(file, chosenIndices, includePrefixCheckBox.isSelected());
+			AlertUtils.showSuccess("Exported " + chosenIndices.size() + " continuation(s) to:\n" + file.getAbsolutePath());
+		} catch (IOException e) {
+			e.printStackTrace();
+			AlertUtils.showError("Could not export the continuations to XES: " + e.getMessage());
+		}
+	}
+
+	//Writes one trace per given prefix (named "Prefix <i>"): the events its plan added and, if includePrefixEvents, the prefix events it replayed,
+	//restricted to the models' alphabet (see isExportedPlanStep). Categorical attributes are written as strings and numeric ones as floats, e.g.
+	//<string key="categorical" value="c2"/> and <float key="integer" value="8"/>; each event's time is its plan time.
+	private void writeContinuationsAsXes(File file, List<Integer> prefixIndices, boolean includePrefixEvents) throws IOException {
+		Set<String> categoricalAttributes = getCategoricalAttributes(new ArrayList<AbstractModel>(ModelRegistry.getInstance().getModels()));
+
+		try (XesWriter xes = new XesWriter(file, "Continuations")) {
+			for (int index : prefixIndices) {
+				PrefixEntry entry = prefixes.get(index);
+				xes.startTrace("Prefix " + (index + 1));
+
+				for (int i = 0; i < entry.plan.size(); i++) {
+					String[] step = entry.plan.get(i).split(";", 2);
+					if (!isExportedPlanStep(step, includePrefixEvents)) {
+						continue;
+					}
+					Map<String, String> eventAttributeValues = i < entry.planAttributeValues.size() ? entry.planAttributeValues.get(i) : Collections.emptyMap();
+
+					xes.startEvent(getActivityNameAsDefined(step[1]));
+					for (Map.Entry<String, String> attributeValue : eventAttributeValues.entrySet()) {
+						String value = attributeValue.getValue() == null ? "" : attributeValue.getValue().strip();
+						if (!attributeValue.getKey().equals("timestamp") && !value.isEmpty()) {
+							String valueType = getXesAttributeType(value);
+							boolean isNumeric = !categoricalAttributes.contains(attributeValue.getKey().toLowerCase()) && (valueType.equals("int") || valueType.equals("float"));
+							xes.writeAttribute(isNumeric ? "float" : "string", attributeValue.getKey(), value);
+						}
+					}
+					ZonedDateTime timestamp = parseTimestamp(eventAttributeValues.get("timestamp"));
+					if (timestamp != null) {
+						xes.writeTimestamp(timestamp);
+					}
+					xes.endElement();
+				}
+				xes.endElement();
+			}
+		} catch (XMLStreamException e) {
+			throw new IOException(e);
 		}
 	}
 
@@ -1050,6 +1276,7 @@ public class DataAwareController extends AbstractController {
 		refreshListStatistics();
 		selectTimelineIndex(0);
 		labelCost.setText(PlannerSession.getInstance().isPlanPresent() && selectedEntry != null ? selectedEntry.planCost : "");
+		updateExportButton();
 		updateTimelineControls(activeTrace);
 
 		if (selectIndex != null) {
