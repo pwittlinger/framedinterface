@@ -51,6 +51,24 @@
                               </TableView>
                            </content>
                         </TitledPane>
+                        <TitledPane fx:id="constraintsPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Constraints" VBox.vgrow="ALWAYS">
+                           <content>
+                              <TableView fx:id="constraintsTableView" editable="true" maxHeight="1.7976931348623157E308">
+                                <columns>
+                                  <TableColumn fx:id="constraintNameColumn" editable="false" prefWidth="145.0" text="Constraint" />
+                                  <TableColumn fx:id="constraintModelColumn" editable="false" prefWidth="75.0" text="Model" />
+                                  <TableColumn fx:id="constraintCostColumn" maxWidth="50.0" minWidth="45.0" prefWidth="45.0" sortable="false" style="-fx-alignment: CENTER-RIGHT;" text="Cost" />
+                                </columns>
+                                 <columnResizePolicy>
+                                    <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
+                                 </columnResizePolicy>
+                                 <styleClass>
+                                    <String fx:value="table-padding" />
+                                    <String fx:value="hidden-scroll-bar--horizontal" />
+                                 </styleClass>
+                              </TableView>
+                           </content>
+                        </TitledPane>
                         <TitledPane fx:id="activitiesAttributesPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Activities" VBox.vgrow="ALWAYS">
                            <content>
                               <TreeView fx:id="activitiesTreeView" maxHeight="1.7976931348623157E308" />

@@ -15,6 +15,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,9 +71,11 @@ import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
@@ -98,6 +101,7 @@ import javafx.scene.control.Separator;
 import javafx.scene.control.Slider;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TitledPane;
@@ -105,6 +109,7 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.control.cell.CheckBoxTableCell;
+import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
@@ -142,6 +147,21 @@ public class DataAwareController extends AbstractController {
 	private TitledPane modelRegistryPane;
 	@FXML
 	private ChoiceBox<RecoveryStrategy> recoveryStrategyChoice;
+	@FXML
+	private TitledPane constraintsPane;
+	@FXML
+	private TableView<ConstraintEntry> constraintsTableView;
+	@FXML
+	private TableColumn<ConstraintEntry, String> constraintNameColumn;
+	@FXML
+	private TableColumn<ConstraintEntry, String> constraintModelColumn;
+	@FXML
+	private TableColumn<ConstraintEntry, Double> constraintCostColumn;
+
+	private static final double DEFAULT_VIOLATION_COST = 1;
+	//Violation cost per Declare constraint (or per Petri net, keyed by its model), kept across refreshes of the Constraints pane; identity-keyed since
+	//DeclareConstraint.equals compares constraint strings, and the same constraint line in two models should still have independent costs
+	private Map<Object, DoubleProperty> violationCosts = new IdentityHashMap<Object, DoubleProperty>();
 	@FXML
 	private TreeView<String> activitiesTreeView;
 	@FXML
@@ -266,6 +286,34 @@ public class DataAwareController extends AbstractController {
 	private ObservableList<PrefixEntry> prefixes = FXCollections.observableArrayList();
 	private PrefixEntry selectedEntry; //prefixChoice's current selection, whose prefix/continuation is the one live in PlannerSession
 
+	//One row of the Constraints pane: a Declare constraint, or a whole Petri net (which the planner treats as a single constraint).
+	//Intended to also carry the constraint's violation cost for the PDDL generator later on.
+	private static class ConstraintEntry {
+		private final AbstractModel model;
+		private final DeclareConstraint constraint; //null for a Petri net
+		private final DoubleProperty violationCost; //Shared with violationCosts, so edits outlive this entry
+
+		private ConstraintEntry(AbstractModel model, DeclareConstraint constraint, DoubleProperty violationCost) {
+			this.model = model;
+			this.constraint = constraint;
+			this.violationCost = violationCost;
+		}
+
+		//e.g. "Response[ActivityG, ActivityP]" (as written in the model file, without its conditions), or "Petri net" for a net
+		private String getName() {
+			if (constraint == null) {
+				return "Petri net";
+			}
+			String constraintString = constraint.getConstraintString().trim();
+			return constraintString.contains(" |") ? constraintString.substring(0, constraintString.indexOf(" |")).trim() : constraintString;
+		}
+
+		//The full constraint line including its data/time conditions, e.g. "Response[ActivityG, ActivityP] |A.integer > 10 |T.integer < 10 |"
+		private String getDetails() {
+			return constraint == null ? "Petri net " + model.getModelName() : constraint.getConstraintString().trim();
+		}
+	}
+
 	//One prefix's worth of PlannerSession state: its manually-built events, their attribute values, and whatever planner continuation was generated from it
 	private static class PrefixEntry {
 		private List<String> prefixEvents = new ArrayList<String>();
@@ -290,13 +338,34 @@ public class DataAwareController extends AbstractController {
 		modelSelectColumn.setCellValueFactory(data -> getModelSelectedProperty(data.getValue()));
 		modelSelectColumn.setCellFactory(CheckBoxTableCell.forTableColumn(modelSelectColumn));
 
+		//Constraints panel: view-only list of the constraints of the currently selected process specifications (each Petri net counts as one constraint)
+		constraintsTableView.setPlaceholder(new Label("No process specifications selected"));
+		constraintNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getName()));
+		constraintModelColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().model.getModelName()));
+		//Editable violation cost (Enter confirms); input that isn't a non-negative number is rejected and the previous cost shown again
+		constraintCostColumn.setCellValueFactory(data -> data.getValue().violationCost.asObject());
+		constraintCostColumn.setCellFactory(TextFieldTableCell.forTableColumn(COST_CONVERTER));
+		constraintCostColumn.setOnEditCommit(event -> {
+			if (event.getNewValue() != null) {
+				event.getRowValue().violationCost.set(event.getNewValue());
+			}
+			constraintsTableView.refresh();
+		});
+		constraintsTableView.setRowFactory(tableView -> new TableRow<ConstraintEntry>() {
+			@Override
+			protected void updateItem(ConstraintEntry item, boolean empty) {
+				super.updateItem(item, empty);
+				setTooltip(empty || item == null ? null : new Tooltip(item.getDetails())); //Shows the conditions the Constraint column leaves out
+			}
+		});
+
 		//Activities & Attributes panel: view-only tree of unique activity labels (with their bound attributes, if any) across the currently selected process specifications
 		activitiesTreeView.setShowRoot(false);
 		attributesTreeView.setShowRoot(false);
 		updateActivitiesListView();
 
 		//Collapsed panes should only take up their title bar's height, not keep claiming a share of the column's growable space
-		for (TitledPane pane : new TitledPane[] {modelRegistryPane, activitiesAttributesPane, attributesPane, prefixPane, continuationPane}) {
+		for (TitledPane pane : new TitledPane[] {modelRegistryPane, constraintsPane, activitiesAttributesPane, attributesPane, prefixPane, continuationPane}) {
 			bindPaneGrowToExpanded(pane);
 		}
 
@@ -1161,8 +1230,49 @@ public class DataAwareController extends AbstractController {
 		activitiesTreeView.setRoot(activitiesRoot);
 
 		planListView.refresh(); //Already-rendered prefix events need to re-check attribute availability now that the selected models (and thus known attributes) may have changed
+		updateConstraintsTableView();
 		updateAttributesTreeView();
 	}
+
+	//Refreshes the Constraints panel with the constraints of the currently selected process specifications, in model and file order
+	private void updateConstraintsTableView() {
+		List<ConstraintEntry> constraintEntries = new ArrayList<ConstraintEntry>();
+		for (AbstractModel model : getSelectedModels()) {
+			if (model instanceof DeclareModel) {
+				for (DeclareConstraint constraint : ((DeclareModel) model).getDeclareConstraints()) {
+					constraintEntries.add(new ConstraintEntry(model, constraint, getViolationCost(constraint)));
+				}
+			} else if (model instanceof PnModel) {
+				constraintEntries.add(new ConstraintEntry(model, null, getViolationCost(model)));
+			}
+		}
+		constraintsTableView.getItems().setAll(constraintEntries);
+	}
+
+	//Violation cost of a Declare constraint, or of a Petri net (keyed by its model); DEFAULT_VIOLATION_COST until edited in the Constraints pane
+	private DoubleProperty getViolationCost(Object constraintOrPetriNet) {
+		return violationCosts.computeIfAbsent(constraintOrPetriNet, key -> new SimpleDoubleProperty(DEFAULT_VIOLATION_COST));
+	}
+
+	//Shows whole costs without a fraction ("1" rather than "1.0"); unparseable or negative input yields null, which rejects the edit
+	private static final StringConverter<Double> COST_CONVERTER = new StringConverter<Double>() {
+		@Override
+		public String toString(Double cost) {
+			if (cost == null) {
+				return "";
+			}
+			return cost == Math.rint(cost) ? Long.toString(cost.longValue()) : cost.toString();
+		}
+		@Override
+		public Double fromString(String string) {
+			try {
+				double cost = Double.parseDouble(string.strip());
+				return cost >= 0 && Double.isFinite(cost) ? cost : null;
+			} catch (NumberFormatException | NullPointerException e) {
+				return null;
+			}
+		}
+	};
 
 	//Refreshes the Attributes panel with the declared value range/set of each attribute, merged (widest range / union of values) across the currently selected Declare models
 	private void updateAttributesTreeView() {
