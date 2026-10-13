@@ -166,6 +166,20 @@
         <artifactId>controlsfx</artifactId>
         <version>11.1.2</version>
     </dependency>
+    <!-- The generator from data-framed-autonomy (run "mvn install" in its pddl_gen folder first).
+         We only use its formula package here, to read the data conditions the same way the generator does,
+         so we leave out all its dependencies. -->
+    <dependency>
+        <groupId>org.example</groupId>
+        <artifactId>pddl_gen</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <exclusions>
+            <exclusion>
+                <groupId>*</groupId>
+                <artifactId>*</artifactId>
+            </exclusion>
+        </exclusions>
+    </dependency>
     </dependencies>
 
 

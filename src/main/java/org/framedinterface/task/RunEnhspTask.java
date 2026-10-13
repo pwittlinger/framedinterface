@@ -18,6 +18,9 @@ public class RunEnhspTask extends Task<List<Integer>> {
 
 	public static final String ENHSP_JAR = "dependencies/enhsp.jar";
 	public static final String DOMAIN_FILE = "dependencies/domain_framed_autonomy_process_reset_time.pddl";
+	//Written by the generator next to the problems when some data condition uses or/not (nand clauses).
+	//Those problems only work with this domain, so when it's there we use it instead of the normal one.
+	public static final String CLAUSES_DOMAIN_FILE = GenerateDataAwarePDDLTask.PDDL_OUTPUT_FOLDER + "/domain_framed_autonomy_process_reset_time_clauses.pddl";
 	public static final String PLAN_OUTPUT_FOLDER = "output/plans";
 
 	private String currentPath;
@@ -32,6 +35,11 @@ public class RunEnhspTask extends Task<List<Integer>> {
 	protected List<Integer> call() throws Exception {
 		File jar = new File(currentPath, ENHSP_JAR);
 		File domain = new File(currentPath, DOMAIN_FILE);
+		File clausesDomain = new File(currentPath, CLAUSES_DOMAIN_FILE);
+		if (clausesDomain.isFile()) {
+			domain = clausesDomain;
+		}
+		System.out.println("RunEnhspTask: using domain " + domain.getAbsolutePath());
 		if (!jar.isFile()) {
 			throw new Exception("ENHSP not found: " + jar.getAbsolutePath());
 		}
