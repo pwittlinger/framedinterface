@@ -5,3 +5,13 @@
 /sas_plan
 /fast-downward*
 /target
+apptainer/*
+/apptainer/**
+fast-downward.sif
+problem.pddl
+prefix.txt
+results.txt
+dependencies/**
+/output
+*/prefixes/**
+/planner/target
