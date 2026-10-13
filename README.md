@@ -29,6 +29,20 @@ The Fast Downward Planner ([here](https://www.fast-downward.org/latest/)) can be
 Alternatively, you can compile Fast Downward yourself. Compile it into a directory called "fast-downward". A full description on how to install the Fast Downward can be found [here](https://github.com/aibasel/downward/blob/main/BUILD.md). This is a little bit more involved for Windows Users, as it involves installing [Visual Studio](https://visualstudio.microsoft.com/de/vs/older-downloads/), [Python](https://www.python.org/downloads/windows/) (make sure it is set in your PATH variables!) and [CMake](http://www.cmake.org/download/). 
 
 
+## Building with Maven (Data-Aware page)
+
+The planner (ENHSP) and the PDDL generator are fetched and built by Maven, nothing has to be installed by hand:
+
+```
+cd ../data-framed-autonomy/pddl_gen && mvn initialize && mvn install   # the generator (initialize installs the ProM jars)
+cd ../../framedinterface/planner && mvn install                       # ENHSP, downloaded and built from a fixed commit
+cd .. && mvn package                                                   # FrAIm; copies enhsp.jar and the generator into dependencies/
+java -jar target/framedinterface-1.0-launcher.jar                      # run it from this folder
+```
+
+Solved problems are cached in `~/.fraim/plan-cache`, so planning the same prefix on the same model again is instant.
+Delete that folder to clear the cache.
+
 ## Good to know
 - The planner currently supported is Fast-Downward, with A* and a fully blind heuristic.
 - The names of the different transition should be unique within a single process model (?)
