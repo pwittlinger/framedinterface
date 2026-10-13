@@ -224,6 +224,8 @@
                                        </children>
                                     </HBox>
                                     <Region maxWidth="20.0" HBox.hgrow="ALWAYS" />
+                                    <Label text="Recovery:" />
+                                    <ChoiceBox fx:id="recoveryStrategyChoice" prefWidth="110.0" styleClass="standard-choice-box" />
                                     <Button fx:id="buttonRunPlanner" mnemonicParsing="false" onAction="#onClickPlanner" styleClass="standard-button" text="Run Planner" />
                                     <Button fx:id="buttonPrefix" mnemonicParsing="false" onAction="#onClickPrefix" styleClass="standard-button" text="Reset" />
                                  </children>

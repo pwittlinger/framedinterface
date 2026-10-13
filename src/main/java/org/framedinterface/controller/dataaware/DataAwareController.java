@@ -41,6 +41,7 @@ import org.framedinterface.utils.EnhspPlanParser;
 import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
+import org.framedinterface.utils.enums.RecoveryStrategy;
 import org.controlsfx.control.ToggleSwitch;
 import org.deckfour.xes.extension.std.XConceptExtension;
 import org.deckfour.xes.extension.std.XLifecycleExtension;
@@ -100,6 +101,7 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TitledPane;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.control.cell.CheckBoxTableCell;
@@ -138,6 +140,8 @@ public class DataAwareController extends AbstractController {
 
 	@FXML
 	private TitledPane modelRegistryPane;
+	@FXML
+	private ChoiceBox<RecoveryStrategy> recoveryStrategyChoice;
 	@FXML
 	private TreeView<String> activitiesTreeView;
 	@FXML
@@ -402,6 +406,16 @@ public class DataAwareController extends AbstractController {
 
 		bttnDisplayViolations.setSelected(PlannerSession.getInstance().isDisplayViolations());
 
+		//How the planner recovers from violated constraints; the tooltip explains the selected strategy
+		recoveryStrategyChoice.getItems().setAll(RecoveryStrategy.values());
+		Tooltip recoveryStrategyTooltip = new Tooltip();
+		recoveryStrategyTooltip.setWrapText(true);
+		recoveryStrategyTooltip.setMaxWidth(350);
+		recoveryStrategyChoice.setTooltip(recoveryStrategyTooltip);
+		recoveryStrategyChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) ->
+				recoveryStrategyTooltip.setText(newValue == null ? "" : newValue + ": " + newValue.getDescription()));
+		recoveryStrategyChoice.getSelectionModel().select(RecoveryStrategy.RESET);
+
 		//Sets up the prefix selector with a single initial entry; this also reflects whatever trace/plan is already active in
 		//PlannerSession (e.g. carried over from Data-Agnostic), same as the updateTrace(null) it used to do here directly
 		setupPrefixSelector();
@@ -572,6 +586,12 @@ public class DataAwareController extends AbstractController {
 			AlertUtils.showWarning("Select at least one Declare model under Process Specifications before running the planner.");
 			return;
 		}
+		RecoveryStrategy recoveryStrategy = recoveryStrategyChoice.getSelectionModel().getSelectedItem();
+		File domainFile = RunEnhspTask.getDomainFile(currentPath, recoveryStrategy);
+		if (!domainFile.isFile()) { //Checked up front, rather than only after generating the PDDL problems
+			AlertUtils.showError("The PDDL domain for the recovery strategy \"" + recoveryStrategy + "\" was not found:\n" + domainFile.getAbsolutePath());
+			return;
+		}
 
 		//The selected prefix's latest edits only live in PlannerSession until it is synced back into its entry
 		if (selectedEntry != null) {
@@ -597,14 +617,14 @@ public class DataAwareController extends AbstractController {
 		loadProgressLayer();
 		setUiBusy(true, "Generating PDDL...");
 
-		GenerateDataAwarePDDLTask generatePDDLTask = new GenerateDataAwarePDDLTask(currentPath, declPaths, pnPaths, logFile.getAbsolutePath());
+		GenerateDataAwarePDDLTask generatePDDLTask = new GenerateDataAwarePDDLTask(currentPath, declPaths, pnPaths, logFile.getAbsolutePath(), recoveryStrategy);
 		generatePDDLTask.setOnCancelled(taskEvent -> setUiBusy(false, null));
 		generatePDDLTask.setOnFailed(taskEvent -> {
 			setUiBusy(false, null);
 			AlertUtils.showError("Generating PDDL failed: " + generatePDDLTask.getException().getMessage());
 		});
 		generatePDDLTask.setOnSucceeded(taskEvent -> {
-			RunEnhspTask runEnhspTask = new RunEnhspTask(currentPath, prefixCount);
+			RunEnhspTask runEnhspTask = new RunEnhspTask(currentPath, prefixCount, recoveryStrategy);
 			if (progressLayerController != null) {
 				progressLayerController.getProgressTextLabel().textProperty().bind(runEnhspTask.messageProperty());
 			}
@@ -1804,7 +1824,9 @@ public class DataAwareController extends AbstractController {
 			new Label("\t i) \tsync: A prefix event, replayed as is"),
 			new Label("\t ii) \tskip: A prefix event that none of the process models refer to"),
 			new Label("\t iii) \tadd: An event added by the planner, with the attribute values it chose"),
-			new Label("\t iv) \treset constraint: The constraint (or Petri net) was violated and is reset to its initial state"),
+			new Label("\t iv) \treset constraint: The constraint (or Petri net) was violated and is reset to its initial state (Reset recovery strategy)"),
+			new Label(""),
+			new Label("The Recovery strategy (next to Run Planner) decides how the planner handles violated constraints; hover over it for a description of the selected one."),
 			new Label(""),
 			new Label("Reset discards the selected prefix's plan (making the prefix editable again); pressing it again clears the prefix.")
 		);

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.framedinterface.utils.RunnerUtils;
+import org.framedinterface.utils.enums.RecoveryStrategy;
 
 import javafx.concurrent.Task;
 
@@ -28,12 +29,14 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 	private List<String> declPaths;
 	private List<String> pnPaths;
 	private String logPath;
+	private RecoveryStrategy recoveryStrategy;
 
-	public GenerateDataAwarePDDLTask(String currentPath, List<String> declPaths, List<String> pnPaths, String logPath) {
+	public GenerateDataAwarePDDLTask(String currentPath, List<String> declPaths, List<String> pnPaths, String logPath, RecoveryStrategy recoveryStrategy) {
 		this.currentPath = currentPath;
 		this.declPaths = declPaths;
 		this.pnPaths = pnPaths;
 		this.logPath = logPath;
+		this.recoveryStrategy = recoveryStrategy;
 	}
 
 	@Override
@@ -71,6 +74,8 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 		command.add(VARIABLE_SUBSTITUTIONS_FILE);
 		command.add("-c");
 		command.add(COST_MODEL_FILE);
+		command.add("--recovery");
+		command.add(recoveryStrategy.getCliValue());
 
 		int exitCode = RunnerUtils.runProcess(command, new File(currentPath), null);
 		if (exitCode != 0) {

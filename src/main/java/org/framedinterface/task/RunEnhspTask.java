@@ -6,32 +6,39 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.framedinterface.utils.RunnerUtils;
+import org.framedinterface.utils.enums.RecoveryStrategy;
 
 import javafx.concurrent.Task;
 
 /**
- * Runs the ENHSP planner on output/pddl/problem1.pddl ... problem<problemCount>.pddl, one after another, writing the
+ * Runs the ENHSP planner, with the recovery strategy's domain, on output/pddl/problem1.pddl ... problem<problemCount>.pddl, one after another, writing the
  * planner output for problem<i>.pddl to output/plans/plan<i>.txt.
  * The result is the list of problem numbers for which no plan was found.
  */
 public class RunEnhspTask extends Task<List<Integer>> {
 
 	public static final String ENHSP_JAR = "dependencies/enhsp.jar";
-	public static final String DOMAIN_FILE = "dependencies/domain_framed_autonomy_process_reset_time.pddl";
+	public static final String DOMAIN_FOLDER = "dependencies"; //Holds one PDDL domain per recovery strategy (see RecoveryStrategy.getDomainFileName)
 	public static final String PLAN_OUTPUT_FOLDER = "output/plans";
 
 	private String currentPath;
 	private int problemCount;
+	private RecoveryStrategy recoveryStrategy;
 
-	public RunEnhspTask(String currentPath, int problemCount) {
+	public RunEnhspTask(String currentPath, int problemCount, RecoveryStrategy recoveryStrategy) {
 		this.currentPath = currentPath;
 		this.problemCount = problemCount;
+		this.recoveryStrategy = recoveryStrategy;
+	}
+
+	public static File getDomainFile(String currentPath, RecoveryStrategy recoveryStrategy) {
+		return new File(currentPath, DOMAIN_FOLDER + "/" + recoveryStrategy.getDomainFileName());
 	}
 
 	@Override
 	protected List<Integer> call() throws Exception {
 		File jar = new File(currentPath, ENHSP_JAR);
-		File domain = new File(currentPath, DOMAIN_FILE);
+		File domain = getDomainFile(currentPath, recoveryStrategy);
 		if (!jar.isFile()) {
 			throw new Exception("ENHSP not found: " + jar.getAbsolutePath());
 		}
