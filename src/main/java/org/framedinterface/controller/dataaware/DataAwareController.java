@@ -15,13 +15,18 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.framedinterface.controller.ProgressLayerController;
 import org.framedinterface.controller.common.AbstractController;
@@ -94,16 +99,20 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Separator;
 import javafx.scene.control.Slider;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.TitledPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.TreeItem;
@@ -127,13 +136,17 @@ import javafx.util.Duration;
 import javafx.util.StringConverter;
 import netscape.javascript.JSObject;
 
-
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 
 public class DataAwareController extends AbstractController {
 
+	//Entries for the "Process Specifications" Table
+	// modelRegistryPane is the container (expandable, collapseable)
+	// Whereas the TableView contains the content of loaded Process models
+	@FXML
+	private TitledPane modelRegistryPane;
 	@FXML
 	private TableView<AbstractModel> modelTabelView;
 	@FXML
@@ -146,10 +159,7 @@ public class DataAwareController extends AbstractController {
 	//Tracks which process specifications are checked in modelTabelView, to later be used for populating the data-aware planner
 	private Map<AbstractModel, BooleanProperty> modelSelectionState = new HashMap<AbstractModel, BooleanProperty>();
 
-	@FXML
-	private TitledPane modelRegistryPane;
-	@FXML
-	private ChoiceBox<RecoveryStrategy> recoveryStrategyChoice;
+	// Entries for the Constraints table.
 	@FXML
 	private TitledPane constraintsPane;
 	@FXML
@@ -158,28 +168,58 @@ public class DataAwareController extends AbstractController {
 	private TreeTableColumn<ConstraintEntry, String> constraintNameColumn;
 	@FXML
 	private TreeTableColumn<ConstraintEntry, Double> constraintCostColumn;
-
-	private static final double DEFAULT_VIOLATION_COST = 1;
-	//Violation cost per Declare constraint (or per Petri net, keyed by its model), kept across refreshes of the Constraints pane; identity-keyed since
-	//DeclareConstraint.equals compares constraint strings, and the same constraint line in two models should still have independent costs
+	
+	private static final double DEFAULT_VIOLATION_COST = 100;
+	
+	//Violation cost per Process Model (DECLARE or Petri net, keyed by its model), kept across refreshes of the Constraints pane; identity-keyed since
+	//DeclareConstraint.equals only compares template and activities, and the same constraint in two models should still have independent costs
 	private Map<Object, DoubleProperty> violationCosts = new IdentityHashMap<Object, DoubleProperty>();
+
+	@FXML
+	private ChoiceBox<RecoveryStrategy> recoveryStrategyChoice;
+	
+
 	//Models whose constraints the user collapsed in the Constraints pane, so the pane keeps them collapsed when it is rebuilt
 	private Set<AbstractModel> collapsedConstraintModels = Collections.newSetFromMap(new IdentityHashMap<AbstractModel, Boolean>());
-	@FXML
-	private TreeView<String> activitiesTreeView;
+
+
+	// "Activities" overview
 	@FXML
 	private TitledPane activitiesAttributesPane;
 	@FXML
-	private TreeView<String> attributesTreeView;
+	private TreeTableView<ActivityEntry> activitiesTreeTableView;
 	@FXML
-	private TitledPane attributesPane;
+	private TreeTableColumn<ActivityEntry, String> activityNameColumn;
+	@FXML
+	private TreeTableColumn<ActivityEntry, Double> activityCostColumn;
+
+	private static final double DEFAULT_ACTIVITY_COST = 0;
+
+	//Cost per activity, keyed by its lowercased name (activities are merged case-insensitively across models), kept across refreshes of the Activities pane
+	private Map<String, DoubleProperty> activityCosts = new HashMap<String, DoubleProperty>();
+
+	//Rows of the Activities pane the user collapsed ("<activity>" or "<activity>/<group>", lowercased), so the pane keeps them collapsed when it is rebuilt
+	private Set<String> collapsedActivityRows = new HashSet<String>();
+
+	//Attributes (lowercased names) the user collapsed in the Attributes pane, so the pane keeps them collapsed when it is rebuilt
+	private Set<String> collapsedAttributeRows = new HashSet<String>();
 
 	//Unique (case-insensitive) activity labels, and their bound attributes (Declare models only), of the currently selected process specifications; refreshed by updateActivitiesListView()
 	private Map<String, Set<String>> activityToAttributes = new TreeMap<String, Set<String>>();
 
+
+	// "Attributes" overview
+	@FXML
+	private TitledPane attributesPane;
+	@FXML
+	private TreeView<String> attributesTreeView;
+
+
 	@FXML
 	private SplitPane resultsSplitPane;
 
+	// DECLARE viewer (top, middle) elements
+	// All of these elements go on the top half of the screen and is used to display and control the DECLARE viewer
 	@FXML
 	private ChoiceBox<AbstractModel> declModelChoice;
 	@FXML
@@ -193,6 +233,8 @@ public class DataAwareController extends AbstractController {
 	@FXML
 	private ToggleSwitch dataConditionsToggle;
 
+	// Petri net Viewer (bottom, middle)
+	//
 	@FXML
 	private ChoiceBox<AbstractModel> pnModelChoice;
 	@FXML
@@ -330,6 +372,19 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	//One row of the Activities pane: an activity (with its cost), one of its "Attributes"/"Models" groups, or an attribute / model within such a group
+	private static class ActivityEntry {
+		private final String label;
+		private final String tooltip; //null for none
+		private final DoubleProperty cost; //Only set for activity rows; shared with activityCosts, so edits outlive this entry
+
+		private ActivityEntry(String label, String tooltip, DoubleProperty cost) {
+			this.label = label;
+			this.tooltip = tooltip;
+			this.cost = cost;
+		}
+	}
+
 	//One prefix's worth of PlannerSession state: its manually-built events, their attribute values, and whatever planner continuation was generated from it
 	private static class PrefixEntry {
 		private List<String> prefixEvents = new ArrayList<String>();
@@ -354,29 +409,19 @@ public class DataAwareController extends AbstractController {
 		modelSelectColumn.setCellValueFactory(data -> getModelSelectedProperty(data.getValue()));
 		modelSelectColumn.setCellFactory(CheckBoxTableCell.forTableColumn(modelSelectColumn));
 
+		
+		selectedDecl.setVisible(false);
+		selectedDecl.setManaged(false);
+		selectedPN.setVisible(false);
+		selectedPN.setManaged(false);
+		prefixOnlyLabel.setVisible(false);
+		prefixOnlyLabel.setManaged(false);
+
 		//Constraints panel: the constraints of the currently selected process specifications, grouped by (collapsible) model; each Petri net counts as one constraint
 		constraintsTreeTableView.setPlaceholder(new Label("No process specifications selected"));
 		constraintNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getValue().getName()));
-		//Editable violation cost of each constraint row (Enter confirms); input that isn't a non-negative number is rejected and the previous cost shown again
-		constraintCostColumn.setCellValueFactory(data -> data.getValue().getValue().isModelRow()
-				? new ReadOnlyObjectWrapper<Double>(null)
-				: data.getValue().getValue().violationCost.asObject());
-		constraintCostColumn.setCellFactory(column -> new TextFieldTreeTableCell<ConstraintEntry, Double>(COST_CONVERTER) {
-			@Override
-			public void startEdit() {
-				TreeItem<ConstraintEntry> treeItem = getTreeTableRow() == null ? null : getTreeTableRow().getTreeItem();
-				if (treeItem != null && treeItem.getValue() != null && !treeItem.getValue().isModelRow()) { //Model rows have no cost of their own
-					super.startEdit();
-				}
-			}
-		});
-		constraintCostColumn.setOnEditCommit(event -> {
-			ConstraintEntry entry = event.getRowValue().getValue();
-			if (event.getNewValue() != null && !entry.isModelRow()) {
-				entry.violationCost.set(event.getNewValue());
-			}
-			constraintsTreeTableView.refresh();
-		});
+		setupCostColumn(constraintsTreeTableView, constraintCostColumn, entry -> entry.violationCost); //Model rows have no cost of their own
+		setupBulkCostEditing(constraintsTreeTableView, entry -> entry.violationCost, "constraint", "constraints"); //A selected model row stands for all of its constraints
 		constraintsTreeTableView.setRowFactory(treeTableView -> new TreeTableRow<ConstraintEntry>() {
 			@Override
 			protected void updateItem(ConstraintEntry item, boolean empty) {
@@ -385,8 +430,18 @@ public class DataAwareController extends AbstractController {
 			}
 		});
 
-		//Activities & Attributes panel: view-only tree of unique activity labels (with their bound attributes, if any) across the currently selected process specifications
-		activitiesTreeView.setShowRoot(false);
+		//Activities panel: the unique activities of the currently selected process specifications, each with its cost, its bound attributes (if any) and the models containing it
+		activitiesTreeTableView.setPlaceholder(new Label("No process specifications selected"));
+		activityNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getValue().label));
+		setupCostColumn(activitiesTreeTableView, activityCostColumn, entry -> entry.cost); //Only activity rows have a cost
+		setupBulkCostEditing(activitiesTreeTableView, entry -> entry.cost, "activity", "activities"); //A selected group/attribute/model row stands for its activity
+		activitiesTreeTableView.setRowFactory(treeTableView -> new TreeTableRow<ActivityEntry>() {
+			@Override
+			protected void updateItem(ActivityEntry item, boolean empty) {
+				super.updateItem(item, empty);
+				setTooltip(empty || item == null || item.tooltip == null ? null : new Tooltip(item.tooltip));
+			}
+		});
 		attributesTreeView.setShowRoot(false);
 		updateActivitiesListView();
 
@@ -667,14 +722,18 @@ public class DataAwareController extends AbstractController {
 	//data-aware PDDL generator, then runs ENHSP on each of them (output/plans/plan<i>.txt)
 	@FXML
 	private void onClickPlanner() {
+		String selectedDeclModels = "";
+		String selectedPnModels = "";
 		List<AbstractModel> plannedModels = getSelectedModels(); //In this order, as the generator names its (Petri net) constraints by position
 		List<String> declPaths = new ArrayList<String>();
 		List<String> pnPaths = new ArrayList<String>();
 		for (AbstractModel model : plannedModels) {
 			if (model.getModelType() == ModelType.DECLARE) {
 				declPaths.add(model.getFilePath());
+				selectedDeclModels = selectedDeclModels + model.getModelName() + "+";
 			} else if (model.getModelType() == ModelType.PN) {
 				pnPaths.add(model.getFilePath());
+				selectedPnModels = selectedPnModels + model.getModelName() + "+";
 			}
 		}
 		if (declPaths.isEmpty()) {
@@ -712,7 +771,7 @@ public class DataAwareController extends AbstractController {
 		loadProgressLayer();
 		setUiBusy(true, "Generating PDDL...");
 
-		GenerateDataAwarePDDLTask generatePDDLTask = new GenerateDataAwarePDDLTask(currentPath, declPaths, pnPaths, logFile.getAbsolutePath(), recoveryStrategy);
+		GenerateDataAwarePDDLTask generatePDDLTask = new GenerateDataAwarePDDLTask(currentPath, declPaths, pnPaths, logFile.getAbsolutePath(), recoveryStrategy, buildCostModelLines(), buildViolationCostLines(plannedModels));
 		generatePDDLTask.setOnCancelled(taskEvent -> setUiBusy(false, null));
 		generatePDDLTask.setOnFailed(taskEvent -> {
 			setUiBusy(false, null);
@@ -750,6 +809,25 @@ public class DataAwareController extends AbstractController {
 			startPlannerTask(runEnhspTask);
 		});
 		startPlannerTask(generatePDDLTask);
+
+
+		//prefixOnlyLabel.setVisible(false);
+		//prefixOnlyLabel.setManaged(false);
+		try {
+			selectedDecl.setText(selectedDeclModels);
+			selectedDecl.setVisible(true);
+			selectedDecl.setManaged(true);
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		
+		try {
+			selectedPN.setText(selectedPnModels);
+			selectedPN.setVisible(true);
+			selectedPN.setManaged(true);
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
 	}
 
 	//Replaces every prefix's continuation with its plan from output/plans/plan<i>.txt (prefix i), decoded with the generator's encodings,
@@ -806,11 +884,45 @@ public class DataAwareController extends AbstractController {
 		entry.planPresent = false;
 	}
 
-	//Gives every Declare constraint the name the PDDL generator uses for it: "<template>_<activation>[_<target>]" (spaces as "_"), with repeated
-	//names numbered "_2", "_3", ... across all Declare models passed to it, in order. Petri nets are named "pn" (single net) or "pn1", "pn2", ...
-	//(in the order passed). Returns, for the Petri nets, the reset activity their plan resets should replay (the Declare names are replayed as is).
+	//The name the PDDL generator gives each Declare constraint of the given models: "<template>_<activation>[_<target>]" (spaces as "_", activities
+	//spelled as in the model file), with repeated names numbered "_2", "_3", ... across all Declare models passed to it, in order.
+	//Activation and target are as in DeclareConstraint, i.e. already swapped for the Precedence templates ("Precedence[D, F]" -> "Precedence_F_D").
+	//Identity-keyed, since DeclareConstraint.equals only compares template and activities, and two models may contain the same constraint.
+	private static Map<DeclareConstraint, String> getPlannerConstraintNames(List<AbstractModel> plannedModels) {
+		Map<DeclareConstraint, String> plannerNames = new IdentityHashMap<DeclareConstraint, String>();
+		Map<String, Integer> nameCounts = new HashMap<String, Integer>(); //By lowercased name, as DeclareConstraint lowercases its activities
+		for (AbstractModel model : plannedModels) {
+			if (model instanceof DeclareModel) {
+				for (DeclareConstraint constraint : ((DeclareModel) model).getDeclareConstraints()) {
+					String activation = constraint.getActivationActivity();
+					String target = constraint.getTargetActivity();
+					//The original spelling only survives in the constraint line, e.g. "Precedence[ActivityD, ActivityF] |..."
+					Matcher argumentsMatcher = Pattern.compile("\\[(.*?)\\]").matcher(constraint.getConstraintString());
+					if (argumentsMatcher.find()) {
+						String[] arguments = argumentsMatcher.group(1).split(",");
+						if (arguments.length >= 2) {
+							boolean reversed = constraint.getTemplate().getReverseActivationTarget();
+							activation = (reversed ? arguments[1] : arguments[0]).trim();
+							target = (reversed ? arguments[0] : arguments[1]).trim();
+						} else if (arguments.length == 1) {
+							activation = arguments[0].trim();
+						}
+					}
+					String name = constraint.getTemplate().getTemplateName().replace(" ", "_") + "_" + activation
+							+ (target == null || target.isBlank() ? "" : "_" + target);
+					int count = nameCounts.merge(name.toLowerCase(), 1, Integer::sum);
+					plannerNames.put(constraint, count > 1 ? name + "_" + count : name);
+				}
+			}
+		}
+		return plannerNames;
+	}
+
+	//Gives every Declare constraint the name the PDDL generator uses for it (see getPlannerConstraintNames), so plan resets can be matched to it.
+	//Petri nets are named "pn" (single net) or "pn1", "pn2", ... (in the order passed). Returns, for the Petri nets, the reset activity their plan
+	//resets should replay (the Declare names are replayed as is).
 	private Map<String, String> assignPlannerConstraintNames(List<AbstractModel> plannedModels) {
-		Map<String, Integer> nameCounts = new HashMap<String, Integer>();
+		Map<DeclareConstraint, String> constraintNames = getPlannerConstraintNames(plannedModels);
 		List<PnModel> petriNets = new ArrayList<PnModel>();
 		for (AbstractModel model : ModelRegistry.getInstance().getModels()) {
 			if (model instanceof DeclareModel && !plannedModels.contains(model)) {
@@ -821,11 +933,7 @@ public class DataAwareController extends AbstractController {
 			if (model instanceof DeclareModel) {
 				Map<String, DeclareConstraint> plannerNames = new HashMap<String, DeclareConstraint>();
 				for (DeclareConstraint constraint : ((DeclareModel) model).getDeclareConstraints()) {
-					String name = constraint.getTemplate().getTemplateName().replace(" ", "_") + "_" + constraint.getActivationActivity()
-							+ (constraint.getTargetActivity() == null || constraint.getTargetActivity().isBlank() ? "" : "_" + constraint.getTargetActivity());
-					name = name.toLowerCase();
-					int count = nameCounts.merge(name, 1, Integer::sum);
-					plannerNames.put(count > 1 ? name + "_" + count : name, constraint);
+					plannerNames.put(constraintNames.get(constraint).toLowerCase(), constraint); //Looked up case-insensitively
 				}
 				((DeclareModel) model).setPlannerConstraintNames(plannerNames);
 			} else if (model instanceof PnModel) {
@@ -1214,6 +1322,40 @@ public class DataAwareController extends AbstractController {
 		pane.expandedProperty().addListener((observable, oldValue, expanded) -> VBox.setVgrow(pane, expanded ? Priority.ALWAYS : Priority.NEVER));
 	}
 
+	//Expands the specification panes on the left and every row within them (models, activities, their groups, attributes)
+	@FXML
+	private void onClickExpandAll() {
+		setSpecificationPanesExpanded(true);
+	}
+
+	//Collapses the specification panes on the left and every row within them, so they stay collapsed when the panes are opened again
+	@FXML
+	private void onClickCollapseAll() {
+		setSpecificationPanesExpanded(false);
+	}
+
+	private void setSpecificationPanesExpanded(boolean expanded) {
+		for (TitledPane pane : new TitledPane[] {modelRegistryPane, constraintsPane, activitiesAttributesPane, attributesPane}) {
+			pane.setExpanded(expanded);
+		}
+		setRowsExpanded(constraintsTreeTableView.getRoot(), expanded);
+		setRowsExpanded(activitiesTreeTableView.getRoot(), expanded);
+		setRowsExpanded(attributesTreeView.getRoot(), expanded);
+	}
+
+	//The (hidden) root itself stays expanded, otherwise none of its rows would be shown at all
+	private static void setRowsExpanded(TreeItem<?> root, boolean expanded) {
+		if (root == null) {
+			return;
+		}
+		for (TreeItem<?> child : root.getChildren()) {
+			if (!child.isLeaf()) {
+				child.setExpanded(expanded);
+				setRowsExpanded(child, expanded);
+			}
+		}
+	}
+
 	private BooleanProperty getModelSelectedProperty(AbstractModel model) {
 		return modelSelectionState.computeIfAbsent(model, m -> {
 			BooleanProperty selected = new SimpleBooleanProperty(false);
@@ -1222,13 +1364,16 @@ public class DataAwareController extends AbstractController {
 		});
 	}
 
-	//Refreshes the Activities & Attributes panel with the unique (case-insensitive) activity labels, and their bound attributes (Declare models only), of the currently selected process specifications
+	//Refreshes the Activities panel with the unique (case-insensitive) activities of the currently selected process specifications: each with its cost,
+	//its bound attributes (Declare models only) and the models containing it
 	private void updateActivitiesListView() {
 		activityToAttributes.clear();
+		Map<String, List<AbstractModel>> activityToModels = new HashMap<String, List<AbstractModel>>();
 		timestampFieldVisible = false;
 		for (AbstractModel model : getSelectedModels()) {
 			for (String activity : model.getActivities()) {
 				String activityLabel = activity.toLowerCase();
+				activityToModels.computeIfAbsent(activityLabel, a -> new ArrayList<AbstractModel>()).add(model);
 				Set<String> attributes = activityToAttributes.computeIfAbsent(activityLabel, a -> new TreeSet<String>());
 				if (model instanceof DeclareModel) {
 					for (String attribute : ((DeclareModel) model).getAttributesForActivity(activityLabel)) {
@@ -1241,19 +1386,32 @@ public class DataAwareController extends AbstractController {
 			}
 		}
 
-		TreeItem<String> activitiesRoot = new TreeItem<String>();
-		if (activityToAttributes.isEmpty()) {
-			activitiesRoot.getChildren().add(new TreeItem<String>("No process specifications selected")); //TreeView has no built-in placeholder support, unlike ListView/TableView
-		}
+		TreeItem<ActivityEntry> activitiesRoot = new TreeItem<ActivityEntry>();
 		for (Map.Entry<String, Set<String>> entry : activityToAttributes.entrySet()) {
-			TreeItem<String> activityItem = new TreeItem<String>(entry.getKey());
-			activityItem.setExpanded(true);
-			for (String attribute : entry.getValue()) {
-				activityItem.getChildren().add(new TreeItem<String>(attribute));
+			String activity = entry.getKey();
+			List<AbstractModel> models = activityToModels.get(activity);
+			String activityName = getActivityNameAsDefined(activity); //As spelled in the model files, which is what the planner works with
+			TreeItem<ActivityEntry> activityItem = new TreeItem<ActivityEntry>(new ActivityEntry(activityName, null, getActivityCost(activity)));
+
+			if (!entry.getValue().isEmpty()) {
+				TreeItem<ActivityEntry> attributesItem = new TreeItem<ActivityEntry>(new ActivityEntry("Attributes", null, null));
+				for (String attribute : entry.getValue()) {
+					attributesItem.getChildren().add(new TreeItem<ActivityEntry>(new ActivityEntry(attribute, null, null)));
+				}
+				keepExpansionState(attributesItem, collapsedActivityRows, activity + "/attributes");
+				activityItem.getChildren().add(attributesItem);
 			}
+			TreeItem<ActivityEntry> modelsItem = new TreeItem<ActivityEntry>(new ActivityEntry("Models", null, null));
+			for (AbstractModel model : models) {
+				modelsItem.getChildren().add(new TreeItem<ActivityEntry>(new ActivityEntry(model.getModelName(), model.getFilePath(), null)));
+			}
+			keepExpansionState(modelsItem, collapsedActivityRows, activity + "/models");
+			activityItem.getChildren().add(modelsItem);
+
+			keepExpansionState(activityItem, collapsedActivityRows, activity);
 			activitiesRoot.getChildren().add(activityItem);
 		}
-		activitiesTreeView.setRoot(activitiesRoot);
+		activitiesTreeTableView.setRoot(activitiesRoot); //An empty root shows the placeholder
 
 		planListView.refresh(); //Already-rendered prefix events need to re-check attribute availability now that the selected models (and thus known attributes) may have changed
 		updateConstraintsTableView();
@@ -1284,6 +1442,170 @@ public class DataAwareController extends AbstractController {
 			constraintsRoot.getChildren().add(modelItem);
 		}
 		constraintsTreeTableView.setRoot(constraintsRoot); //An empty root shows the placeholder
+	}
+
+	//Makes costColumn show and edit the cost of each row that has one (costOf returns null for rows without): Enter confirms, and input that
+	//isn't a non-negative number is rejected, showing the previous cost again
+	private static <T> void setupCostColumn(TreeTableView<T> treeTableView, TreeTableColumn<T, Double> costColumn, Function<T, DoubleProperty> costOf) {
+		costColumn.setCellValueFactory(data -> {
+			DoubleProperty cost = data.getValue().getValue() == null ? null : costOf.apply(data.getValue().getValue());
+			return cost == null ? new ReadOnlyObjectWrapper<Double>(null) : cost.asObject();
+		});
+		costColumn.setCellFactory(column -> new TextFieldTreeTableCell<T, Double>(COST_CONVERTER) {
+			@Override
+			public void startEdit() {
+				TreeItem<T> treeItem = getTreeTableRow() == null ? null : getTreeTableRow().getTreeItem();
+				if (treeItem != null && treeItem.getValue() != null && costOf.apply(treeItem.getValue()) != null) {
+					super.startEdit();
+				}
+			}
+		});
+		costColumn.setOnEditCommit(event -> {
+			DoubleProperty cost = costOf.apply(event.getRowValue().getValue());
+			if (event.getNewValue() != null && cost != null) {
+				cost.set(event.getNewValue());
+			}
+			treeTableView.refresh();
+		});
+	}
+
+	//Sets the cost of the selected constraints, or of all constraints if none are selected
+	@FXML
+	private void onClickSetConstraintCosts() {
+		promptCostsOfSelectionOrAll(constraintsTreeTableView, entry -> entry.violationCost, "constraint", "constraints");
+	}
+
+	//Sets the cost of the selected activities, or of all activities if none are selected
+	@FXML
+	private void onClickSetActivityCosts() {
+		promptCostsOfSelectionOrAll(activitiesTreeTableView, entry -> entry.cost, "activity", "activities");
+	}
+
+	//Lets several rows of the tree be selected, and adds a context menu to set the cost of the selected / all items (e.g. "constraints") at once
+	private <T> void setupBulkCostEditing(TreeTableView<T> treeTableView, Function<T, DoubleProperty> costOf, String itemName, String itemsName) {
+		treeTableView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+		String capitalizedItems = Character.toUpperCase(itemsName.charAt(0)) + itemsName.substring(1);
+		MenuItem setSelectedCostsItem = new MenuItem("Set Cost of Selected " + capitalizedItems + "...");
+		setSelectedCostsItem.setOnAction(event -> promptCosts(treeTableView, getCosts(treeTableView, costOf, true), "the selected", itemName, itemsName));
+		MenuItem setAllCostsItem = new MenuItem("Set Cost of All " + capitalizedItems + "...");
+		setAllCostsItem.setOnAction(event -> promptCosts(treeTableView, getCosts(treeTableView, costOf, false), "all", itemName, itemsName));
+		ContextMenu contextMenu = new ContextMenu(setSelectedCostsItem, setAllCostsItem);
+		contextMenu.setOnShowing(event -> setSelectedCostsItem.setDisable(treeTableView.getSelectionModel().getSelectedItems().isEmpty()));
+		treeTableView.setContextMenu(contextMenu);
+	}
+
+	private <T> void promptCostsOfSelectionOrAll(TreeTableView<T> treeTableView, Function<T, DoubleProperty> costOf, String itemName, String itemsName) {
+		List<DoubleProperty> selectedCosts = getCosts(treeTableView, costOf, true);
+		if (selectedCosts.isEmpty()) {
+			promptCosts(treeTableView, getCosts(treeTableView, costOf, false), "all", itemName, itemsName);
+		} else {
+			promptCosts(treeTableView, selectedCosts, "the selected", itemName, itemsName);
+		}
+	}
+
+	//The costs of the selected rows (or of all rows), each once. A row without a cost of its own stands for the nearest ancestor that has one
+	//(e.g. an activity's attribute/model rows) or, failing that, for all descendants that have one (e.g. a model row for its constraints)
+	private static <T> List<DoubleProperty> getCosts(TreeTableView<T> treeTableView, Function<T, DoubleProperty> costOf, boolean selectedOnly) {
+		List<TreeItem<T>> rows = new ArrayList<TreeItem<T>>();
+		if (selectedOnly) {
+			rows.addAll(treeTableView.getSelectionModel().getSelectedItems());
+		} else if (treeTableView.getRoot() != null) {
+			rows.addAll(treeTableView.getRoot().getChildren());
+		}
+		Set<DoubleProperty> costs = new LinkedHashSet<DoubleProperty>(); //Identity-based (properties don't override equals)
+		for (TreeItem<T> row : rows) {
+			DoubleProperty ownOrAncestorCost = null;
+			for (TreeItem<T> item = row; item != null && ownOrAncestorCost == null; item = item.getParent()) {
+				ownOrAncestorCost = item.getValue() == null ? null : costOf.apply(item.getValue());
+			}
+			if (ownOrAncestorCost != null) {
+				costs.add(ownOrAncestorCost);
+			} else if (row != null) {
+				addDescendantCosts(row, costOf, costs);
+			}
+		}
+		return new ArrayList<DoubleProperty>(costs);
+	}
+
+	private static <T> void addDescendantCosts(TreeItem<T> item, Function<T, DoubleProperty> costOf, Set<DoubleProperty> costs) {
+		for (TreeItem<T> child : item.getChildren()) {
+			DoubleProperty cost = child.getValue() == null ? null : costOf.apply(child.getValue());
+			if (cost != null) {
+				costs.add(cost);
+			} else {
+				addDescendantCosts(child, costOf, costs);
+			}
+		}
+	}
+
+	//Asks for a cost (pre-filled if the given costs are currently equal) and sets all of them to it; scope (e.g. "the selected"/"all") is only used in the prompt
+	private void promptCosts(TreeTableView<?> treeTableView, List<DoubleProperty> costs, String scope, String itemName, String itemsName) {
+		if (costs.isEmpty()) {
+			AlertUtils.showWarning("There are no " + itemsName + " to set the cost of. Select process specifications under Process Specifications first.");
+			return;
+		}
+		double firstCost = costs.get(0).get();
+		boolean sharedCost = costs.stream().allMatch(cost -> cost.get() == firstCost);
+
+		TextInputDialog dialog = new TextInputDialog(sharedCost ? COST_CONVERTER.toString(firstCost) : "");
+		dialog.setTitle("Set " + Character.toUpperCase(itemName.charAt(0)) + itemName.substring(1) + " Costs");
+		dialog.setHeaderText("Set the cost of " + scope + " " + costs.size() + " " + (costs.size() == 1 ? itemName : itemsName)
+				+ (sharedCost ? "" : System.lineSeparator() + "(their costs currently differ)"));
+		dialog.setContentText("Cost:");
+		dialog.initOwner(getStage());
+		dialog.getDialogPane().getStylesheets().add("/org/framedinterface/dialogPane.css");
+		dialog.getDialogPane().lookupButton(ButtonType.OK).disableProperty().bind(Bindings.createBooleanBinding(
+				() -> COST_CONVERTER.fromString(dialog.getEditor().getText()) == null, dialog.getEditor().textProperty())); //Only non-negative numbers
+
+		dialog.showAndWait().map(COST_CONVERTER::fromString).ifPresent(newCost -> {
+			costs.forEach(cost -> cost.set(newCost));
+			treeTableView.refresh();
+		});
+	}
+
+	//The cost model handed to the PDDL generator: one "<ActivityName> <activityCost> 0" line per activity of the Activities pane (i.e. of the selected
+	//process specifications), spelled as in the model files, since the generator matches activity names case-sensitively
+	private List<String> buildCostModelLines() {
+		List<String> lines = new ArrayList<String>();
+		for (String activity : activityToAttributes.keySet()) {
+			lines.add(getActivityNameAsDefined(activity) + " " + COST_CONVERTER.toString(getActivityCost(activity).get()) + " 0");
+		}
+		return lines;
+	}
+
+	//The violation costs handed to the PDDL generator, from the Constraints pane: "<model file>|<constraint name> <cost>" per Declare constraint
+	//(named as the generator names it, see getPlannerConstraintNames) and "<model file> <cost>" per Petri net
+	private List<String> buildViolationCostLines(List<AbstractModel> plannedModels) {
+		Map<DeclareConstraint, String> constraintNames = getPlannerConstraintNames(plannedModels);
+		List<String> lines = new ArrayList<String>();
+		for (AbstractModel model : plannedModels) {
+			String modelFileName = Paths.get(model.getFilePath()).getFileName().toString();
+			if (model instanceof DeclareModel) {
+				for (DeclareConstraint constraint : ((DeclareModel) model).getDeclareConstraints()) {
+					lines.add(modelFileName + "|" + constraintNames.get(constraint) + " " + COST_CONVERTER.toString(getViolationCost(constraint).get()));
+				}
+			} else if (model instanceof PnModel) {
+				lines.add(modelFileName + " " + COST_CONVERTER.toString(getViolationCost(model).get()));
+			}
+		}
+		return lines;
+	}
+
+	//Cost of an activity (case-insensitive); DEFAULT_ACTIVITY_COST until edited in the Activities pane
+	private DoubleProperty getActivityCost(String activity) {
+		return activityCosts.computeIfAbsent(activity.toLowerCase(), key -> new SimpleDoubleProperty(DEFAULT_ACTIVITY_COST));
+	}
+
+	//Restores whether the user had collapsed the row with the given key, and keeps track of it from now on
+	private static void keepExpansionState(TreeItem<?> item, Set<String> collapsedKeys, String key) {
+		item.setExpanded(!collapsedKeys.contains(key));
+		item.expandedProperty().addListener((observable, oldValue, expanded) -> {
+			if (expanded) {
+				collapsedKeys.remove(key);
+			} else {
+				collapsedKeys.add(key);
+			}
+		});
 	}
 
 	//Violation cost of a Declare constraint, or of a Petri net (keyed by its model); DEFAULT_VIOLATION_COST until edited in the Constraints pane
@@ -1328,7 +1650,7 @@ public class DataAwareController extends AbstractController {
 		}
 		for (Map.Entry<String, AttributeDomain> entry : mergedDomains.entrySet()) {
 			TreeItem<String> attributeItem = new TreeItem<String>(entry.getKey());
-			attributeItem.setExpanded(true);
+			keepExpansionState(attributeItem, collapsedAttributeRows, entry.getKey().toLowerCase());
 			attributeItem.getChildren().add(new TreeItem<String>(entry.getValue().describe()));
 			attributesRoot.getChildren().add(attributeItem);
 		}

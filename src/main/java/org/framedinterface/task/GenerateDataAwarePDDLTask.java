@@ -1,6 +1,7 @@
 package org.framedinterface.task;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,7 +23,10 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 	//Written by the generator alongside the problems; needed to decode the planner's output (activity and value encodings)
 	public static final String VARIABLE_VALUES_FILE = OUTPUT_FOLDER + "/variable_values.txt";
 	public static final String VARIABLE_SUBSTITUTIONS_FILE = OUTPUT_FOLDER + "/variable_substitutions.txt";
+	//Written by this task (rather than the generator) from the activity costs set on the Data-Aware page, one "<ActivityName> <activityCost> 0" line per activity
 	public static final String COST_MODEL_FILE = OUTPUT_FOLDER + "/cost_model.txt";
+	//Written by this task from the constraint costs set on the Data-Aware page: "<model file>|<constraint name> <cost>" per Declare constraint, "<model file> <cost>" per Petri net
+	public static final String VIOLATION_COST_FILE = OUTPUT_FOLDER + "/violation_costs.txt";
 	public static final String ACTIVITY_MAPPING_FILE_PATTERN = "activityMapping_.*\\.txt"; //One per model, in OUTPUT_FOLDER
 
 	private String currentPath;
@@ -30,13 +34,18 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 	private List<String> pnPaths;
 	private String logPath;
 	private RecoveryStrategy recoveryStrategy;
+	private List<String> costModelLines;
+	private List<String> violationCostLines;
 
-	public GenerateDataAwarePDDLTask(String currentPath, List<String> declPaths, List<String> pnPaths, String logPath, RecoveryStrategy recoveryStrategy) {
+	public GenerateDataAwarePDDLTask(String currentPath, List<String> declPaths, List<String> pnPaths, String logPath, RecoveryStrategy recoveryStrategy,
+			List<String> costModelLines, List<String> violationCostLines) {
 		this.currentPath = currentPath;
 		this.declPaths = declPaths;
 		this.pnPaths = pnPaths;
 		this.logPath = logPath;
 		this.recoveryStrategy = recoveryStrategy;
+		this.costModelLines = costModelLines;
+		this.violationCostLines = violationCostLines;
 	}
 
 	@Override
@@ -46,14 +55,16 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 			throw new Exception("PDDL generator not found: " + jar.getAbsolutePath());
 		}
 
-		//Files left over from a previous run must not be mistaken for the ones generated now. This includes the variable/cost files,
+		//Files left over from a previous run must not be mistaken for the ones generated now. This includes the variable files,
 		//which the generator only creates if they don't exist yet (and would otherwise silently reuse for different models)
 		deleteFiles(new File(currentPath, PDDL_OUTPUT_FOLDER), "problem\\d+\\.pddl");
 		deleteFiles(new File(currentPath, OUTPUT_FOLDER), ACTIVITY_MAPPING_FILE_PATTERN);
 		new File(currentPath, VARIABLE_VALUES_FILE).delete();
 		new File(currentPath, VARIABLE_SUBSTITUTIONS_FILE).delete();
-		new File(currentPath, COST_MODEL_FILE).delete();
 		new File(currentPath, OUTPUT_FOLDER).mkdirs();
+		//The generator reads an existing cost model instead of creating its default one
+		Files.write(new File(currentPath, COST_MODEL_FILE).toPath(), costModelLines);
+		Files.write(new File(currentPath, VIOLATION_COST_FILE).toPath(), violationCostLines);
 
 		ArrayList<String> command = new ArrayList<String>();
 		command.add("java");
@@ -76,6 +87,8 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 		command.add(COST_MODEL_FILE);
 		command.add("--recovery");
 		command.add(recoveryStrategy.getCliValue());
+		command.add("--violation_cost_file");
+		command.add(VIOLATION_COST_FILE); //Relative to the working directory, like the files above
 
 		int exitCode = RunnerUtils.runProcess(command, new File(currentPath), null);
 		if (exitCode != 0) {

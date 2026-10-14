@@ -35,6 +35,15 @@
                <children>
                   <VBox styleClass="section-box section-box--main-parameters">
                      <children>
+                        <HBox alignment="CENTER_RIGHT" spacing="4.0">
+                           <children>
+                              <Button fx:id="expandAllButton" mnemonicParsing="false" onAction="#onClickExpandAll" styleClass="standard-button" text="Expand All" />
+                              <Button fx:id="collapseAllButton" mnemonicParsing="false" onAction="#onClickCollapseAll" styleClass="standard-button" text="Collapse All" />
+                           </children>
+                           <padding>
+                              <Insets bottom="4.0" right="4.0" top="4.0" />
+                           </padding>
+                        </HBox>
                         <TitledPane fx:id="modelRegistryPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Process Specifications" VBox.vgrow="ALWAYS">
                            <content>
                               <TableView fx:id="modelTabelView" editable="true" maxHeight="1.7976931348623157E308">
@@ -55,24 +64,54 @@
                         </TitledPane>
                         <TitledPane fx:id="constraintsPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Constraints" VBox.vgrow="ALWAYS">
                            <content>
-                              <TreeTableView fx:id="constraintsTreeTableView" editable="true" maxHeight="1.7976931348623157E308" showRoot="false">
-                                <columns>
-                                  <TreeTableColumn fx:id="constraintNameColumn" editable="false" prefWidth="215.0" sortable="false" text="Constraint" />
-                                  <TreeTableColumn fx:id="constraintCostColumn" maxWidth="50.0" minWidth="45.0" prefWidth="45.0" sortable="false" style="-fx-alignment: CENTER-RIGHT;" text="Cost" />
-                                </columns>
-                                 <columnResizePolicy>
-                                    <TreeTableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
-                                 </columnResizePolicy>
-                                 <styleClass>
-                                    <String fx:value="table-padding" />
-                                    <String fx:value="hidden-scroll-bar--horizontal" />
-                                 </styleClass>
-                              </TreeTableView>
+                              <VBox spacing="4.0">
+                                 <children>
+                                    <TreeTableView fx:id="constraintsTreeTableView" editable="true" maxHeight="1.7976931348623157E308" showRoot="false" VBox.vgrow="ALWAYS">
+                                      <columns>
+                                        <TreeTableColumn fx:id="constraintNameColumn" editable="false" prefWidth="215.0" sortable="false" text="Constraint" />
+                                        <TreeTableColumn fx:id="constraintCostColumn" maxWidth="50.0" minWidth="45.0" prefWidth="45.0" sortable="false" style="-fx-alignment: CENTER-RIGHT;" text="Cost" />
+                                      </columns>
+                                       <columnResizePolicy>
+                                          <TreeTableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
+                                       </columnResizePolicy>
+                                       <styleClass>
+                                          <String fx:value="table-padding" />
+                                          <String fx:value="hidden-scroll-bar--horizontal" />
+                                       </styleClass>
+                                    </TreeTableView>
+                                    <HBox alignment="CENTER_RIGHT">
+                                       <children>
+                                          <Button fx:id="setConstraintCostsButton" mnemonicParsing="false" onAction="#onClickSetConstraintCosts" styleClass="standard-button" text="Set Cost..." />
+                                       </children>
+                                    </HBox>
+                                 </children>
+                              </VBox>
                            </content>
                         </TitledPane>
                         <TitledPane fx:id="activitiesAttributesPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Activities" VBox.vgrow="ALWAYS">
                            <content>
-                              <TreeView fx:id="activitiesTreeView" maxHeight="1.7976931348623157E308" />
+                              <VBox spacing="4.0">
+                                 <children>
+                                    <TreeTableView fx:id="activitiesTreeTableView" editable="true" maxHeight="1.7976931348623157E308" showRoot="false" VBox.vgrow="ALWAYS">
+                                      <columns>
+                                        <TreeTableColumn fx:id="activityNameColumn" editable="false" prefWidth="215.0" sortable="false" text="Activity" />
+                                        <TreeTableColumn fx:id="activityCostColumn" maxWidth="50.0" minWidth="45.0" prefWidth="45.0" sortable="false" style="-fx-alignment: CENTER-RIGHT;" text="Cost" />
+                                      </columns>
+                                       <columnResizePolicy>
+                                          <TreeTableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
+                                       </columnResizePolicy>
+                                       <styleClass>
+                                          <String fx:value="table-padding" />
+                                          <String fx:value="hidden-scroll-bar--horizontal" />
+                                       </styleClass>
+                                    </TreeTableView>
+                                    <HBox alignment="CENTER_RIGHT">
+                                       <children>
+                                          <Button fx:id="setActivityCostsButton" mnemonicParsing="false" onAction="#onClickSetActivityCosts" styleClass="standard-button" text="Set Cost..." />
+                                       </children>
+                                    </HBox>
+                                 </children>
+                              </VBox>
                            </content>
                         </TitledPane>
                         <TitledPane fx:id="attributesPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Attributes" VBox.vgrow="ALWAYS">

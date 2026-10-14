@@ -1,0 +1,10 @@
+c3 2
+c1 0
+c2 1
+integer1000 100
+integer50 5
+integer600 60
+integer00 0
+integer150 15
+integer100 10
+integer200 20
