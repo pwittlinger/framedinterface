@@ -5,9 +5,15 @@ import java.util.Map;
 import org.framedinterface.utils.enums.MonitoringState;
 
 public class EventData {
+	private static final Map<MonitoringState, Integer> EMPTY_MONITORING_STATE_COUNTS = Map.of(
+			MonitoringState.SAT, 0,
+			MonitoringState.POSS_SAT, 0,
+			MonitoringState.POSS_VIOL, 0,
+			MonitoringState.VIOL, 0);
+
 	private int eventNumber; //Event number in the trace
 	private String activityName;
-	private Map<MonitoringState, Integer> declMonitoringStateCounts;
+	private Map<MonitoringState, Integer> declMonitoringStateCounts = EMPTY_MONITORING_STATE_COUNTS;
 	private String plannerAction;
 	private Map<String, String> attributeValues; //Attribute name -> value, manually attached by the user; only populated for editable (prefix, no plan present) events
 	private int timelineIndex; //Position of this event in the replayed (timeline) trace; differs from eventNumber when the list isn't the replayed trace itself (e.g. prefix events while a plan is replayed)
