@@ -246,8 +246,9 @@ public class DataAgnosticController extends AbstractController {
 		selectedPN.setManaged(false);
 
 		//Enable and disable timelineControls and resultsSplitPane based on if there are input models or not
-		resultsSplitPane.setDisable(true);
-		timelineControls.setDisable(true);
+		//(models may already be loaded on Process Frame Overview by the time this page is first opened, so this can't just default to disabled)
+		resultsSplitPane.setDisable(ModelRegistry.getInstance().getModels().isEmpty());
+		timelineControls.setDisable(ModelRegistry.getInstance().getModels().isEmpty());
 		ModelRegistry.getInstance().getModels().addListener(new InvalidationListener() {
 			@Override
 			public void invalidated(Observable observable) {
@@ -347,8 +348,11 @@ public class DataAgnosticController extends AbstractController {
 		});
 		
 		//All cells in planListView are handled by EventCell class
-		planListView.setCellFactory(value -> new EventCell(selectionCallback));	
+		planListView.setCellFactory(value -> new EventCell(selectionCallback));
 
+		//Models may already be loaded when this page is first opened; the model ChoiceBox items listeners above only react to later changes
+		declModelChoice.getSelectionModel().selectFirst();
+		pnModelChoice.getSelectionModel().selectFirst();
 	}
 
     @FXML

@@ -36,10 +36,12 @@ public class NavigationSidebarController extends AbstractController {
 		this.navigationCallback = navigationCallback;
 	}
 
+	/*
 	@FXML
 	private void openDataAgnostic() {
 		handleNavigation(PageType.DATA_AGNOSTIC);
 	}
+	*/
 
 	@FXML
 	private void openDataAware() {
@@ -64,10 +66,12 @@ public class NavigationSidebarController extends AbstractController {
 			currentlyHighlighted.pseudoClassStateChanged(highlightedClass, false);
 		}
 		switch (pageType) {
+		/*
 		case DATA_AGNOSTIC:
 			dataAgnosticButton.pseudoClassStateChanged(highlightedClass, true);
 			currentlyHighlighted = dataAgnosticButton;
 			break;
+		*/
 		case DATA_AWARE:
 			dataAwareButton.pseudoClassStateChanged(highlightedClass, true);
 			currentlyHighlighted = dataAwareButton;
