@@ -1,12 +1,12 @@
-package org.framedinterface.controller;
+package org.framedinterface.controller.dataagnostic;
 
-import java.io.BufferedInputStream;
+import org.framedinterface.controller.ProgressLayerController;
+import org.framedinterface.controller.common.AbstractController;
+
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,23 +17,18 @@ import java.util.function.Consumer;
 
 import org.framedinterface.model.AbstractModel;
 import org.framedinterface.model.DeclareModel;
+import org.framedinterface.model.ModelRegistry;
 import org.framedinterface.model.ModelType;
+import org.framedinterface.model.PlannerSession;
 import org.framedinterface.model.PnModel;
 import org.framedinterface.task.GeneratePDDLTask;
 import org.framedinterface.task.RunPlannerTask;
 import org.framedinterface.utils.AlertUtils;
 import org.framedinterface.utils.FileUtils;
-import org.framedinterface.utils.ModelUtils;
 import org.framedinterface.utils.TranslationUtils;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
 import org.kordamp.ikonli.javafx.FontIcon;
-import org.processmining.datapetrinets.DataPetriNetsWithMarkings;
-import org.processmining.datapetrinets.io.DPNIOException;
-import org.processmining.datapetrinets.io.DataPetriNetImporter;
-import org.processmining.models.graphbased.directed.petrinet.Petrinet;
-import org.processmining.models.semantics.petrinet.PetrinetSemantics;
-import org.processmining.models.semantics.petrinet.impl.PetrinetSemanticsFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -42,15 +37,12 @@ import org.w3c.dom.events.EventTarget;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
-import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.animation.Animation.Status;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ObjectProperty;
-import javafx.beans.property.ReadOnlyObjectWrapper;
-import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
@@ -65,11 +57,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.Slider;
 import javafx.scene.control.SplitPane;
-import javafx.scene.control.TableCell;
-import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
-import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
@@ -77,7 +65,6 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.web.WebView;
 import javafx.stage.Popup;
-import javafx.stage.Stage;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
 import netscape.javascript.JSObject;
@@ -93,7 +80,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 
-public class InitialController {
+public class DataAgnosticController extends AbstractController {
 	
 	@FXML 
 	private StackPane rootElement;
@@ -105,15 +92,6 @@ public class InitialController {
 
     @FXML
     private Label labelCost;
-
-	@FXML
-	private TableView<AbstractModel> modelTabelView;
-	@FXML
-	private TableColumn<AbstractModel, String> modelNameColumn;
-	@FXML
-	private TableColumn<AbstractModel, String> modelTypeColumn;
-	@FXML
-	private TableColumn<AbstractModel, AbstractModel> modelRemoveColumn;
 
 	@FXML
     //private ListView<String> planListView;
@@ -139,9 +117,6 @@ public class InitialController {
 
     @FXML
     private TextField textFieldPrefix;
-
-    @FXML
-    private Button uploadModel;
 
     @FXML
     private Font x1;
@@ -231,7 +206,6 @@ public class InitialController {
 	private ObjectProperty<Double> declWebViewZoomObject;
 	private ObjectProperty<Double> pnWebViewZoomObject;
 
-	private int modelCounter = 0; //For unique model identifiers, needed to reliably determine which model was clicked in the visualization (not an ideal solution)
 	private List<String> tracePrefix = new ArrayList<String>(); //Trace prefix entered by the user, starting out with an empty trace
 
 	private Timeline animationTimeline; //Controls eventSlider movement during animation
@@ -243,7 +217,6 @@ public class InitialController {
 
 
 	List<VBox> resultsList;
-    private Stage stage;
 	private ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 	private int defaultViolationCost = 3;
 	private String declPath;
@@ -252,15 +225,7 @@ public class InitialController {
 	private String finMarking;
 	private boolean resetDomain;
 	private boolean violatedDomain;
-	private boolean displayViolations;
 	private static String framedAutonomyJar = "FramedAutonomyTool.jar";
-	private ArrayList<String> currentPlan;
-	private ArrayList<String> currentPrefix;
-	private boolean planPresent;
-
-	public void setStage(Stage stage) {
-		this.stage = stage;
-	}
 
 	@FXML
 	private void initialize() {
@@ -269,85 +234,32 @@ public class InitialController {
 		resetDomain = true;
 		buttonResetYes.setSelected(true);
 		
-		displayViolations = false;
-		planPresent = false;
+		PlannerSession.getInstance().setDisplayViolations(false);
+		PlannerSession.getInstance().setPlanPresent(false);
 		currentPath = Paths.get(".").toAbsolutePath().normalize().toString();
-		currentPlan = new ArrayList<>();
-		currentPrefix = new ArrayList<>();
-		
+		PlannerSession.getInstance().setCurrentPlan(new ArrayList<>());
+		PlannerSession.getInstance().setCurrentPrefix(new ArrayList<>());
+
 		selectedDecl.setVisible(false);
 		selectedDecl.setManaged(false);
 		selectedPN.setVisible(false);
 		selectedPN.setManaged(false);
-		
-		modelTabelView.setPlaceholder(new Label("No process specifications selected"));
-		modelNameColumn.setCellFactory(TextFieldTableCell.forTableColumn());
-		modelNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelName()));
-		modelTypeColumn.setCellFactory(TextFieldTableCell.forTableColumn());
-		modelTypeColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelType().toString()));
-		
-		modelRemoveColumn.setCellValueFactory(
-				param -> new ReadOnlyObjectWrapper<AbstractModel>(param.getValue())
-				);
-		modelRemoveColumn.setCellFactory(param -> new TableCell<AbstractModel, AbstractModel>() {
-			private final Button removeButton = new Button();
-			private FontIcon deleteFontIcon = new FontIcon("fa-trash");
-			
-			@Override
-			protected void updateItem(AbstractModel item, boolean empty) {
-				super.updateItem(item, empty);
-
-				if (item == null) {
-					setGraphic(null);
-					return;
-				}
-				
-				if (!removeButton.getStyleClass().contains("action-cell__button")) {
-					removeButton.getStyleClass().add("action-cell__button");
-					deleteFontIcon.getStyleClass().add("action-cell__delete-icon");
-					removeButton.setGraphic(deleteFontIcon);
-				}
-
-				setGraphic(removeButton);
-				removeButton.setOnAction(
-						event -> {getTableView().getItems().remove(item);
-						updateSelectedModelVisualizations();}
-						);
-			}
-		});
-
-		//Switch visualized model by selecting it in modelTableView
-		modelTabelView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
-			if (newValue != null) {
-				if (newValue.getModelType() == ModelType.DECLARE) {
-					declModelChoice.getSelectionModel().select(newValue);
-					declPath = newValue.getFilePath();
-				} else if (newValue.getModelType() == ModelType.PN) {
-					pnModelChoice.getSelectionModel().select(newValue);
-					petrinetPath = newValue.getFilePath();
-					PnModel p_ = (PnModel) newValue;
-					finMarking = p_.finalMarking;
-					labelFinalMarking.setText(finMarking);
-				}
-				//modelTableView.getSelectionModel().clearSelection(); //Causes a weird IndexOutOfBoundsException exception
-			}
-		});
 
 		//Enable and disable timelineControls and resultsSplitPane based on if there are input models or not
 		resultsSplitPane.setDisable(true);
 		timelineControls.setDisable(true);
-		modelTabelView.getItems().addListener(new InvalidationListener() {
+		ModelRegistry.getInstance().getModels().addListener(new InvalidationListener() {
 			@Override
 			public void invalidated(Observable observable) {
-				resultsSplitPane.setDisable(modelTabelView.getItems().isEmpty());
-				timelineControls.setDisable(modelTabelView.getItems().isEmpty());
+				resultsSplitPane.setDisable(ModelRegistry.getInstance().getModels().isEmpty());
+				timelineControls.setDisable(ModelRegistry.getInstance().getModels().isEmpty());
 			}
 		});
 
 
 		//Setting up model ChoiceBoxes
-		declModelChoice.setItems(new FilteredList<AbstractModel>(modelTabelView.getItems(), item -> item.getModelType()==ModelType.DECLARE));
-		pnModelChoice.setItems(new FilteredList<AbstractModel>(modelTabelView.getItems(), item -> item.getModelType()==ModelType.PN));
+		declModelChoice.setItems(new FilteredList<AbstractModel>(ModelRegistry.getInstance().getModels(), item -> item.getModelType()==ModelType.DECLARE));
+		pnModelChoice.setItems(new FilteredList<AbstractModel>(ModelRegistry.getInstance().getModels(), item -> item.getModelType()==ModelType.PN));
 		StringConverter<AbstractModel> modelStringConverter = new StringConverter<AbstractModel>() { //For displaying the model name in model choice boxes
 			@Override
 			public String toString(AbstractModel abstractModel) {
@@ -391,9 +303,9 @@ public class InitialController {
 		declModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
 			declPath = newValue.getFilePath();
 
-			if (!currentPlan.isEmpty()){
+			if (!PlannerSession.getInstance().getCurrentPlan().isEmpty()){
 				newValue.resetModel();
-				newValue.updateMonitoringStates(currentPlan, displayViolations);
+				newValue.updateMonitoringStates(PlannerSession.getInstance().getCurrentPlan(), PlannerSession.getInstance().isDisplayViolations());
 			}
 			updateVisualization(declWebView, newValue, ModelType.DECLARE);
 			updateplanListViewStatistics(newValue, planListView.getItems());
@@ -440,73 +352,15 @@ public class InitialController {
 	}
 
     @FXML
-    void onButtonClickedUploadModel(ActionEvent event) {
-		// When uploading a model I immediately save the path to the model.
-		// In this way I can later pass it to the Framed Autonomy Tool easier.
-		List<File> modelFiles = FileUtils.showModelOpenDialog(stage);
-		if (modelFiles != null) {
-			List<AbstractModel> abstractModels = new ArrayList<AbstractModel>();
-			for (File modelFile : modelFiles) {
-				String modelName = modelFile.getName();
-				try {
-					String modelExtension = modelName.substring(modelName.lastIndexOf(".")+1);
-					if ("decl".equalsIgnoreCase(modelExtension)) {
-						abstractModels.add(ModelUtils.loadDeclareModel(modelFile.toPath(), "m"+modelCounter, modelName));
-						declPath = modelFile.toPath().toAbsolutePath().toString();
-					} else if ("pnml".equalsIgnoreCase(modelExtension)) {
-						AbstractModel abstractModel = ModelUtils.loadDpnModel(modelFile.toPath(), "m"+modelCounter, modelName);
-						abstractModels.add(abstractModel);
-						petrinetPath = modelFile.toPath().toAbsolutePath().toString();
-
-
-						try {
-						DataPetriNetImporter dataPetriNetImporter = new DataPetriNetImporter();
-						InputStream inputStream = new BufferedInputStream(new FileInputStream(modelFile.toPath().toString()));
-						DataPetriNetsWithMarkings dataPetriNet = dataPetriNetImporter.importFromStream(inputStream).getDPN();
-		
-
-						PetrinetSemantics sem = PetrinetSemanticsFactory.regularPetrinetSemantics(Petrinet.class);
-						sem.initialize(dataPetriNet.getTransitions(), dataPetriNet.getInitialMarking());
-						finMarking = dataPetriNet.getFinalMarkings()[0].toString();
-						labelFinalMarking.setText(finMarking);
-						System.out.println("Petrinet Final Marking found by file:" + finMarking);
-						} catch (Exception e) {
-							// TODO: handle exception
-							System.out.println("Use Petri Net with Final Marking!");
-						}
-
-					} else {
-						System.err.println("Skipping model of unknown type: " + modelExtension);
-					}
-					modelCounter++;
-				} catch (DPNIOException | IOException | IndexOutOfBoundsException e) {
-					System.err.println("Unable to load model: " + modelFile.getAbsolutePath());
-					e.printStackTrace();
-				}
-			}
-
-			//If the plan has not been executed then show the Trace Prefix
-			if (!planPresent) {
-				abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations)); //Monitoring states for an empty prefix
-				modelTabelView.getItems().addAll(abstractModels);
-			} else { // Otherwise show the last generated plan
-				abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(currentPlan, displayViolations)); //Monitoring states for an empty prefix
-				modelTabelView.getItems().addAll(abstractModels);
-			}
-
-		}
-    }
-
-    @FXML
     void onClickPrefix(ActionEvent event) {
 		//TODO: Rename function
 		// Now denotes the reset of the plan.
 
-		planPresent = false;
-	
+		PlannerSession.getInstance().setPlanPresent(false);
+
 		// The FramedAutonomy Tool casts everything to lowerCase, so I do the same here. Otherwise there could be an issue when running the planner
-    	modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
-		currentPrefix.clear();
+    	ModelRegistry.getInstance().getModels().forEach(abstractModel -> abstractModel.resetModel());
+		PlannerSession.getInstance().getCurrentPrefix().clear();
 
 		prefixOnlyLabel.setVisible(true);
 		prefixOnlyLabel.setManaged(true);
@@ -552,11 +406,11 @@ public class InitialController {
 		
 		setUiBusy(true);
 
-		planPresent = true;
+		PlannerSession.getInstance().setPlanPresent(true);
 
 		planListView.getItems().clear();
 
-		modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
+		ModelRegistry.getInstance().getModels().forEach(abstractModel -> abstractModel.resetModel());
 
 		try {
 			declPath = declModelChoice.getSelectionModel().getSelectedItem().getFilePath();
@@ -583,12 +437,12 @@ public class InitialController {
 
 		BufferedWriter writer = new BufferedWriter(new FileWriter(currentPath + "/prefix.txt"));
 
-		if (currentPrefix.isEmpty()) {
+		if (PlannerSession.getInstance().getCurrentPrefix().isEmpty()) {
 			writer.write("");
-		}	
+		}
 		else {
-			
-			String prefixString = currentPrefix.toString();
+
+			String prefixString = PlannerSession.getInstance().getCurrentPrefix().toString();
 			prefixString = prefixString.replace(",", "");
 			prefixString = prefixString.replace("[", "");
 			prefixString = prefixString.replace("]", "");
@@ -617,7 +471,20 @@ public class InitialController {
 		generatePDDLTask.setOnFailed(taskEvent -> {
 			// Ensure that any errors do not lead to the system crashing
 			AlertUtils.showError("Generating PDDL failed");
-			setUiBusy(false);
+			// modelTabelView.getItems() were already reset (see above) in preparation for the new plan,
+			// so we need to bring the models, timeline and plan list back into a consistent state
+			// instead of leaving them wiped/stale (which caused a later ChoiceBox selection to index
+			// into a visStrings list shorter than the stale currentEventIndex).
+			// setUiBusy(false) must run no matter what happens above, otherwise mainContents stays
+			// disabled and the progress overlay stays up, blocking all further interaction.
+			try {
+				PlannerSession.getInstance().setPlanPresent(false);
+				updatePrefix(null);
+			} catch (Exception e) {
+				e.printStackTrace();
+			} finally {
+				setUiBusy(false);
+			}
 		});
 		
 		generatePDDLTask.setOnSucceeded(pddlTaskEvent -> {
@@ -637,7 +504,14 @@ public class InitialController {
 			runPlannerTask.setOnFailed(plannerTaskEvent -> {
 				// Ensure that any errors do not lead to the system crashing
 				AlertUtils.showError("Running the planner failed");
-				setUiBusy(false);
+				try {
+					PlannerSession.getInstance().setPlanPresent(false);
+					updatePrefix(null);
+				} catch (Exception e) {
+					e.printStackTrace();
+				} finally {
+					setUiBusy(false);
+				}
 			});
 			runPlannerTask.setOnSucceeded(plannerTaskEvent -> {
 				ArrayList<String> generatedPlan =  FileUtils.parsePlan(currentPath+"/results.txt");
@@ -673,10 +547,10 @@ public class InitialController {
 				System.out.println("----------------------------------");
 				System.out.println(onlyActions);
 				System.out.println("----------------------------------");
-				modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, displayViolations));
+				ModelRegistry.getInstance().getModels().forEach(abstractModel -> abstractModel.updateMonitoringStates(onlyActions, PlannerSession.getInstance().isDisplayViolations()));
 				updateplanListView(onlyActions);
 				updateTimelineControls(onlyActions);
-				this.currentPlan = onlyActions;
+				PlannerSession.getInstance().setCurrentPlan(onlyActions);
 				labelCost.setText(FileUtils.parsePlanCost(currentPath+"/results.txt"));
 				
 				setUiBusy(false);
@@ -766,18 +640,18 @@ public class InitialController {
 		//TODO: Allow building prefix event-by-event, without resetting after each event
 		tracePrefix = new ArrayList<String>(); //Resetting to empty trace
 
-		if (!currentPrefix.isEmpty()) {
-			tracePrefix = currentPrefix;
-			//modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
-			//modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
+		if (!PlannerSession.getInstance().getCurrentPrefix().isEmpty()) {
+			tracePrefix = PlannerSession.getInstance().getCurrentPrefix();
+			//ModelRegistry.getInstance().getModels().forEach(abstractModel -> abstractModel.resetModel());
+			//ModelRegistry.getInstance().getModels().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
 			//updateplanListView(tracePrefix);
 			//updateTimelineControls(tracePrefix);
 		}
 
-		if ((!planPresent)){
+		if ((!PlannerSession.getInstance().isPlanPresent())){
 			// Very stupid fix but i didn't have time to find a better solution
-			modelTabelView.getItems().forEach(abstractModel -> abstractModel.resetModel());
-			modelTabelView.getItems().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, displayViolations));
+			ModelRegistry.getInstance().getModels().forEach(abstractModel -> abstractModel.resetModel());
+			ModelRegistry.getInstance().getModels().forEach(abstractModel -> abstractModel.updateMonitoringStates(tracePrefix, PlannerSession.getInstance().isDisplayViolations()));
 			updateplanListView(tracePrefix);
 			updateTimelineControls(tracePrefix);
 		}
@@ -847,7 +721,7 @@ public class InitialController {
 			@Override
 			public void changed(ObservableValue<? extends Worker.State> observable, Worker.State oldValue, Worker.State newValue) {
 				if(newValue == Worker.State.SUCCEEDED) {
-					((JSObject)visualizationWebView.getEngine().executeScript("window")).setMember("app", InitialController.this);
+					((JSObject)visualizationWebView.getEngine().executeScript("window")).setMember("app", DataAgnosticController.this);
 					if (modelType == ModelType.DECLARE) { //A hack to load the pnWebView only after declWebView is already loaded
 						setupWebView(pnWebView, ModelType.PN, pnZoomSlider, pnZoomSliderValueObject, pnZoomValueField, pnWebViewZoomObject);
 					}
@@ -1041,21 +915,21 @@ public class InitialController {
 
 	//Called when the user clicks on graph elements
 	private void addToTracePrefix(String modelId, String activityEncoding) {
-		if (planPresent) {
+		if (PlannerSession.getInstance().isPlanPresent()) {
 			return;
 		}
-		
+
 		String activityName = null;
-		for (AbstractModel abstractModel : modelTabelView.getItems()) {
+		for (AbstractModel abstractModel : ModelRegistry.getInstance().getModels()) {
 			if (abstractModel.getModelId().equals(modelId)) {
 				activityName = abstractModel.getActivityByEncoding(activityEncoding);
 				break;
 			}
 		}
 		if (activityName != null) {
-			
-			currentPrefix.add(activityName);
-			updatePrefix(currentPrefix.size());
+
+			PlannerSession.getInstance().getCurrentPrefix().add(activityName);
+			updatePrefix(PlannerSession.getInstance().getCurrentPrefix().size());
 
 			/*
 			if (textFieldPrefix.getText().isEmpty()) {
@@ -1106,7 +980,7 @@ public class InitialController {
 			//((JSObject)visualizationWebView.getEngine().executeScript("window")).setMember("app", this); //Does not work after reload for some reason
 			visualizationWebView.getEngine().executeScript("clearModel()");
 		} else {
-			visualizationString = abstractModel.getVisualisationString(currentEventIndex.get(), displayViolations);
+			visualizationString = abstractModel.getVisualisationString(currentEventIndex.get(), PlannerSession.getInstance().isDisplayViolations());
 			if (visualizationString != null) {
 				script = "setModel('" + visualizationString + "')";
 				if (visualizationWebView.getEngine().getLoadWorker().stateProperty().get() == Worker.State.SUCCEEDED) { //If load worker is not busy then execute current script
@@ -1171,7 +1045,7 @@ public class InitialController {
 	@FXML
 	private void switchViolationStrings() {
 
-		displayViolations = bttnDisplayViolations.isSelected();
+		PlannerSession.getInstance().setDisplayViolations(bttnDisplayViolations.isSelected());
 
 		updateSelectedModelVisualizations();
 		

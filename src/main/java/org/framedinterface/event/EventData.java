@@ -9,18 +9,32 @@ public class EventData {
 	private String activityName;
 	private Map<MonitoringState, Integer> declMonitoringStateCounts;
 	private String plannerAction;
-	
+	private Map<String, String> attributeValues; //Attribute name -> value, manually attached by the user; only populated for editable (prefix, no plan present) events
+	private int timelineIndex; //Position of this event in the replayed (timeline) trace; differs from eventNumber when the list isn't the replayed trace itself (e.g. prefix events while a plan is replayed)
+
 	private boolean isStart;
 	private boolean isEnd;
-	
+
 	public EventData(int eventNumber, String activityName) {
 		this.eventNumber = eventNumber;
 		this.activityName = activityName;
+		this.timelineIndex = eventNumber;
 	}
 
 	public EventData(int eventNumber, String activityName, String planAction) {
-		this.eventNumber = eventNumber;
-		this.activityName = activityName;
+		this(eventNumber, activityName);
+		this.plannerAction = planAction;
+	}
+
+	public int getTimelineIndex() {
+		return timelineIndex;
+	}
+
+	public void setTimelineIndex(int timelineIndex) {
+		this.timelineIndex = timelineIndex;
+	}
+
+	public void setPlanAction(String planAction) {
 		this.plannerAction = planAction;
 	}
 	
@@ -46,6 +60,14 @@ public class EventData {
 
 	public String getPlanAction() {
 		return this.plannerAction;
+	}
+
+	public void setAttributeValues(Map<String, String> attributeValues) {
+		this.attributeValues = attributeValues;
+	}
+
+	public Map<String, String> getAttributeValues() {
+		return attributeValues;
 	}
 	
 	public void setDeclMonitoringStateCounts(Map<MonitoringState, Integer> declMonitoringStateCounts) {

@@ -1,6 +1,7 @@
 package org.framedinterface.model;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -16,21 +17,66 @@ public class DeclareModel extends AbstractModel  {
 	
 	private LinkedHashSet<DeclareConstraint> declareConstraints;
 	private Map<String, List<DeclareConstraint>> activityToUnaryMap;
+	private Map<String, LinkedHashSet<String>> activityToAttributesMap; //Bindings are only present in Declare models
+	private Map<String, AttributeDomain> attributeDomains; //Attribute name (lowercased) -> its declared value range/set
 	private List<Map<DeclareConstraint, MonitoringState>> monitoringStates; //First index is the initial state and last index is the final state
+	private Map<String, DeclareConstraint> plannerConstraintNames = new HashMap<String, DeclareConstraint>(); //Lowercased PDDL constraint object name (Data-Aware planner) -> constraint; see setPlannerConstraintNames
 
-	public DeclareModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, LinkedHashSet<DeclareConstraint> declareConstraints, Map<String, List<DeclareConstraint>> activityToUnaryMap) {
+	//Plan step action (Data-Aware plans, "reset constraint;<PDDL constraint name>") that resets a violated constraint instead of executing an activity
+	public static final String RESET_CONSTRAINT_ACTION = "reset constraint";
+
+	public DeclareModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, LinkedHashSet<DeclareConstraint> declareConstraints, Map<String, List<DeclareConstraint>> activityToUnaryMap, Map<String, LinkedHashSet<String>> activityToAttributesMap, Map<String, AttributeDomain> attributeDomains) {
 		super(modelId, modelName, activities, activityToEncodingMap, ModelType.DECLARE);
 		this.declareConstraints = declareConstraints;
 		this.activityToUnaryMap = activityToUnaryMap;
+		this.activityToAttributesMap = activityToAttributesMap;
+		this.attributeDomains = attributeDomains;
 	}
-	
+
+	//Attribute names (lowercased) bound to the given activity (lowercased), or an empty set if none are bound
+	public LinkedHashSet<String> getAttributesForActivity(String activity) {
+		return activityToAttributesMap.getOrDefault(activity, new LinkedHashSet<String>());
+	}
+
+	public Map<String, AttributeDomain> getAttributeDomains() {
+		return attributeDomains;
+	}
+
+	public LinkedHashSet<DeclareConstraint> getDeclareConstraints() {
+		return declareConstraints;
+	}
+
+	//The names are assigned by the caller, since the PDDL generator numbers duplicate names across all Declare models it is given together
+	public void setPlannerConstraintNames(Map<String, DeclareConstraint> plannerConstraintNames) {
+		this.plannerConstraintNames = plannerConstraintNames;
+	}
+
+	public DeclareConstraint getConstraintByPlannerName(String plannerConstraintName) {
+		return plannerConstraintName == null ? null : plannerConstraintNames.get(plannerConstraintName.toLowerCase());
+	}
+
+	//Whether any constraint in this model declares a time condition (e.g. "ActivityP,0,100,h/ActivityG,2,5,h") -
+	//used by the Data-Aware page to decide whether prefix events need a "timestamp" attribute
+	public boolean hasTimeConditions() {
+		for (DeclareConstraint declareConstraint : declareConstraints) {
+			String timeCondition = declareConstraint.getTimeCondition();
+			if (timeCondition != null && !timeCondition.isBlank()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public Map<MonitoringState, Integer> getMonitoringStateCounts(int activityIndex) {
 		Map<MonitoringState, Integer> monitoringStateCounts = new HashMap<MonitoringState, Integer>();
 		monitoringStateCounts.put(MonitoringState.SAT, 0);
 		monitoringStateCounts.put(MonitoringState.POSS_SAT, 0);
 		monitoringStateCounts.put(MonitoringState.POSS_VIOL, 0);
 		monitoringStateCounts.put(MonitoringState.VIOL, 0);
-		
+		if (monitoringStates == null || activityIndex < 0 || activityIndex >= monitoringStates.size()) {
+			return monitoringStateCounts; //Not replayed (yet), or an index into a different trace
+		}
+
 		for (MonitoringState monitoringState : monitoringStates.get(activityIndex).values()) {
 			monitoringStateCounts.put(monitoringState, monitoringStateCounts.get(monitoringState) + 1);
 		}
@@ -121,25 +167,106 @@ public class DeclareModel extends AbstractModel  {
 		monitoringStates.add(finalStates);
 	}
 
+	//Data-Aware page only: like updateMonitoringStates, but each constraint's activation/target data condition is checked against the
+	//attribute values attached to the occurring event before counting it as an activation/target occurrence. The Data-Agnostic page
+	//intentionally ignores data conditions and keeps using updateMonitoringStates.
+	//attributeValuesPerEvent is parallel to activities (attributeValuesPerEvent.get(i) holds the attribute values for activities.get(i)).
+	public void updateMonitoringStatesWithData(List<String> activities, List<Map<String, String>> attributeValuesPerEvent, boolean displayViolations) {
+		Map<DeclareConstraint, MonitoringState> initialStates = new HashMap<DeclareConstraint, MonitoringState>();
+		declareConstraints.forEach(declareConstraint -> initialStates.put(declareConstraint, declareConstraint.resetAutomaton()));
+		monitoringStates = new ArrayList<Map<DeclareConstraint,MonitoringState>>();
+		monitoringStates.add(initialStates);
+
+		for (int i = 0; i < activities.size(); i++) {
+			String[] planAction = activities.get(i).split(";");
+			String activity;
+
+			if (planAction.length == 2) {
+				activity = planAction[1];
+			}
+			else{
+				activity = planAction[0];
+			}
+
+			//Data-Aware plan reset: only the named constraint returns to its initial state, and no activity is executed (which would otherwise advance e.g. chain constraints)
+			if (planAction.length == 2 && planAction[0].equals(RESET_CONSTRAINT_ACTION)) {
+				DeclareConstraint violatedConstraint = getConstraintByPlannerName(activity);
+				if (violatedConstraint != null) {
+					violatedConstraint.resetAutomaton();
+				}
+				Map<DeclareConstraint, MonitoringState> monitoringState = new HashMap<DeclareConstraint, MonitoringState>();
+				declareConstraints.forEach(declareConstraint -> monitoringState.put(declareConstraint, declareConstraint.getMonitoringState()));
+				monitoringStates.add(monitoringState);
+				continue;
+			}
+
+			//Check if the action is reset-petrinet
+			if (activity.startsWith("reset") && !activity.equals("reset-petrinet")) {
+				String resetAct = activity.substring(6);
+
+				for (DeclareConstraint dc : declareConstraints) {
+					String templateName_ = dc.getTemplate().getTemplateName().toLowerCase();
+					templateName_ = templateName_.replace(" ", "_");
+					String activ_;
+					if (dc.getTemplate().getReverseActivationTarget()) {
+						activ_ = dc.getTargetActivity();
+					} else {activ_ = dc.getActivationActivity();}
+
+					if (resetAct.contains(templateName_) && (resetAct.contains(activ_.toLowerCase()))) {
+						String target_;
+						if (dc.getTemplate().getReverseActivationTarget()) {
+								target_ = dc.getActivationActivity();
+						} else {target_ = dc.getTargetActivity();}
+
+						if (!(target_.isBlank())&&(!resetAct.contains(target_.toLowerCase()))){
+							continue;
+						}
+						dc.resetAutomaton();
+					}
+				}
+			}
+
+			Map<String, String> attributeValues = i < attributeValuesPerEvent.size() ? attributeValuesPerEvent.get(i) : Collections.emptyMap();
+			Map<DeclareConstraint, MonitoringState> monitoringState = new HashMap<DeclareConstraint, MonitoringState>();
+			declareConstraints.forEach(declareConstraint -> monitoringState.put(declareConstraint, declareConstraint.executeNextActivity(activity.toLowerCase(), attributeValues)));
+			monitoringStates.add(monitoringState);
+		}
+
+		//Adding final monitoring states (constraint states when the trace terminates)
+		Map<DeclareConstraint, MonitoringState> finalStates = new HashMap<DeclareConstraint, MonitoringState>();
+		declareConstraints.forEach(declareConstraint -> {
+			MonitoringState monitoringState = declareConstraint.getMonitoringState();
+			if (monitoringState == MonitoringState.POSS_SAT) { monitoringState = MonitoringState.SAT;}
+			else if (monitoringState == MonitoringState.POSS_VIOL) { monitoringState = MonitoringState.VIOL;}
+			finalStates.put(declareConstraint, monitoringState);
+		});
+		monitoringStates.add(finalStates);
+	}
+
 	@Override
 	public String getVisualisationString(int activityIndex, boolean displayViolations) {
+		return getVisualisationString(activityIndex, displayViolations, false);
+	}
+
+	//Data conditions (e.g. "[A.grade > 4]") are only meaningful for Declare models, so this overload lives here rather than on AbstractModel
+	public String getVisualisationString(int activityIndex, boolean displayViolations, boolean showDataConditions) {
 		StringBuilder sb = new StringBuilder("digraph \"\" {");
 		sb.append("id = \"graphRoot_" + getModelId() + "\"");
 		sb.append("ranksep = \".6\"");
 		sb.append("nodesep = \".5\"");
 		sb.append("node [style=\"filled\", shape=box, fontsize=\"8\", fontname=\"Helvetica\"]");
 		sb.append("edge [fontsize=\"8\", fontname=\"Helvetica\" arrowsize=\".8\"]");
-		
+
 		for (String activity : this.getActivities()) {
-			sb.append(GraphGenerator.buildDeclNodeString(this.getActivityEncoding(activity), activity, monitoringStates.get(activityIndex), activityToUnaryMap.get(activity)));
+			sb.append(GraphGenerator.buildDeclNodeString(this.getActivityEncoding(activity), activity, monitoringStates.get(activityIndex), activityToUnaryMap.get(activity), showDataConditions));
 		}
-		
+
 		for (DeclareConstraint declareConstraint : declareConstraints) {
 			if (declareConstraint.getTemplate().getIsBinary()) {
-				sb.append(GraphGenerator.buildDeclEdgeString(declareConstraint, monitoringStates.get(activityIndex).get(declareConstraint), this.getActivityToEncodingMap()));
+				sb.append(GraphGenerator.buildDeclEdgeString(declareConstraint, monitoringStates.get(activityIndex).get(declareConstraint), this.getActivityToEncodingMap(), showDataConditions));
 			}
 		}
-		
+
 		sb.append("}");
 
 		//System.out.println(sb.toString());

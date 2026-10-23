@@ -1,6 +1,6 @@
 package org.framedinterface.main;
 
-import org.framedinterface.controller.InitialController;
+import org.framedinterface.controller.dataagnostic.DataAgnosticController;
 
 //import controller.LogGenViewController;
 import javafx.application.Application;
@@ -25,7 +25,7 @@ public class MainGui extends Application {
 		String fxmlPath = "org/framedInterface/maininterface.fxml";
 		FXMLLoader fxmlLoader = new FXMLLoader(MainGui.class.getClassLoader().getResource(fxmlPath));
 		Parent parent = fxmlLoader.load();
-		((InitialController)fxmlLoader.getController()).setStage(primaryStage);
+		((DataAgnosticController)fxmlLoader.getController()).setStage(primaryStage);
 		scene = new Scene(parent);
 		//scene.getStylesheets().add("css/main.css");
 		

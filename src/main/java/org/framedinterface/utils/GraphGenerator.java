@@ -17,7 +17,7 @@ public class GraphGenerator {
 
 
 	//Used for monitoring and editor; creates a node strings with html table if the node has unary constraints (otherwise normal node strings are used)
-	public static String buildDeclNodeString(String nodeId, String activityName, Map<DeclareConstraint, MonitoringState> monitoringStates, List<DeclareConstraint> activityUnaryConstraints) {
+	public static String buildDeclNodeString(String nodeId, String activityName, Map<DeclareConstraint, MonitoringState> monitoringStates, List<DeclareConstraint> activityUnaryConstraints, boolean showDataConditions) {
 		StringBuilder sb = new StringBuilder(nodeId);
 
 		if(activityUnaryConstraints == null || activityUnaryConstraints.isEmpty()) {
@@ -33,19 +33,20 @@ public class GraphGenerator {
 			for (DeclareConstraint unaryConstraint : activityUnaryConstraints) {
 				sb.append("<tr><td width=\"60\" bgcolor=\"");
 				MonitoringState monitoringState = monitoringStates.get(unaryConstraint);
+				String unaryLabel = unaryConstraint.getTemplate().getTemplateName() + escapeHtml(getDataConditionsLabel(unaryConstraint, showDataConditions));
 				//Coloring based on the constraint status
 				if (monitoringState == MonitoringState.CONFLICT) {
-					sb.append("#ff9900\">").append(unaryConstraint.getTemplate().getTemplateName());
+					sb.append("#ff9900\">").append(unaryLabel);
 				} else if (monitoringState == MonitoringState.SAT) {
-					sb.append("#66ccff\">").append(unaryConstraint.getTemplate().getTemplateName());
+					sb.append("#66ccff\">").append(unaryLabel);
 				} else if (monitoringState == MonitoringState.VIOL) {
-					sb.append("#d44942\">").append(unaryConstraint.getTemplate().getTemplateName());
+					sb.append("#d44942\">").append(unaryLabel);
 				} else if (monitoringState == MonitoringState.POSS_VIOL) {
-					sb.append("#ffd700\">").append(unaryConstraint.getTemplate().getTemplateName());
+					sb.append("#ffd700\">").append(unaryLabel);
 				} else if (monitoringState == MonitoringState.POSS_SAT) {
-					sb.append("#79a888\">").append(unaryConstraint.getTemplate().getTemplateName());
+					sb.append("#79a888\">").append(unaryLabel);
 				} else {
-					sb.append("#000000\"><font color=\"white\">").append(unaryConstraint.getTemplate().getTemplateName()).append("</font>"); //Fallback for unknown monitoring states
+					sb.append("#000000\"><font color=\"white\">").append(unaryLabel).append("</font>"); //Fallback for unknown monitoring states
 				}
 				sb.append("</td></tr>");
 			}
@@ -58,7 +59,7 @@ public class GraphGenerator {
 		}
 	}
 
-	public static String buildDeclEdgeString(DeclareConstraint binaryConstraint, MonitoringState monitoringState, BidiMap<String, String> activityToEncodingMap) {
+	public static String buildDeclEdgeString(DeclareConstraint binaryConstraint, MonitoringState monitoringState, BidiMap<String, String> activityToEncodingMap, boolean showDataConditions) {
 		StringBuilder sb = new StringBuilder();
 		if (binaryConstraint.getTemplate().getReverseActivationTarget()) {
 			sb.append(activityToEncodingMap.get(binaryConstraint.getTargetActivity()));
@@ -70,12 +71,33 @@ public class GraphGenerator {
 			sb.append(activityToEncodingMap.get(binaryConstraint.getTargetActivity()));
 		}
 
-		sb.append(" ").append(getBinaryConstraintStyle(binaryConstraint, monitoringState, ""));
+		sb.append(" ").append(getBinaryConstraintStyle(binaryConstraint, monitoringState, "", showDataConditions));
 		return sb.toString();
 	}
 
+	//Builds the "[activationCondition][targetCondition][timeCondition]" suffix shown when data conditions are toggled on
+	//(target condition is omitted for unary constraints, which have no target activity)
+	private static String getDataConditionsLabel(DeclareConstraint constraint, boolean showDataConditions) {
+		if (!showDataConditions) {
+			return "";
+		}
+		StringBuilder sb = new StringBuilder();
+		sb.append("[").append(constraint.getActivationCondition()).append("]");
+		if (constraint.getTemplate().getIsBinary()) {
+			sb.append("[").append(constraint.getTargetCondition()).append("]");
+		}
+		sb.append("[").append(constraint.getTimeCondition()).append("]");
+		return sb.toString();
+	}
 
-	private static String getBinaryConstraintStyle(DeclareConstraint binaryConstraint, MonitoringState monitoringState, String penwidth) {
+	//Node labels with unary constraints use Graphviz's HTML-like label syntax, which is parsed as XML -
+	//a raw '<' or '>' in a data condition (e.g. "T.integer < 10") would otherwise be read as a tag
+	private static String escapeHtml(String s) {
+		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+	}
+
+
+	private static String getBinaryConstraintStyle(DeclareConstraint binaryConstraint, MonitoringState monitoringState, String penwidth, boolean showDataConditions) {
 		String color = "#000000"; //Used if states are not shown or if the constraints has an unknown monitoring status
 
 		//Coloring based on the constraint status
@@ -92,7 +114,7 @@ public class GraphGenerator {
 		} 
 
 
-		String label = binaryConstraint.getTemplate().getTemplateName();
+		String label = binaryConstraint.getTemplate().getTemplateName() + (showDataConditions ? "\\\\n" + getDataConditionsLabel(binaryConstraint, true) : "");
 		switch(binaryConstraint.getTemplate()) {
 		case Responded_Existence:
 			return "[dir=\"both\", edgetooltip=\"Responded Existence\", labeltooltip=\"Responded Existence\",arrowhead=\"none\",arrowtail=\"dot\", label=\""+label+"\", color=\""+color+"\","+penwidth+"]";

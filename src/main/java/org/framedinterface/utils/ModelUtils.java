@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,6 +25,7 @@ import org.processmining.datapetrinets.io.DataPetriNetImporter;
 import org.processmining.models.graphbased.AttributeMap;
 import org.processmining.models.graphbased.directed.petrinet.elements.Transition;
 
+import org.framedinterface.model.AttributeDomain;
 import org.framedinterface.model.DeclareModel;
 import org.framedinterface.model.PnModel;
 import org.framedinterface.utils.enums.DeclareTemplate;
@@ -40,10 +42,14 @@ public class ModelUtils {
 		LinkedHashSet<String> activities = createActivityNamesSet(modelPath);
 		BidiMap<String, String> activityToEncodingMap = createActivityToEncodingMap(activities);
 		LinkedHashSet<DeclareConstraint> declareConstrains = readConstraints(modelPath);
-		Map<String, List<DeclareConstraint>> activityToUnaryMap = createActivityToUnaryMap(activities, declareConstrains); 
+		Map<String, List<DeclareConstraint>> activityToUnaryMap = createActivityToUnaryMap(activities, declareConstrains);
+		Map<String, LinkedHashSet<String>> activityToAttributesMap = readActivityAttributeBindings(modelPath);
+		addAttributesFromConditions(activityToAttributesMap, declareConstrains);
+		Map<String, AttributeDomain> attributeDomains = readAttributeDomains(modelPath);
 
-		DeclareModel declareModel = new DeclareModel(modelId, modelName, activities, activityToEncodingMap, declareConstrains, activityToUnaryMap);
+		DeclareModel declareModel = new DeclareModel(modelId, modelName, activities, activityToEncodingMap, declareConstrains, activityToUnaryMap, activityToAttributesMap, attributeDomains);
 		declareModel.setFilePath(modelPath.toAbsolutePath().toString());
+		declareModel.setActivityNamesAsDefined(readActivityNamesAsDefined(modelPath));
 		return declareModel;
 	}
 
@@ -62,6 +68,22 @@ public class ModelUtils {
 		sc.close();
 
 		return activityNames;
+	}
+
+	//Maps each (lowercased, as in createActivityNamesSet) activity name of a Declare model to its original spelling in the model file
+	private static Map<String, String> readActivityNamesAsDefined(Path modelPath) throws IOException {
+		Map<String, String> activityNamesAsDefined = new HashMap<String, String>();
+
+		Scanner sc = new Scanner(modelPath);
+		while(sc.hasNextLine()) {
+			String line = sc.nextLine();
+			if(line.startsWith("activity ") && line.length() > 9) {
+				activityNamesAsDefined.putIfAbsent(line.substring(9).toLowerCase(), line.substring(9).trim());
+			}
+		}
+		sc.close();
+
+		return activityNamesAsDefined;
 	}
 	
 	
@@ -85,12 +107,95 @@ public class ModelUtils {
 		return activityToUnaryMap;
 	}
 	
+	//Finds "bind ActivityName: attr1, attr2" lines and creates a map of activity name to its bound attribute names
+	private static Map<String, LinkedHashSet<String>> readActivityAttributeBindings(Path modelPath) throws IOException {
+		Map<String, LinkedHashSet<String>> activityToAttributesMap = new HashMap<String, LinkedHashSet<String>>();
+
+		Scanner sc = new Scanner(modelPath);
+		while(sc.hasNextLine()) {
+			String line = sc.nextLine();
+			if(line.startsWith("bind") && line.length() > 7 && line.substring(6).contains(":")) {
+				String activity = line.substring(4, line.indexOf(':')).trim().toLowerCase();
+				LinkedHashSet<String> attributes = activityToAttributesMap.computeIfAbsent(activity, a -> new LinkedHashSet<String>());
+				for (String attributeName : line.substring(line.indexOf(':') + 1).split(",")) {
+					if (!attributeName.trim().isEmpty()) {
+						attributes.add(attributeName.trim().toLowerCase());
+					}
+				}
+			}
+		}
+		sc.close();
+
+		return activityToAttributesMap;
+	}
+
+	//Data conditions (e.g. "A.categorical is c2") also reveal attribute-activity associations, which "bind" lines don't always fully capture
+	private static final Pattern CONDITION_ATTRIBUTE_PATTERN = Pattern.compile("\\b([AT])\\.(\\w+)");
+
+	private static void addAttributesFromConditions(Map<String, LinkedHashSet<String>> activityToAttributesMap, LinkedHashSet<DeclareConstraint> declareConstraints) {
+		for (DeclareConstraint declareConstraint : declareConstraints) {
+			addAttributesFromCondition(activityToAttributesMap, declareConstraint, declareConstraint.getActivationCondition());
+			addAttributesFromCondition(activityToAttributesMap, declareConstraint, declareConstraint.getTargetCondition());
+		}
+	}
+
+	//"A." refers to the constraint's activation activity and "T." to its target activity, regardless of which condition string the token appears in
+	private static void addAttributesFromCondition(Map<String, LinkedHashSet<String>> activityToAttributesMap, DeclareConstraint declareConstraint, String condition) {
+		if (condition == null || condition.isEmpty()) {
+			return;
+		}
+		Matcher matcher = CONDITION_ATTRIBUTE_PATTERN.matcher(condition);
+		while (matcher.find()) {
+			String activity = "A".equals(matcher.group(1)) ? declareConstraint.getActivationActivity() : declareConstraint.getTargetActivity();
+			if (activity != null && !activity.isEmpty()) {
+				activityToAttributesMap.computeIfAbsent(activity.toLowerCase(), a -> new LinkedHashSet<String>()).add(matcher.group(2).toLowerCase());
+			}
+		}
+	}
+
+	//Matches attribute domain declaration lines, e.g. "integer: integer between 0 and 100" or "categorical: c1, c2, c3"
+	//(these are the only remaining colon-lines once "activity X" and "bind X: ..." lines are excluded, since neither has a bare "word:" prefix)
+	private static final Pattern DOMAIN_LINE_PATTERN = Pattern.compile("^(\\w+):\\s*(.*)$");
+	private static final Pattern NUMERIC_DOMAIN_PATTERN = Pattern.compile("(?i)(integer|float)\\s+between\\s+(\\S+)\\s+and\\s+(\\S+)");
+
+	//Finds attribute domain declarations and creates a map of attribute name to its declared value range/set
+	private static Map<String, AttributeDomain> readAttributeDomains(Path modelPath) throws IOException {
+		Map<String, AttributeDomain> attributeDomains = new HashMap<String, AttributeDomain>();
+
+		Scanner sc = new Scanner(modelPath);
+		while (sc.hasNextLine()) {
+			Matcher domainMatcher = DOMAIN_LINE_PATTERN.matcher(sc.nextLine());
+			if (domainMatcher.matches()) {
+				String attributeName = domainMatcher.group(1).toLowerCase();
+				String description = domainMatcher.group(2).trim();
+				Matcher numericMatcher = NUMERIC_DOMAIN_PATTERN.matcher(description);
+				if (numericMatcher.find()) {
+					AttributeDomain.Type type = "float".equalsIgnoreCase(numericMatcher.group(1)) ? AttributeDomain.Type.FLOAT : AttributeDomain.Type.INTEGER;
+					attributeDomains.put(attributeName, AttributeDomain.numeric(type, Double.parseDouble(numericMatcher.group(2)), Double.parseDouble(numericMatcher.group(3))));
+				} else if (!description.isEmpty()) {
+					Set<String> values = new TreeSet<String>();
+					for (String value : description.split(",")) {
+						if (!value.trim().isEmpty()) {
+							values.add(value.trim());
+						}
+					}
+					if (!values.isEmpty()) {
+						attributeDomains.put(attributeName, AttributeDomain.categorical(values));
+					}
+				}
+			}
+		}
+		sc.close();
+
+		return attributeDomains;
+	}
+
 	//Finds constraint strings in the Declare model and creates a list of Declare constraint objects
 	private static LinkedHashSet<DeclareConstraint> readConstraints(Path declareModelPath) throws IOException {
 		LinkedHashSet<DeclareConstraint> declareConstraints = new LinkedHashSet<DeclareConstraint>(); //To remove duplicates, while retaining predictable iteration order
 
 		Scanner sc = new Scanner(declareModelPath);
-		Pattern constraintPattern = Pattern.compile("\\w+(\\[.*\\]) \\|");
+		Pattern constraintPattern = Pattern.compile("\\w+\\[.*\\]"); //Trailing " |conditions" is optional
 
 		while(sc.hasNextLine()) {
 			String line = sc.nextLine();
@@ -113,14 +218,19 @@ public class ModelUtils {
 		return declareConstraints;
 	}
 
-	//Creates a Declare constraint object from a single Declare constraint string (removed reading of data conditions)
+	//Creates a Declare constraint object from a single Declare constraint string
 	private static DeclareConstraint readConstraintString(String constraintString) {
 		DeclareTemplate template = null;
 		String activationActivity = "";
 		String targetActivity = "";
+		String activationCondition = "";
+		String targetCondition = "";
+		String timeCondition = "";
 
-		Matcher mBinary = Pattern.compile("(.*)\\[(.*), (.*)\\] \\|(.*) \\|(.*) \\|(.*)").matcher(constraintString);
-		Matcher mUnary = Pattern.compile(".*\\[(.*)\\] \\|(.*) \\|(.*)").matcher(constraintString);
+		//The trailing " |activationCondition |targetCondition |timeCondition" section is optional -
+		//some exports omit it entirely when a constraint has no data/time conditions
+		Matcher mBinary = Pattern.compile("(.*)\\[(.*), (.*)\\](?: \\|(.*) \\|(.*) \\|(.*))?").matcher(constraintString);
+		Matcher mUnary = Pattern.compile(".*\\[(.*)\\](?: \\|(.*) \\|(.*))?").matcher(constraintString);
 
 		//Processing the constraint
 		if(mBinary.find()) { //Binary constraints
@@ -133,13 +243,23 @@ public class ModelUtils {
 				activationActivity = mBinary.group(2);
 				targetActivity = mBinary.group(3);
 			}
+			activationCondition = trimOrEmpty(mBinary.group(4));
+			targetCondition = trimOrEmpty(mBinary.group(5));
+			timeCondition = trimOrEmpty(mBinary.group(6));
 		} else if(mUnary.find()) { //Unary constraints
 			template = DeclareTemplate.getByTemplateName(mUnary.group(0).substring(0, mUnary.group(0).indexOf("["))); //TODO: Should be done more intelligently
 			activationActivity = mUnary.group(1);
+			activationCondition = trimOrEmpty(mUnary.group(2));
+			timeCondition = trimOrEmpty(mUnary.group(3));
 		}
 
-		//return new DeclareConstraint(constraintString, template, activationActivity, targetActivity);
-		return new DeclareConstraint(constraintString, template, activationActivity.toLowerCase(), targetActivity.toLowerCase());
+		return new DeclareConstraint(constraintString, template, activationActivity.toLowerCase(), targetActivity.toLowerCase(),
+				activationCondition, targetCondition, timeCondition);
+	}
+
+	//Regex groups for the optional trailing condition section are null when that section is absent entirely
+	private static String trimOrEmpty(String s) {
+		return s == null ? "" : s.trim();
 	}
 
 
@@ -149,8 +269,12 @@ public class ModelUtils {
 		DataPetriNetImporter dataPetriNetImporter = new DataPetriNetImporter(); //There should be a version for regular Petri nets somewhere, but reusing the data Petri nets one will hopefully be fine
 		InputStream inputStream = new BufferedInputStream(new FileInputStream(modelPath.toString()));
 		DataPetriNetsWithMarkings dataPetriNet = dataPetriNetImporter.importFromStream(inputStream).getDPN();
-		
+
+		Map<String, String> activityNamesAsDefined = new HashMap<String, String>(); //Must be captured before the labels are lowercased below
 		for (Transition transition : dataPetriNet.getTransitions()) {
+			if (!transition.isInvisible()) {
+				activityNamesAsDefined.putIfAbsent(transition.getLabel().toLowerCase(), transition.getLabel());
+			}
 			transition.getAttributeMap().put(AttributeMap.LABEL, transition.getLabel().toLowerCase());
 		}
 		
@@ -161,6 +285,7 @@ public class ModelUtils {
 
 		PnModel dpnModel = new PnModel(modelId, modelName, activities, activityToEncodingMap, dataPetriNet);
 		dpnModel.setFilePath(modelPath.toAbsolutePath().toString());
+		dpnModel.setActivityNamesAsDefined(activityNamesAsDefined);
 		return dpnModel;
 	}
 

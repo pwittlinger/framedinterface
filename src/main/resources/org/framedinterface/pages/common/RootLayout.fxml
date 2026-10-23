@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+
+<HBox fx:id="rootRegion" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" styleClass="standard-bg-color" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.framedinterface.controller.common.RootLayoutController">
+   <children>
+      <fx:include fx:id="navigationSidebar" source="NavigationSidebar.fxml" HBox.hgrow="NEVER" />
+      <Region HBox.hgrow="ALWAYS" />
+   </children>
+</HBox>
