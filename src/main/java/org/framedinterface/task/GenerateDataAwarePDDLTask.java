@@ -25,7 +25,8 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 	public static final String VARIABLE_SUBSTITUTIONS_FILE = OUTPUT_FOLDER + "/variable_substitutions.txt";
 	//Written by this task (rather than the generator) from the activity costs set on the Data-Aware page, one "<ActivityName> <activityCost> 0" line per activity
 	public static final String COST_MODEL_FILE = OUTPUT_FOLDER + "/cost_model.txt";
-	//Written by this task from the constraint costs set on the Data-Aware page: "<model file>|<constraint name> <cost>" per Declare constraint, "<model file> <cost>" per Petri net
+	//Written by this task from the constraint costs set on the Data-Aware page: "<model file>|<constraint name> <cost>" per Declare constraint, "<model file> <cost>" per Petri net,
+	//with "x" instead of the cost for a hard constraint (one that may not be violated)
 	public static final String VIOLATION_COST_FILE = OUTPUT_FOLDER + "/violation_costs.txt";
 	public static final String ACTIVITY_MAPPING_FILE_PATTERN = "activityMapping_.*\\.txt"; //One per model, in OUTPUT_FOLDER
 
@@ -36,9 +37,10 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 	private RecoveryStrategy recoveryStrategy;
 	private List<String> costModelLines;
 	private List<String> violationCostLines;
+	private String waitingCost; //Cost of waiting one time unit; null to use the generator's default
 
 	public GenerateDataAwarePDDLTask(String currentPath, List<String> declPaths, List<String> pnPaths, String logPath, RecoveryStrategy recoveryStrategy,
-			List<String> costModelLines, List<String> violationCostLines) {
+			List<String> costModelLines, List<String> violationCostLines, String waitingCost) {
 		this.currentPath = currentPath;
 		this.declPaths = declPaths;
 		this.pnPaths = pnPaths;
@@ -46,6 +48,7 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 		this.recoveryStrategy = recoveryStrategy;
 		this.costModelLines = costModelLines;
 		this.violationCostLines = violationCostLines;
+		this.waitingCost = waitingCost;
 	}
 
 	@Override
@@ -89,6 +92,10 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 		command.add(recoveryStrategy.getCliValue());
 		command.add("--violation_cost_file");
 		command.add(VIOLATION_COST_FILE); //Relative to the working directory, like the files above
+		if (waitingCost != null) {
+			command.add("--waiting_cost");
+			command.add(waitingCost);
+		}
 
 		int exitCode = RunnerUtils.runProcess(command, new File(currentPath), null);
 		if (exitCode != 0) {

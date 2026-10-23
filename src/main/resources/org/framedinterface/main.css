@@ -580,7 +580,7 @@
 
 
 .standard-button:hover > .standard-button__icon,
-.standard-button:selected > .standard-button__icon,{
+.standard-button:selected > .standard-button__icon {
 	-fx-icon-color: #393939;
 }
 
@@ -732,6 +732,11 @@
 
 .text-field-table-cell{
 	-fx-alignment: center_left;
+}
+
+/* Cost cells that can't be edited, e.g. the cost of a hard constraint on the Data-Aware page */
+.tree-table-cell:locked {
+	-fx-text-fill: #a0a0a0;
 }
 
 

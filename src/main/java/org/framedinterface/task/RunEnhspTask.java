@@ -80,6 +80,10 @@ public class RunEnhspTask extends Task<List<Integer>> {
 			command.add("-planner");
 			command.add("opt-blind");
 
+			if (recoveryStrategy.getCliValue().contains("discard") | recoveryStrategy.getCliValue().contains("skip")) {
+				command.add("-sdac");
+			}
+
 			File planFile = new File(planFolder, "plan" + i + ".txt");
 			int exitCode = RunnerUtils.runProcess(command, new File(currentPath), planFile);
 			boolean solved = exitCode == 0 && new String(Files.readAllBytes(planFile.toPath())).contains("Problem Solved");

@@ -68,7 +68,8 @@
                                  <children>
                                     <TreeTableView fx:id="constraintsTreeTableView" editable="true" maxHeight="1.7976931348623157E308" showRoot="false" VBox.vgrow="ALWAYS">
                                       <columns>
-                                        <TreeTableColumn fx:id="constraintNameColumn" editable="false" prefWidth="215.0" sortable="false" text="Constraint" />
+                                        <TreeTableColumn fx:id="constraintNameColumn" editable="false" prefWidth="175.0" sortable="false" text="Constraint" />
+                                        <TreeTableColumn fx:id="constraintHardColumn" maxWidth="45.0" minWidth="40.0" prefWidth="40.0" sortable="false" text="Hard" />
                                         <TreeTableColumn fx:id="constraintCostColumn" maxWidth="50.0" minWidth="45.0" prefWidth="45.0" sortable="false" style="-fx-alignment: CENTER-RIGHT;" text="Cost" />
                                       </columns>
                                        <columnResizePolicy>
@@ -282,8 +283,11 @@
                                        </children>
                                     </HBox>
                                     <Region maxWidth="20.0" HBox.hgrow="ALWAYS" />
-                                    <Label text="Recovery:" />
-                                    <ChoiceBox fx:id="recoveryStrategyChoice" prefWidth="110.0" styleClass="standard-choice-box" />
+                                    <Button fx:id="plannerSettingsButton" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#onClickPlannerSettings" styleClass="standard-button">
+                                       <graphic>
+                                          <FontIcon iconLiteral="fa-cog" styleClass="standard-button__icon" />
+                                       </graphic>
+                                    </Button>
                                     <Button fx:id="buttonRunPlanner" mnemonicParsing="false" onAction="#onClickPlanner" styleClass="standard-button" text="Run Planner" />
                                     <Button fx:id="buttonPrefix" mnemonicParsing="false" onAction="#onClickPrefix" styleClass="standard-button" text="Reset" />
                                  </children>

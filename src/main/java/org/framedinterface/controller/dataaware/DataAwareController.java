@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -74,6 +75,7 @@ import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
+import javafx.beans.binding.BooleanBinding;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
@@ -90,6 +92,7 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Task;
 import javafx.concurrent.Worker;
+import javafx.css.PseudoClass;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -107,6 +110,7 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Separator;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Slider;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableColumn;
@@ -121,11 +125,14 @@ import javafx.scene.control.TreeTableRow;
 import javafx.scene.control.TreeTableView;
 import javafx.scene.control.TreeView;
 import javafx.scene.control.cell.CheckBoxTableCell;
+import javafx.scene.control.cell.CheckBoxTreeTableCell;
 import javafx.scene.control.cell.TextFieldTreeTableCell;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -167,17 +174,28 @@ public class DataAwareController extends AbstractController {
 	@FXML
 	private TreeTableColumn<ConstraintEntry, String> constraintNameColumn;
 	@FXML
+	private TreeTableColumn<ConstraintEntry, Boolean> constraintHardColumn;
+	@FXML
 	private TreeTableColumn<ConstraintEntry, Double> constraintCostColumn;
-	
+
 	private static final double DEFAULT_VIOLATION_COST = 100;
-	
+
 	//Violation cost per Process Model (DECLARE or Petri net, keyed by its model), kept across refreshes of the Constraints pane; identity-keyed since
 	//DeclareConstraint.equals only compares template and activities, and the same constraint in two models should still have independent costs
 	private Map<Object, DoubleProperty> violationCosts = new IdentityHashMap<Object, DoubleProperty>();
 
+	//Whether a constraint (keyed like violationCosts) is hard, i.e. may not be violated, so its violation cost and the recovery strategy don't apply to it
+	private Map<Object, BooleanProperty> hardConstraints = new IdentityHashMap<Object, BooleanProperty>();
+	private static final String HARD_CONSTRAINT_COST = "x"; //Written to the violation cost file instead of the cost of a hard constraint
+	private static final PseudoClass LOCKED_PSEUDO_CLASS = PseudoClass.getPseudoClass("locked");
+
+	//Planner settings, changed via the planner settings dialog (gear button next to Run Planner)
 	@FXML
-	private ChoiceBox<RecoveryStrategy> recoveryStrategyChoice;
-	
+	private Button plannerSettingsButton;
+	private RecoveryStrategy recoveryStrategy = RecoveryStrategy.RESET;
+	private Double waitingCost = null; //Cost of waiting one time unit; null to use the generator's default
+	private static final String GENERATOR_DEFAULT_WAITING_COST = "10"; //Only shown to the user, the generator applies it itself when --waiting_cost is omitted
+	private static final PseudoClass ERROR_PSEUDO_CLASS = PseudoClass.getPseudoClass("error");
 
 	//Models whose constraints the user collapsed in the Constraints pane, so the pane keeps them collapsed when it is rebuilt
 	private Set<AbstractModel> collapsedConstraintModels = Collections.newSetFromMap(new IdentityHashMap<AbstractModel, Boolean>());
@@ -337,19 +355,30 @@ public class DataAwareController extends AbstractController {
 		private final AbstractModel model;
 		private final DeclareConstraint constraint; //null for a model row and for a Petri net
 		private final DoubleProperty violationCost; //null for a model row; shared with violationCosts, so edits outlive this entry
+		private final BooleanProperty hard; //null for a model row; shared with hardConstraints, so edits outlive this entry
 
-		private ConstraintEntry(AbstractModel model, DeclareConstraint constraint, DoubleProperty violationCost) {
+		private ConstraintEntry(AbstractModel model, DeclareConstraint constraint, DoubleProperty violationCost, BooleanProperty hard) {
 			this.model = model;
 			this.constraint = constraint;
 			this.violationCost = violationCost;
+			this.hard = hard;
 		}
 
 		private static ConstraintEntry modelRow(AbstractModel model) {
-			return new ConstraintEntry(model, null, null);
+			return new ConstraintEntry(model, null, null, null);
 		}
 
 		private boolean isModelRow() {
 			return violationCost == null;
+		}
+
+		private boolean isHard() {
+			return hard != null && hard.get();
+		}
+
+		//The violation cost, unless the constraint is hard (its cost doesn't apply, so it can't be edited); null for a model row
+		private DoubleProperty getEditableViolationCost() {
+			return isHard() ? null : violationCost;
 		}
 
 		//The model's name, "Petri net" for a net, or e.g. "Response[ActivityG, ActivityP]" (as written in the model file, without its conditions)
@@ -420,8 +449,10 @@ public class DataAwareController extends AbstractController {
 		//Constraints panel: the constraints of the currently selected process specifications, grouped by (collapsible) model; each Petri net counts as one constraint
 		constraintsTreeTableView.setPlaceholder(new Label("No process specifications selected"));
 		constraintNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getValue().getName()));
-		setupCostColumn(constraintsTreeTableView, constraintCostColumn, entry -> entry.violationCost); //Model rows have no cost of their own
-		setupBulkCostEditing(constraintsTreeTableView, entry -> entry.violationCost, "constraint", "constraints"); //A selected model row stands for all of its constraints
+		setupHardColumn();
+		setupCostColumn(constraintsTreeTableView, constraintCostColumn, entry -> entry.violationCost, ConstraintEntry::isHard); //Model rows have no cost of their own
+		setupBulkCostEditing(constraintsTreeTableView, ConstraintEntry::getEditableViolationCost, "constraint", "constraints"); //A selected model row stands for all of its constraints
+		setupBulkHardEditing();
 		constraintsTreeTableView.setRowFactory(treeTableView -> new TreeTableRow<ConstraintEntry>() {
 			@Override
 			protected void updateItem(ConstraintEntry item, boolean empty) {
@@ -433,7 +464,7 @@ public class DataAwareController extends AbstractController {
 		//Activities panel: the unique activities of the currently selected process specifications, each with its cost, its bound attributes (if any) and the models containing it
 		activitiesTreeTableView.setPlaceholder(new Label("No process specifications selected"));
 		activityNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getValue().label));
-		setupCostColumn(activitiesTreeTableView, activityCostColumn, entry -> entry.cost); //Only activity rows have a cost
+		setupCostColumn(activitiesTreeTableView, activityCostColumn, entry -> entry.cost, entry -> false); //Only activity rows have a cost
 		setupBulkCostEditing(activitiesTreeTableView, entry -> entry.cost, "activity", "activities"); //A selected group/attribute/model row stands for its activity
 		activitiesTreeTableView.setRowFactory(treeTableView -> new TreeTableRow<ActivityEntry>() {
 			@Override
@@ -556,15 +587,8 @@ public class DataAwareController extends AbstractController {
 
 		bttnDisplayViolations.setSelected(PlannerSession.getInstance().isDisplayViolations());
 
-		//How the planner recovers from violated constraints; the tooltip explains the selected strategy
-		recoveryStrategyChoice.getItems().setAll(RecoveryStrategy.values());
-		Tooltip recoveryStrategyTooltip = new Tooltip();
-		recoveryStrategyTooltip.setWrapText(true);
-		recoveryStrategyTooltip.setMaxWidth(350);
-		recoveryStrategyChoice.setTooltip(recoveryStrategyTooltip);
-		recoveryStrategyChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) ->
-				recoveryStrategyTooltip.setText(newValue == null ? "" : newValue + ": " + newValue.getDescription()));
-		recoveryStrategyChoice.getSelectionModel().select(RecoveryStrategy.RESET);
+		plannerSettingsButton.setTooltip(new Tooltip());
+		updatePlannerSettingsTooltip();
 
 		//Sets up the prefix selector with a single initial entry; this also reflects whatever trace/plan is already active in
 		//PlannerSession (e.g. carried over from Data-Agnostic), same as the updateTrace(null) it used to do here directly
@@ -718,6 +742,71 @@ public class DataAwareController extends AbstractController {
 		return attribute.toString();
 	}
 
+	//Lets the user change the settings the planner runs with: the recovery strategy and the waiting cost (left empty to use the generator's default)
+	@FXML
+	private void onClickPlannerSettings() {
+		Dialog<ButtonType> dialog = new Dialog<ButtonType>();
+		dialog.setTitle("Planner Settings");
+		dialog.setHeaderText("Settings used when running the planner");
+		dialog.initOwner(getStage());
+		dialog.getDialogPane().getStylesheets().add("/org/framedinterface/dialogPane.css");
+		dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+		ChoiceBox<RecoveryStrategy> recoveryChoice = new ChoiceBox<RecoveryStrategy>();
+		recoveryChoice.getItems().setAll(RecoveryStrategy.values());
+		recoveryChoice.getSelectionModel().select(recoveryStrategy);
+		Label recoveryDescription = new Label();
+		recoveryDescription.textProperty().bind(Bindings.createStringBinding(() -> recoveryChoice.getValue().getDescription(), recoveryChoice.valueProperty()));
+
+		TextField waitingCostField = new TextField(waitingCost == null ? "" : COST_CONVERTER.toString(waitingCost));
+		waitingCostField.setPromptText(GENERATOR_DEFAULT_WAITING_COST + " (default)");
+		waitingCostField.setPrefColumnCount(6);
+		waitingCostField.setMaxWidth(Region.USE_PREF_SIZE);
+		Label waitingCostDescription = new Label("The cost of waiting one time unit: any positive number (e.g. 0.5). Leave it empty to use the generator's default ("
+				+ GENERATOR_DEFAULT_WAITING_COST + ").");
+		BooleanBinding waitingCostInvalid = Bindings.createBooleanBinding(() -> !isValidWaitingCost(waitingCostField.getText()), waitingCostField.textProperty());
+		waitingCostInvalid.addListener((observable, wasInvalid, isInvalid) -> waitingCostField.pseudoClassStateChanged(ERROR_PSEUDO_CLASS, isInvalid));
+		dialog.getDialogPane().lookupButton(ButtonType.OK).disableProperty().bind(waitingCostInvalid);
+
+		for (Label description : List.of(recoveryDescription, waitingCostDescription)) {
+			description.setWrapText(true);
+			description.setPrefWidth(320);
+			description.setMinHeight(Region.USE_PREF_SIZE);
+		}
+		GridPane content = new GridPane();
+		content.setHgap(10);
+		content.setVgap(6);
+		content.setPadding(new Insets(10));
+		content.addRow(0, new Label("Recovery:"), recoveryChoice);
+		content.add(recoveryDescription, 1, 1);
+		content.addRow(2, new Label("Waiting cost:"), waitingCostField);
+		content.add(waitingCostDescription, 1, 3);
+		dialog.getDialogPane().setContent(content);
+
+		if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+			return;
+		}
+		recoveryStrategy = recoveryChoice.getValue();
+		waitingCost = waitingCostField.getText().isBlank() ? null : COST_CONVERTER.fromString(waitingCostField.getText());
+		updatePlannerSettingsTooltip();
+	}
+
+	//Empty (the generator's default is used) or a positive number
+	private static boolean isValidWaitingCost(String text) {
+		if (text.isBlank()) {
+			return true;
+		}
+		Double cost = COST_CONVERTER.fromString(text);
+		return cost != null && cost > 0;
+	}
+
+	//The planner settings are only visible in their dialog, so the gear button's tooltip summarizes them
+	private void updatePlannerSettingsTooltip() {
+		plannerSettingsButton.getTooltip().setText("Planner settings" + System.lineSeparator()
+				+ "Recovery: " + recoveryStrategy + System.lineSeparator()
+				+ "Waiting cost: " + (waitingCost == null ? GENERATOR_DEFAULT_WAITING_COST + " (default)" : COST_CONVERTER.toString(waitingCost)));
+	}
+
 	//Exports all prefixes to an XES log (output/prefixes/prefixes_<timestamp>.xes), generates one PDDL problem per prefix (output/pddl/problem<i>.pddl) with the
 	//data-aware PDDL generator, then runs ENHSP on each of them (output/plans/plan<i>.txt)
 	@FXML
@@ -740,7 +829,6 @@ public class DataAwareController extends AbstractController {
 			AlertUtils.showWarning("Select at least one Declare model under Process Specifications before running the planner.");
 			return;
 		}
-		RecoveryStrategy recoveryStrategy = recoveryStrategyChoice.getSelectionModel().getSelectedItem();
 		File domainFile = RunEnhspTask.getDomainFile(currentPath, recoveryStrategy);
 		if (!domainFile.isFile()) { //Checked up front, rather than only after generating the PDDL problems
 			AlertUtils.showError("The PDDL domain for the recovery strategy \"" + recoveryStrategy + "\" was not found:\n" + domainFile.getAbsolutePath());
@@ -771,7 +859,8 @@ public class DataAwareController extends AbstractController {
 		loadProgressLayer();
 		setUiBusy(true, "Generating PDDL...");
 
-		GenerateDataAwarePDDLTask generatePDDLTask = new GenerateDataAwarePDDLTask(currentPath, declPaths, pnPaths, logFile.getAbsolutePath(), recoveryStrategy, buildCostModelLines(), buildViolationCostLines(plannedModels));
+		GenerateDataAwarePDDLTask generatePDDLTask = new GenerateDataAwarePDDLTask(currentPath, declPaths, pnPaths, logFile.getAbsolutePath(), recoveryStrategy, buildCostModelLines(), buildViolationCostLines(plannedModels),
+				waitingCost == null ? null : COST_CONVERTER.toString(waitingCost));
 		generatePDDLTask.setOnCancelled(taskEvent -> setUiBusy(false, null));
 		generatePDDLTask.setOnFailed(taskEvent -> {
 			setUiBusy(false, null);
@@ -1426,10 +1515,10 @@ public class DataAwareController extends AbstractController {
 			TreeItem<ConstraintEntry> modelItem = new TreeItem<ConstraintEntry>(ConstraintEntry.modelRow(model));
 			if (model instanceof DeclareModel) {
 				for (DeclareConstraint constraint : ((DeclareModel) model).getDeclareConstraints()) {
-					modelItem.getChildren().add(new TreeItem<ConstraintEntry>(new ConstraintEntry(model, constraint, getViolationCost(constraint))));
+					modelItem.getChildren().add(new TreeItem<ConstraintEntry>(new ConstraintEntry(model, constraint, getViolationCost(constraint), getHardProperty(constraint))));
 				}
 			} else if (model instanceof PnModel) {
-				modelItem.getChildren().add(new TreeItem<ConstraintEntry>(new ConstraintEntry(model, null, getViolationCost(model))));
+				modelItem.getChildren().add(new TreeItem<ConstraintEntry>(new ConstraintEntry(model, null, getViolationCost(model), getHardProperty(model))));
 			}
 			modelItem.setExpanded(!collapsedConstraintModels.contains(model));
 			modelItem.expandedProperty().addListener((observable, oldValue, expanded) -> {
@@ -1445,8 +1534,8 @@ public class DataAwareController extends AbstractController {
 	}
 
 	//Makes costColumn show and edit the cost of each row that has one (costOf returns null for rows without): Enter confirms, and input that
-	//isn't a non-negative number is rejected, showing the previous cost again
-	private static <T> void setupCostColumn(TreeTableView<T> treeTableView, TreeTableColumn<T, Double> costColumn, Function<T, DoubleProperty> costOf) {
+	//isn't a non-negative number is rejected, showing the previous cost again. Rows isLocked holds for show their cost greyed out and can't be edited
+	private static <T> void setupCostColumn(TreeTableView<T> treeTableView, TreeTableColumn<T, Double> costColumn, Function<T, DoubleProperty> costOf, Predicate<T> isLocked) {
 		costColumn.setCellValueFactory(data -> {
 			DoubleProperty cost = data.getValue().getValue() == null ? null : costOf.apply(data.getValue().getValue());
 			return cost == null ? new ReadOnlyObjectWrapper<Double>(null) : cost.asObject();
@@ -1454,10 +1543,20 @@ public class DataAwareController extends AbstractController {
 		costColumn.setCellFactory(column -> new TextFieldTreeTableCell<T, Double>(COST_CONVERTER) {
 			@Override
 			public void startEdit() {
-				TreeItem<T> treeItem = getTreeTableRow() == null ? null : getTreeTableRow().getTreeItem();
-				if (treeItem != null && treeItem.getValue() != null && costOf.apply(treeItem.getValue()) != null) {
+				T rowValue = getRowValue();
+				if (rowValue != null && costOf.apply(rowValue) != null && !isLocked.test(rowValue)) {
 					super.startEdit();
 				}
+			}
+			@Override
+			public void updateItem(Double item, boolean empty) {
+				super.updateItem(item, empty);
+				T rowValue = getRowValue();
+				pseudoClassStateChanged(LOCKED_PSEUDO_CLASS, !empty && rowValue != null && isLocked.test(rowValue));
+			}
+			private T getRowValue() {
+				TreeItem<T> treeItem = getTreeTableRow() == null ? null : getTreeTableRow().getTreeItem();
+				return treeItem == null ? null : treeItem.getValue();
 			}
 		});
 		costColumn.setOnEditCommit(event -> {
@@ -1469,10 +1568,38 @@ public class DataAwareController extends AbstractController {
 		});
 	}
 
-	//Sets the cost of the selected constraints, or of all constraints if none are selected
+	//Makes the Hard column show a checkbox for each constraint (and Petri net), but none for the model rows
+	private void setupHardColumn() {
+		constraintHardColumn.setCellValueFactory(data -> {
+			BooleanProperty hard = data.getValue().getValue() == null ? null : data.getValue().getValue().hard;
+			return hard == null ? new ReadOnlyObjectWrapper<Boolean>(null) : hard;
+		});
+		constraintHardColumn.setCellFactory(column -> new CheckBoxTreeTableCell<ConstraintEntry, Boolean>() {
+			@Override
+			public void updateItem(Boolean item, boolean empty) {
+				super.updateItem(item, empty);
+				if (item == null) {
+					setGraphic(null);
+				}
+			}
+		});
+	}
+
+	//Adds context menu entries to mark the selected constraints as hard or soft at once (a selected model row stands for all of its constraints)
+	private void setupBulkHardEditing() {
+		MenuItem markHardItem = new MenuItem("Mark Selected Constraints as Hard");
+		markHardItem.setOnAction(event -> getRowProperties(constraintsTreeTableView, entry -> entry.hard, true).forEach(hard -> hard.set(true)));
+		MenuItem markSoftItem = new MenuItem("Mark Selected Constraints as Soft");
+		markSoftItem.setOnAction(event -> getRowProperties(constraintsTreeTableView, entry -> entry.hard, true).forEach(hard -> hard.set(false)));
+		markHardItem.disableProperty().bind(Bindings.isEmpty(constraintsTreeTableView.getSelectionModel().getSelectedItems()));
+		markSoftItem.disableProperty().bind(markHardItem.disableProperty());
+		constraintsTreeTableView.getContextMenu().getItems().addAll(new SeparatorMenuItem(), markHardItem, markSoftItem);
+	}
+
+	//Sets the cost of the selected constraints, or of all constraints if none are selected (hard constraints excluded)
 	@FXML
 	private void onClickSetConstraintCosts() {
-		promptCostsOfSelectionOrAll(constraintsTreeTableView, entry -> entry.violationCost, "constraint", "constraints");
+		promptCostsOfSelectionOrAll(constraintsTreeTableView, ConstraintEntry::getEditableViolationCost, "constraint", "constraints");
 	}
 
 	//Sets the cost of the selected activities, or of all activities if none are selected
@@ -1486,54 +1613,54 @@ public class DataAwareController extends AbstractController {
 		treeTableView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
 		String capitalizedItems = Character.toUpperCase(itemsName.charAt(0)) + itemsName.substring(1);
 		MenuItem setSelectedCostsItem = new MenuItem("Set Cost of Selected " + capitalizedItems + "...");
-		setSelectedCostsItem.setOnAction(event -> promptCosts(treeTableView, getCosts(treeTableView, costOf, true), "the selected", itemName, itemsName));
+		setSelectedCostsItem.setOnAction(event -> promptCosts(treeTableView, getRowProperties(treeTableView, costOf, true), "the selected", itemName, itemsName));
 		MenuItem setAllCostsItem = new MenuItem("Set Cost of All " + capitalizedItems + "...");
-		setAllCostsItem.setOnAction(event -> promptCosts(treeTableView, getCosts(treeTableView, costOf, false), "all", itemName, itemsName));
+		setAllCostsItem.setOnAction(event -> promptCosts(treeTableView, getRowProperties(treeTableView, costOf, false), "all", itemName, itemsName));
 		ContextMenu contextMenu = new ContextMenu(setSelectedCostsItem, setAllCostsItem);
 		contextMenu.setOnShowing(event -> setSelectedCostsItem.setDisable(treeTableView.getSelectionModel().getSelectedItems().isEmpty()));
 		treeTableView.setContextMenu(contextMenu);
 	}
 
+	//Decided by the selected rows rather than their costs, so that selecting only rows without an editable cost (hard constraints) doesn't fall back to all
 	private <T> void promptCostsOfSelectionOrAll(TreeTableView<T> treeTableView, Function<T, DoubleProperty> costOf, String itemName, String itemsName) {
-		List<DoubleProperty> selectedCosts = getCosts(treeTableView, costOf, true);
-		if (selectedCosts.isEmpty()) {
-			promptCosts(treeTableView, getCosts(treeTableView, costOf, false), "all", itemName, itemsName);
+		if (treeTableView.getSelectionModel().getSelectedItems().isEmpty()) {
+			promptCosts(treeTableView, getRowProperties(treeTableView, costOf, false), "all", itemName, itemsName);
 		} else {
-			promptCosts(treeTableView, selectedCosts, "the selected", itemName, itemsName);
+			promptCosts(treeTableView, getRowProperties(treeTableView, costOf, true), "the selected", itemName, itemsName);
 		}
 	}
 
-	//The costs of the selected rows (or of all rows), each once. A row without a cost of its own stands for the nearest ancestor that has one
+	//The properties (e.g. costs) of the selected rows (or of all rows), each once. A row without one of its own stands for the nearest ancestor that has one
 	//(e.g. an activity's attribute/model rows) or, failing that, for all descendants that have one (e.g. a model row for its constraints)
-	private static <T> List<DoubleProperty> getCosts(TreeTableView<T> treeTableView, Function<T, DoubleProperty> costOf, boolean selectedOnly) {
+	private static <T, P> List<P> getRowProperties(TreeTableView<T> treeTableView, Function<T, P> propertyOf, boolean selectedOnly) {
 		List<TreeItem<T>> rows = new ArrayList<TreeItem<T>>();
 		if (selectedOnly) {
 			rows.addAll(treeTableView.getSelectionModel().getSelectedItems());
 		} else if (treeTableView.getRoot() != null) {
 			rows.addAll(treeTableView.getRoot().getChildren());
 		}
-		Set<DoubleProperty> costs = new LinkedHashSet<DoubleProperty>(); //Identity-based (properties don't override equals)
+		Set<P> properties = new LinkedHashSet<P>(); //Identity-based (properties don't override equals)
 		for (TreeItem<T> row : rows) {
-			DoubleProperty ownOrAncestorCost = null;
-			for (TreeItem<T> item = row; item != null && ownOrAncestorCost == null; item = item.getParent()) {
-				ownOrAncestorCost = item.getValue() == null ? null : costOf.apply(item.getValue());
+			P ownOrAncestorProperty = null;
+			for (TreeItem<T> item = row; item != null && ownOrAncestorProperty == null; item = item.getParent()) {
+				ownOrAncestorProperty = item.getValue() == null ? null : propertyOf.apply(item.getValue());
 			}
-			if (ownOrAncestorCost != null) {
-				costs.add(ownOrAncestorCost);
+			if (ownOrAncestorProperty != null) {
+				properties.add(ownOrAncestorProperty);
 			} else if (row != null) {
-				addDescendantCosts(row, costOf, costs);
+				addDescendantProperties(row, propertyOf, properties);
 			}
 		}
-		return new ArrayList<DoubleProperty>(costs);
+		return new ArrayList<P>(properties);
 	}
 
-	private static <T> void addDescendantCosts(TreeItem<T> item, Function<T, DoubleProperty> costOf, Set<DoubleProperty> costs) {
+	private static <T, P> void addDescendantProperties(TreeItem<T> item, Function<T, P> propertyOf, Set<P> properties) {
 		for (TreeItem<T> child : item.getChildren()) {
-			DoubleProperty cost = child.getValue() == null ? null : costOf.apply(child.getValue());
-			if (cost != null) {
-				costs.add(cost);
+			P property = child.getValue() == null ? null : propertyOf.apply(child.getValue());
+			if (property != null) {
+				properties.add(property);
 			} else {
-				addDescendantCosts(child, costOf, costs);
+				addDescendantProperties(child, propertyOf, properties);
 			}
 		}
 	}
@@ -1541,7 +1668,9 @@ public class DataAwareController extends AbstractController {
 	//Asks for a cost (pre-filled if the given costs are currently equal) and sets all of them to it; scope (e.g. "the selected"/"all") is only used in the prompt
 	private void promptCosts(TreeTableView<?> treeTableView, List<DoubleProperty> costs, String scope, String itemName, String itemsName) {
 		if (costs.isEmpty()) {
-			AlertUtils.showWarning("There are no " + itemsName + " to set the cost of. Select process specifications under Process Specifications first.");
+			boolean noRows = treeTableView.getRoot() == null || treeTableView.getRoot().getChildren().isEmpty();
+			AlertUtils.showWarning(noRows ? "There are no " + itemsName + " to set the cost of. Select process specifications under Process Specifications first."
+					: "Hard constraints have no cost to set, and " + scope + " " + itemsName + " are hard."); //Every activity has a cost, so only constraints get here
 			return;
 		}
 		double firstCost = costs.get(0).get();
@@ -1574,7 +1703,7 @@ public class DataAwareController extends AbstractController {
 	}
 
 	//The violation costs handed to the PDDL generator, from the Constraints pane: "<model file>|<constraint name> <cost>" per Declare constraint
-	//(named as the generator names it, see getPlannerConstraintNames) and "<model file> <cost>" per Petri net
+	//(named as the generator names it, see getPlannerConstraintNames) and "<model file> <cost>" per Petri net, with HARD_CONSTRAINT_COST as the cost of hard ones
 	private List<String> buildViolationCostLines(List<AbstractModel> plannedModels) {
 		Map<DeclareConstraint, String> constraintNames = getPlannerConstraintNames(plannedModels);
 		List<String> lines = new ArrayList<String>();
@@ -1582,13 +1711,17 @@ public class DataAwareController extends AbstractController {
 			String modelFileName = Paths.get(model.getFilePath()).getFileName().toString();
 			if (model instanceof DeclareModel) {
 				for (DeclareConstraint constraint : ((DeclareModel) model).getDeclareConstraints()) {
-					lines.add(modelFileName + "|" + constraintNames.get(constraint) + " " + COST_CONVERTER.toString(getViolationCost(constraint).get()));
+					lines.add(modelFileName + "|" + constraintNames.get(constraint) + " " + getViolationCostString(constraint));
 				}
 			} else if (model instanceof PnModel) {
-				lines.add(modelFileName + " " + COST_CONVERTER.toString(getViolationCost(model).get()));
+				lines.add(modelFileName + " " + getViolationCostString(model));
 			}
 		}
 		return lines;
+	}
+
+	private String getViolationCostString(Object constraintOrPetriNet) {
+		return getHardProperty(constraintOrPetriNet).get() ? HARD_CONSTRAINT_COST : COST_CONVERTER.toString(getViolationCost(constraintOrPetriNet).get());
 	}
 
 	//Cost of an activity (case-insensitive); DEFAULT_ACTIVITY_COST until edited in the Activities pane
@@ -1611,6 +1744,15 @@ public class DataAwareController extends AbstractController {
 	//Violation cost of a Declare constraint, or of a Petri net (keyed by its model); DEFAULT_VIOLATION_COST until edited in the Constraints pane
 	private DoubleProperty getViolationCost(Object constraintOrPetriNet) {
 		return violationCosts.computeIfAbsent(constraintOrPetriNet, key -> new SimpleDoubleProperty(DEFAULT_VIOLATION_COST));
+	}
+
+	//Whether a Declare constraint, or a Petri net (keyed by its model), is hard; soft until marked in the Constraints pane
+	private BooleanProperty getHardProperty(Object constraintOrPetriNet) {
+		return hardConstraints.computeIfAbsent(constraintOrPetriNet, key -> {
+			BooleanProperty hard = new SimpleBooleanProperty(false);
+			hard.addListener(observable -> constraintsTreeTableView.refresh()); //Greys out / re-enables the constraint's cost cell
+			return hard;
+		});
 	}
 
 	//Shows whole costs without a fraction ("1" rather than "1.0"); unparseable or negative input yields null, which rejects the edit
@@ -2295,7 +2437,8 @@ public class DataAwareController extends AbstractController {
 			new Label("\t iii) \tadd: An event added by the planner, with the attribute values it chose"),
 			new Label("\t iv) \treset constraint: The constraint (or Petri net) was violated and is reset to its initial state (Reset recovery strategy)"),
 			new Label(""),
-			new Label("The Recovery strategy (next to Run Planner) decides how the planner handles violated constraints; hover over it for a description of the selected one."),
+			new Label("The planner settings (gear button next to Run Planner) set the Recovery strategy, which decides how the planner handles violated constraints,"),
+			new Label("and the Waiting cost, the cost of waiting one time unit; hover over the button to see the current settings."),
 			new Label(""),
 			new Label("Reset discards the selected prefix's plan (making the prefix editable again); pressing it again clears the prefix.")
 		);

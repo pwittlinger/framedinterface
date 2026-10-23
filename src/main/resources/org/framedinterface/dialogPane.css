@@ -74,3 +74,10 @@
 	-fx-background-color: white;
 	-fx-text-fill: #393939;
 }
+
+/* Same as in main.css, for text fields with invalid input */
+.dialog-pane .text-field:error {
+	-fx-text-box-border: #d35244;
+	-fx-focus-color: #d35244;
+	-fx-background-insets: -0.2, 1, -1.4, 3;
+}
