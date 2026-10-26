@@ -13,11 +13,12 @@ import java.util.HexFormat;
 import java.util.List;
 
 import org.framedinterface.utils.RunnerUtils;
+import org.framedinterface.utils.enums.RecoveryStrategy;
 
 import javafx.concurrent.Task;
 
 /**
- * Runs the ENHSP planner on output/pddl/problem1.pddl ... problem<problemCount>.pddl, one after another, writing the
+ * Runs the ENHSP planner, with the recovery strategy's domain, on output/pddl/problem1.pddl ... problem<problemCount>.pddl, one after another, writing the
  * planner output for problem<i>.pddl to output/plans/plan<i>.txt.
  * The result is the list of problem numbers for which no plan was found.
  *
@@ -27,20 +28,30 @@ import javafx.concurrent.Task;
 public class RunEnhspTask extends Task<List<Integer>> {
 
 	public static final String ENHSP_JAR = "dependencies/enhsp.jar";
-	public static final String DOMAIN_FILE = "dependencies/domain_framed_autonomy_process_reset_time.pddl";
-	//Written by the generator next to the problems when some data condition uses or/not (nand clauses).
-	//Those problems only work with this domain, so when it's there we use it instead of the normal one.
-	public static final String CLAUSES_DOMAIN_FILE = GenerateDataAwarePDDLTask.PDDL_OUTPUT_FOLDER + "/domain_framed_autonomy_process_reset_time_clauses.pddl";
+	public static final String DOMAIN_FOLDER = "dependencies"; //Holds one PDDL domain per recovery strategy (see RecoveryStrategy.getDomainFileName)
 	public static final String PLAN_OUTPUT_FOLDER = "output/plans";
 	public static final Path PLAN_CACHE = Path.of(System.getProperty("user.home"), ".fraim", "plan-cache");
 	private static final List<String> PLANNER_OPTIONS = List.of("-planner", "opt-blind");
 
 	private String currentPath;
 	private int problemCount;
+	private RecoveryStrategy recoveryStrategy;
 
-	public RunEnhspTask(String currentPath, int problemCount) {
+	public RunEnhspTask(String currentPath, int problemCount, RecoveryStrategy recoveryStrategy) {
 		this.currentPath = currentPath;
 		this.problemCount = problemCount;
+		this.recoveryStrategy = recoveryStrategy;
+	}
+
+	public static File getDomainFile(String currentPath, RecoveryStrategy recoveryStrategy) {
+		return new File(currentPath, DOMAIN_FOLDER + "/" + recoveryStrategy.getDomainFileName());
+	}
+
+	//Written by the generator next to the problems when some data condition uses or/not (nand clauses).
+	//Those problems only work with this variant of the strategy's domain.
+	public static File getClausesDomainFile(String currentPath, RecoveryStrategy recoveryStrategy) {
+		String name = recoveryStrategy.getDomainFileName().replaceFirst("\\.pddl$", "_clauses.pddl");
+		return new File(currentPath, GenerateDataAwarePDDLTask.PDDL_OUTPUT_FOLDER + "/" + name);
 	}
 
 	@Override
@@ -51,6 +62,11 @@ public class RunEnhspTask extends Task<List<Integer>> {
 		}
 		File domain = findDomain();
 		System.out.println("RunEnhspTask: using domain " + domain.getAbsolutePath());
+
+		List<String> plannerOptions = new ArrayList<String>(PLANNER_OPTIONS);
+		if (recoveryStrategy.getCliValue().contains("discard") | recoveryStrategy.getCliValue().contains("skip")) {
+			plannerOptions.add("-sdac");
+		}
 
 		File planFolder = new File(currentPath, PLAN_OUTPUT_FOLDER);
 		planFolder.mkdirs();
@@ -79,7 +95,7 @@ public class RunEnhspTask extends Task<List<Integer>> {
 			}
 
 			File planFile = new File(planFolder, "plan" + i + ".txt");
-			Path cached = PLAN_CACHE.resolve(cacheKey(plannerKey, domainBytes, Files.readAllBytes(problem.toPath())) + ".txt");
+			Path cached = PLAN_CACHE.resolve(cacheKey(plannerKey, plannerOptions, domainBytes, Files.readAllBytes(problem.toPath())) + ".txt");
 			if (Files.isRegularFile(cached)) {
 				Files.copy(cached, planFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
 				System.out.println("RunEnhspTask: problem" + i + ".pddl solved (from the cache)");
@@ -94,7 +110,7 @@ public class RunEnhspTask extends Task<List<Integer>> {
 			command.add(domain.getAbsolutePath());
 			command.add("-f");
 			command.add(problem.getAbsolutePath());
-			command.addAll(PLANNER_OPTIONS);
+			command.addAll(plannerOptions);
 
 			int exitCode = RunnerUtils.runProcess(command, new File(currentPath), planFile);
 			boolean solved = exitCode == 0 && new String(Files.readAllBytes(planFile.toPath())).contains("Problem Solved");
@@ -108,14 +124,14 @@ public class RunEnhspTask extends Task<List<Integer>> {
 		return unsolved;
 	}
 
-	//The clauses domain if the generator wrote one, otherwise the one in dependencies/, otherwise the one that comes
-	//with the generator (it's inside the pddl_gen jar we depend on), so it works without copying anything by hand
+	//The clauses domain if the generator wrote one, otherwise the strategy's one in dependencies/, otherwise the one
+	//that comes with the generator (it's inside the pddl_gen jar we depend on), so it works without copying anything by hand
 	private File findDomain() throws IOException {
-		File clausesDomain = new File(currentPath, CLAUSES_DOMAIN_FILE);
+		File clausesDomain = getClausesDomainFile(currentPath, recoveryStrategy);
 		if (clausesDomain.isFile()) {
 			return clausesDomain;
 		}
-		File domain = new File(currentPath, DOMAIN_FILE);
+		File domain = getDomainFile(currentPath, recoveryStrategy);
 		if (domain.isFile()) {
 			return domain;
 		}
@@ -130,11 +146,11 @@ public class RunEnhspTask extends Task<List<Integer>> {
 		return extracted;
 	}
 
-	//Same planner + same domain + same problem = same plan. The options are in there too, in case we change them.
-	private static String cacheKey(byte[] plannerKey, byte[] domain, byte[] problem) throws NoSuchAlgorithmException {
+	//Same planner + same options + same domain + same problem = same plan
+	private static String cacheKey(byte[] plannerKey, List<String> plannerOptions, byte[] domain, byte[] problem) throws NoSuchAlgorithmException {
 		MessageDigest digest = MessageDigest.getInstance("SHA-256");
 		digest.update(plannerKey);
-		digest.update(String.join(" ", PLANNER_OPTIONS).getBytes());
+		digest.update(String.join(" ", plannerOptions).getBytes());
 		digest.update(sha256(domain));
 		digest.update(sha256(problem));
 		return HexFormat.of().formatHex(digest.digest());

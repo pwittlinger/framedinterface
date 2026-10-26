@@ -102,6 +102,26 @@ public class FileUtils {
 		return chosenFiles;
 	}
 
+	//Opens in the previously used directory if there is one, otherwise in defaultDirectory (if it exists)
+	public static File showXesSaveDialog(Stage stage, File defaultDirectory, String initialFileName) {
+		FileChooser fileChooser = new FileChooser();
+		if (previousDirectory != null && previousDirectory.exists()) {
+			fileChooser.setInitialDirectory(previousDirectory);
+		} else if (defaultDirectory != null && defaultDirectory.isDirectory()) {
+			fileChooser.setInitialDirectory(defaultDirectory);
+		}
+		fileChooser.setInitialFileName(initialFileName);
+
+		fileChooser.getExtensionFilters().add(xesExtensionFilter);
+		File chosenFile = fileChooser.showSaveDialog(stage);
+
+		if (chosenFile != null) {
+			previousDirectory = chosenFile.getParentFile();
+		}
+
+		return chosenFile;
+	}
+
 	public static File showXesOpenDialog(Stage stage) {
 		FileChooser fileChooser = new FileChooser();
 		if (previousDirectory != null && previousDirectory.exists()) {

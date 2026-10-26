@@ -30,8 +30,8 @@ public class RootLayoutController extends AbstractController {
 	// Called explicitly by App.java after setStage(), so that the default page's controller
 	// already has access to the stage (e.g. for file choosers) once it is loaded.
 	public void showDefaultPage() {
-		navigateToPage(PageType.DATA_AGNOSTIC);
-		navigationSidebarController.updateHighlight(PageType.DATA_AGNOSTIC);
+		navigateToPage(PageType.PROCESS_FRAME_OVERVIEW);
+		navigationSidebarController.updateHighlight(PageType.PROCESS_FRAME_OVERVIEW);
 	}
 
 	private void navigateToPage(PageType pageType) {

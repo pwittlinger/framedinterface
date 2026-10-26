@@ -47,3 +47,12 @@ Delete that folder to clear the cache.
 - The planner currently supported is Fast-Downward, with A* and a fully blind heuristic.
 - The names of the different transition should be unique within a single process model (?)
 - Silent transitions are not natively supported.
+
+## Known Issues
+- **Declare constraints that differ only in their data/time conditions are merged.** When a `.decl` model is loaded, two constraints with the same template and activities are treated as duplicates (`DeclareConstraint.equals`/`hashCode` ignore the conditions), so only the first one is kept. For example, of
+  ```
+  Response[ActivityG, ActivityP] |A.integer > 10 |T.integer < 10 |
+  Response[ActivityG, ActivityP] |A.integer > 50 | |
+  ```
+  only the first constraint is shown in the Data-Aware page's Constraints pane, replayed on the models and written to `output/violation_costs.txt`. The data-aware PDDL generator keeps both (naming the second `Response_ActivityG_ActivityP_2`), so the second constraint's violation cost is missing from that file.
+  A fix would be to include the conditions in `DeclareConstraint.equals`/`hashCode`; on the Data-Agnostic page, which ignores conditions, such constraints would then show up twice.

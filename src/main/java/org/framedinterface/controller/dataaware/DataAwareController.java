@@ -15,12 +15,19 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.framedinterface.controller.ProgressLayerController;
 import org.framedinterface.controller.common.AbstractController;
@@ -41,6 +48,7 @@ import org.framedinterface.utils.EnhspPlanParser;
 import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
+import org.framedinterface.utils.enums.RecoveryStrategy;
 import org.controlsfx.control.ToggleSwitch;
 import org.deckfour.xes.extension.std.XConceptExtension;
 import org.deckfour.xes.extension.std.XLifecycleExtension;
@@ -67,11 +75,15 @@ import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
+import javafx.beans.binding.BooleanBinding;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
@@ -80,28 +92,47 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Task;
 import javafx.concurrent.Worker;
+import javafx.css.PseudoClass;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Bounds;
+import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.SelectionMode;
+import javafx.scene.control.Separator;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Slider;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.TitledPane;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.TreeItem;
+import javafx.scene.control.TreeTableColumn;
+import javafx.scene.control.TreeTableRow;
+import javafx.scene.control.TreeTableView;
 import javafx.scene.control.TreeView;
 import javafx.scene.control.cell.CheckBoxTableCell;
+import javafx.scene.control.cell.CheckBoxTreeTableCell;
+import javafx.scene.control.cell.TextFieldTreeTableCell;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -112,13 +143,17 @@ import javafx.util.Duration;
 import javafx.util.StringConverter;
 import netscape.javascript.JSObject;
 
-
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 
 public class DataAwareController extends AbstractController {
 
+	//Entries for the "Process Specifications" Table
+	// modelRegistryPane is the container (expandable, collapseable)
+	// Whereas the TableView contains the content of loaded Process models
+	@FXML
+	private TitledPane modelRegistryPane;
 	@FXML
 	private TableView<AbstractModel> modelTabelView;
 	@FXML
@@ -131,23 +166,78 @@ public class DataAwareController extends AbstractController {
 	//Tracks which process specifications are checked in modelTabelView, to later be used for populating the data-aware planner
 	private Map<AbstractModel, BooleanProperty> modelSelectionState = new HashMap<AbstractModel, BooleanProperty>();
 
+	// Entries for the Constraints table.
 	@FXML
-	private TitledPane modelRegistryPane;
+	private TitledPane constraintsPane;
 	@FXML
-	private TreeView<String> activitiesTreeView;
+	private TreeTableView<ConstraintEntry> constraintsTreeTableView;
+	@FXML
+	private TreeTableColumn<ConstraintEntry, String> constraintNameColumn;
+	@FXML
+	private TreeTableColumn<ConstraintEntry, Boolean> constraintHardColumn;
+	@FXML
+	private TreeTableColumn<ConstraintEntry, Double> constraintCostColumn;
+
+	private static final double DEFAULT_VIOLATION_COST = 100;
+
+	//Violation cost per Process Model (DECLARE or Petri net, keyed by its model), kept across refreshes of the Constraints pane; identity-keyed since
+	//DeclareConstraint.equals only compares template and activities, and the same constraint in two models should still have independent costs
+	private Map<Object, DoubleProperty> violationCosts = new IdentityHashMap<Object, DoubleProperty>();
+
+	//Whether a constraint (keyed like violationCosts) is hard, i.e. may not be violated, so its violation cost and the recovery strategy don't apply to it
+	private Map<Object, BooleanProperty> hardConstraints = new IdentityHashMap<Object, BooleanProperty>();
+	private static final String HARD_CONSTRAINT_COST = "x"; //Written to the violation cost file instead of the cost of a hard constraint
+	private static final PseudoClass LOCKED_PSEUDO_CLASS = PseudoClass.getPseudoClass("locked");
+
+	//Planner settings, changed via the planner settings dialog (gear button next to Run Planner)
+	@FXML
+	private Button plannerSettingsButton;
+	private RecoveryStrategy recoveryStrategy = RecoveryStrategy.RESET;
+	private Double waitingCost = null; //Cost of waiting one time unit; null to use the generator's default
+	private static final String GENERATOR_DEFAULT_WAITING_COST = "10"; //Only shown to the user, the generator applies it itself when --waiting_cost is omitted
+	private static final PseudoClass ERROR_PSEUDO_CLASS = PseudoClass.getPseudoClass("error");
+
+	//Models whose constraints the user collapsed in the Constraints pane, so the pane keeps them collapsed when it is rebuilt
+	private Set<AbstractModel> collapsedConstraintModels = Collections.newSetFromMap(new IdentityHashMap<AbstractModel, Boolean>());
+
+
+	// "Activities" overview
 	@FXML
 	private TitledPane activitiesAttributesPane;
 	@FXML
-	private TreeView<String> attributesTreeView;
+	private TreeTableView<ActivityEntry> activitiesTreeTableView;
 	@FXML
-	private TitledPane attributesPane;
+	private TreeTableColumn<ActivityEntry, String> activityNameColumn;
+	@FXML
+	private TreeTableColumn<ActivityEntry, Double> activityCostColumn;
+
+	private static final double DEFAULT_ACTIVITY_COST = 0;
+
+	//Cost per activity, keyed by its lowercased name (activities are merged case-insensitively across models), kept across refreshes of the Activities pane
+	private Map<String, DoubleProperty> activityCosts = new HashMap<String, DoubleProperty>();
+
+	//Rows of the Activities pane the user collapsed ("<activity>" or "<activity>/<group>", lowercased), so the pane keeps them collapsed when it is rebuilt
+	private Set<String> collapsedActivityRows = new HashSet<String>();
+
+	//Attributes (lowercased names) the user collapsed in the Attributes pane, so the pane keeps them collapsed when it is rebuilt
+	private Set<String> collapsedAttributeRows = new HashSet<String>();
 
 	//Unique (case-insensitive) activity labels, and their bound attributes (Declare models only), of the currently selected process specifications; refreshed by updateActivitiesListView()
 	private Map<String, Set<String>> activityToAttributes = new TreeMap<String, Set<String>>();
 
+
+	// "Attributes" overview
+	@FXML
+	private TitledPane attributesPane;
+	@FXML
+	private TreeView<String> attributesTreeView;
+
+
 	@FXML
 	private SplitPane resultsSplitPane;
 
+	// DECLARE viewer (top, middle) elements
+	// All of these elements go on the top half of the screen and is used to display and control the DECLARE viewer
 	@FXML
 	private ChoiceBox<AbstractModel> declModelChoice;
 	@FXML
@@ -161,6 +251,8 @@ public class DataAwareController extends AbstractController {
 	@FXML
 	private ToggleSwitch dataConditionsToggle;
 
+	// Petri net Viewer (bottom, middle)
+	//
 	@FXML
 	private ChoiceBox<AbstractModel> pnModelChoice;
 	@FXML
@@ -205,6 +297,8 @@ public class DataAwareController extends AbstractController {
 	@FXML
 	private Button importPrefixButton;
 	@FXML
+	private Button exportContinuationButton;
+	@FXML
 	private VBox mainContents;
 	@FXML
 	private Button toolTipButtonPlan;
@@ -229,6 +323,7 @@ public class DataAwareController extends AbstractController {
 	private static String precentageFormat = "%.1f";
 	private static final DateTimeFormatter XES_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"); //Matches the "timestamp" attribute format EventCell's editor expects
 	private static final String PREFIX_OUTPUT_FOLDER = "output/prefixes"; //Where the prefixes handed to the planner are exported as XES
+	private static final String CONTINUATION_OUTPUT_FOLDER = "output/continuations"; //Default folder for exported continuations
 	private static final DateTimeFormatter PREFIX_FILE_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 	private String initialDeclWebViewScript;
 	private String initialPnWebViewScript;
@@ -254,6 +349,71 @@ public class DataAwareController extends AbstractController {
 	private ObservableList<PrefixEntry> prefixes = FXCollections.observableArrayList();
 	private PrefixEntry selectedEntry; //prefixChoice's current selection, whose prefix/continuation is the one live in PlannerSession
 
+	//One row of the Constraints pane: a model (grouping its constraints), or one of its constraints - a Declare constraint, or a whole Petri net
+	//(which the planner treats as a single constraint). Only constraint rows carry a violation cost.
+	private static class ConstraintEntry {
+		private final AbstractModel model;
+		private final DeclareConstraint constraint; //null for a model row and for a Petri net
+		private final DoubleProperty violationCost; //null for a model row; shared with violationCosts, so edits outlive this entry
+		private final BooleanProperty hard; //null for a model row; shared with hardConstraints, so edits outlive this entry
+
+		private ConstraintEntry(AbstractModel model, DeclareConstraint constraint, DoubleProperty violationCost, BooleanProperty hard) {
+			this.model = model;
+			this.constraint = constraint;
+			this.violationCost = violationCost;
+			this.hard = hard;
+		}
+
+		private static ConstraintEntry modelRow(AbstractModel model) {
+			return new ConstraintEntry(model, null, null, null);
+		}
+
+		private boolean isModelRow() {
+			return violationCost == null;
+		}
+
+		private boolean isHard() {
+			return hard != null && hard.get();
+		}
+
+		//The violation cost, unless the constraint is hard (its cost doesn't apply, so it can't be edited); null for a model row
+		private DoubleProperty getEditableViolationCost() {
+			return isHard() ? null : violationCost;
+		}
+
+		//The model's name, "Petri net" for a net, or e.g. "Response[ActivityG, ActivityP]" (as written in the model file, without its conditions)
+		private String getName() {
+			if (isModelRow()) {
+				return model.getModelName();
+			} else if (constraint == null) {
+				return "Petri net";
+			}
+			String constraintString = constraint.getConstraintString().trim();
+			return constraintString.contains(" |") ? constraintString.substring(0, constraintString.indexOf(" |")).trim() : constraintString;
+		}
+
+		//The full constraint line including its data/time conditions, e.g. "Response[ActivityG, ActivityP] |A.integer > 10 |T.integer < 10 |"
+		private String getDetails() {
+			if (isModelRow()) {
+				return model.getFilePath();
+			}
+			return constraint == null ? "Petri net " + model.getModelName() : constraint.getConstraintString().trim();
+		}
+	}
+
+	//One row of the Activities pane: an activity (with its cost), one of its "Attributes"/"Models" groups, or an attribute / model within such a group
+	private static class ActivityEntry {
+		private final String label;
+		private final String tooltip; //null for none
+		private final DoubleProperty cost; //Only set for activity rows; shared with activityCosts, so edits outlive this entry
+
+		private ActivityEntry(String label, String tooltip, DoubleProperty cost) {
+			this.label = label;
+			this.tooltip = tooltip;
+			this.cost = cost;
+		}
+	}
+
 	//One prefix's worth of PlannerSession state: its manually-built events, their attribute values, and whatever planner continuation was generated from it
 	private static class PrefixEntry {
 		private List<String> prefixEvents = new ArrayList<String>();
@@ -278,13 +438,46 @@ public class DataAwareController extends AbstractController {
 		modelSelectColumn.setCellValueFactory(data -> getModelSelectedProperty(data.getValue()));
 		modelSelectColumn.setCellFactory(CheckBoxTableCell.forTableColumn(modelSelectColumn));
 
-		//Activities & Attributes panel: view-only tree of unique activity labels (with their bound attributes, if any) across the currently selected process specifications
-		activitiesTreeView.setShowRoot(false);
+		
+		selectedDecl.setVisible(false);
+		selectedDecl.setManaged(false);
+		selectedPN.setVisible(false);
+		selectedPN.setManaged(false);
+		prefixOnlyLabel.setVisible(false);
+		prefixOnlyLabel.setManaged(false);
+
+		//Constraints panel: the constraints of the currently selected process specifications, grouped by (collapsible) model; each Petri net counts as one constraint
+		constraintsTreeTableView.setPlaceholder(new Label("No process specifications selected"));
+		constraintNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getValue().getName()));
+		setupHardColumn();
+		setupCostColumn(constraintsTreeTableView, constraintCostColumn, entry -> entry.violationCost, ConstraintEntry::isHard); //Model rows have no cost of their own
+		setupBulkCostEditing(constraintsTreeTableView, ConstraintEntry::getEditableViolationCost, "constraint", "constraints"); //A selected model row stands for all of its constraints
+		setupBulkHardEditing();
+		constraintsTreeTableView.setRowFactory(treeTableView -> new TreeTableRow<ConstraintEntry>() {
+			@Override
+			protected void updateItem(ConstraintEntry item, boolean empty) {
+				super.updateItem(item, empty);
+				setTooltip(empty || item == null ? null : new Tooltip(item.getDetails())); //Shows the conditions the Constraint column leaves out
+			}
+		});
+
+		//Activities panel: the unique activities of the currently selected process specifications, each with its cost, its bound attributes (if any) and the models containing it
+		activitiesTreeTableView.setPlaceholder(new Label("No process specifications selected"));
+		activityNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getValue().label));
+		setupCostColumn(activitiesTreeTableView, activityCostColumn, entry -> entry.cost, entry -> false); //Only activity rows have a cost
+		setupBulkCostEditing(activitiesTreeTableView, entry -> entry.cost, "activity", "activities"); //A selected group/attribute/model row stands for its activity
+		activitiesTreeTableView.setRowFactory(treeTableView -> new TreeTableRow<ActivityEntry>() {
+			@Override
+			protected void updateItem(ActivityEntry item, boolean empty) {
+				super.updateItem(item, empty);
+				setTooltip(empty || item == null || item.tooltip == null ? null : new Tooltip(item.tooltip));
+			}
+		});
 		attributesTreeView.setShowRoot(false);
 		updateActivitiesListView();
 
 		//Collapsed panes should only take up their title bar's height, not keep claiming a share of the column's growable space
-		for (TitledPane pane : new TitledPane[] {modelRegistryPane, activitiesAttributesPane, attributesPane, prefixPane, continuationPane}) {
+		for (TitledPane pane : new TitledPane[] {modelRegistryPane, constraintsPane, activitiesAttributesPane, attributesPane, prefixPane, continuationPane}) {
 			bindPaneGrowToExpanded(pane);
 		}
 
@@ -394,6 +587,9 @@ public class DataAwareController extends AbstractController {
 
 		bttnDisplayViolations.setSelected(PlannerSession.getInstance().isDisplayViolations());
 
+		plannerSettingsButton.setTooltip(new Tooltip());
+		updatePlannerSettingsTooltip();
+
 		//Sets up the prefix selector with a single initial entry; this also reflects whatever trace/plan is already active in
 		//PlannerSession (e.g. carried over from Data-Agnostic), same as the updateTrace(null) it used to do here directly
 		setupPrefixSelector();
@@ -414,6 +610,7 @@ public class DataAwareController extends AbstractController {
 			}
 		});
 		removePrefixButton.disableProperty().bind(Bindings.size(prefixes).lessThanOrEqualTo(1));
+		prefixes.addListener((Observable observable) -> updateExportButton()); //Removing/importing prefixes may remove the last continuation
 
 		//The first entry picks up whatever PlannerSession already holds, so a trace/plan carried over from Data-Agnostic still shows up
 		PrefixEntry initialEntry = new PrefixEntry();
@@ -545,22 +742,96 @@ public class DataAwareController extends AbstractController {
 		return attribute.toString();
 	}
 
+	//Lets the user change the settings the planner runs with: the recovery strategy and the waiting cost (left empty to use the generator's default)
+	@FXML
+	private void onClickPlannerSettings() {
+		Dialog<ButtonType> dialog = new Dialog<ButtonType>();
+		dialog.setTitle("Planner Settings");
+		dialog.setHeaderText("Settings used when running the planner");
+		dialog.initOwner(getStage());
+		dialog.getDialogPane().getStylesheets().add("/org/framedinterface/dialogPane.css");
+		dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+		ChoiceBox<RecoveryStrategy> recoveryChoice = new ChoiceBox<RecoveryStrategy>();
+		recoveryChoice.getItems().setAll(RecoveryStrategy.values());
+		recoveryChoice.getSelectionModel().select(recoveryStrategy);
+		Label recoveryDescription = new Label();
+		recoveryDescription.textProperty().bind(Bindings.createStringBinding(() -> recoveryChoice.getValue().getDescription(), recoveryChoice.valueProperty()));
+
+		TextField waitingCostField = new TextField(waitingCost == null ? "" : COST_CONVERTER.toString(waitingCost));
+		waitingCostField.setPromptText(GENERATOR_DEFAULT_WAITING_COST + " (default)");
+		waitingCostField.setPrefColumnCount(6);
+		waitingCostField.setMaxWidth(Region.USE_PREF_SIZE);
+		Label waitingCostDescription = new Label("The cost of waiting one time unit: any positive number (e.g. 0.5). Leave it empty to use the generator's default ("
+				+ GENERATOR_DEFAULT_WAITING_COST + ").");
+		BooleanBinding waitingCostInvalid = Bindings.createBooleanBinding(() -> !isValidWaitingCost(waitingCostField.getText()), waitingCostField.textProperty());
+		waitingCostInvalid.addListener((observable, wasInvalid, isInvalid) -> waitingCostField.pseudoClassStateChanged(ERROR_PSEUDO_CLASS, isInvalid));
+		dialog.getDialogPane().lookupButton(ButtonType.OK).disableProperty().bind(waitingCostInvalid);
+
+		for (Label description : List.of(recoveryDescription, waitingCostDescription)) {
+			description.setWrapText(true);
+			description.setPrefWidth(320);
+			description.setMinHeight(Region.USE_PREF_SIZE);
+		}
+		GridPane content = new GridPane();
+		content.setHgap(10);
+		content.setVgap(6);
+		content.setPadding(new Insets(10));
+		content.addRow(0, new Label("Recovery:"), recoveryChoice);
+		content.add(recoveryDescription, 1, 1);
+		content.addRow(2, new Label("Waiting cost:"), waitingCostField);
+		content.add(waitingCostDescription, 1, 3);
+		dialog.getDialogPane().setContent(content);
+
+		if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+			return;
+		}
+		recoveryStrategy = recoveryChoice.getValue();
+		waitingCost = waitingCostField.getText().isBlank() ? null : COST_CONVERTER.fromString(waitingCostField.getText());
+		updatePlannerSettingsTooltip();
+	}
+
+	//Empty (the generator's default is used) or a positive number
+	private static boolean isValidWaitingCost(String text) {
+		if (text.isBlank()) {
+			return true;
+		}
+		Double cost = COST_CONVERTER.fromString(text);
+		return cost != null && cost > 0;
+	}
+
+	//The planner settings are only visible in their dialog, so the gear button's tooltip summarizes them
+	private void updatePlannerSettingsTooltip() {
+		plannerSettingsButton.getTooltip().setText("Planner settings" + System.lineSeparator()
+				+ "Recovery: " + recoveryStrategy + System.lineSeparator()
+				+ "Waiting cost: " + (waitingCost == null ? GENERATOR_DEFAULT_WAITING_COST + " (default)" : COST_CONVERTER.toString(waitingCost)));
+	}
+
 	//Exports all prefixes to an XES log (output/prefixes/prefixes_<timestamp>.xes), generates one PDDL problem per prefix (output/pddl/problem<i>.pddl) with the
 	//data-aware PDDL generator, then runs ENHSP on each of them (output/plans/plan<i>.txt)
 	@FXML
 	private void onClickPlanner() {
+		String selectedDeclModels = "";
+		String selectedPnModels = "";
 		List<AbstractModel> plannedModels = getSelectedModels(); //In this order, as the generator names its (Petri net) constraints by position
 		List<String> declPaths = new ArrayList<String>();
 		List<String> pnPaths = new ArrayList<String>();
 		for (AbstractModel model : plannedModels) {
 			if (model.getModelType() == ModelType.DECLARE) {
 				declPaths.add(model.getFilePath());
+				selectedDeclModels = selectedDeclModels + model.getModelName() + "+";
 			} else if (model.getModelType() == ModelType.PN) {
 				pnPaths.add(model.getFilePath());
+				selectedPnModels = selectedPnModels + model.getModelName() + "+";
 			}
 		}
 		if (declPaths.isEmpty()) {
 			AlertUtils.showWarning("Select at least one Declare model under Process Specifications before running the planner.");
+			return;
+		}
+		File domainFile = RunEnhspTask.getDomainFile(currentPath, recoveryStrategy);
+		if (!domainFile.isFile()) { //Checked up front, rather than only after generating the PDDL problems
+			AlertUtils.showError("The PDDL domain for the recovery strategy \"" + recoveryStrategy + "\" was not found:\n" + domainFile.getAbsolutePath());
 			return;
 		}
 
@@ -588,14 +859,15 @@ public class DataAwareController extends AbstractController {
 		loadProgressLayer();
 		setUiBusy(true, "Generating PDDL...");
 
-		GenerateDataAwarePDDLTask generatePDDLTask = new GenerateDataAwarePDDLTask(currentPath, declPaths, pnPaths, logFile.getAbsolutePath());
+		GenerateDataAwarePDDLTask generatePDDLTask = new GenerateDataAwarePDDLTask(currentPath, declPaths, pnPaths, logFile.getAbsolutePath(), recoveryStrategy, buildCostModelLines(), buildViolationCostLines(plannedModels),
+				waitingCost == null ? null : COST_CONVERTER.toString(waitingCost));
 		generatePDDLTask.setOnCancelled(taskEvent -> setUiBusy(false, null));
 		generatePDDLTask.setOnFailed(taskEvent -> {
 			setUiBusy(false, null);
 			AlertUtils.showError("Generating PDDL failed: " + generatePDDLTask.getException().getMessage());
 		});
 		generatePDDLTask.setOnSucceeded(taskEvent -> {
-			RunEnhspTask runEnhspTask = new RunEnhspTask(currentPath, prefixCount);
+			RunEnhspTask runEnhspTask = new RunEnhspTask(currentPath, prefixCount, recoveryStrategy);
 			if (progressLayerController != null) {
 				progressLayerController.getProgressTextLabel().textProperty().bind(runEnhspTask.messageProperty());
 			}
@@ -626,24 +898,33 @@ public class DataAwareController extends AbstractController {
 			startPlannerTask(runEnhspTask);
 		});
 		startPlannerTask(generatePDDLTask);
+
+
+		//prefixOnlyLabel.setVisible(false);
+		//prefixOnlyLabel.setManaged(false);
+		try {
+			selectedDecl.setText(selectedDeclModels);
+			selectedDecl.setVisible(true);
+			selectedDecl.setManaged(true);
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		
+		try {
+			selectedPN.setText(selectedPnModels);
+			selectedPN.setVisible(true);
+			selectedPN.setManaged(true);
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
 	}
 
 	//Replaces every prefix's continuation with its plan from output/plans/plan<i>.txt (prefix i), decoded with the generator's encodings,
 	//and replays the selected prefix's plan. Prefixes without a (solved) plan are left without a continuation.
 	private void loadPlans(List<AbstractModel> plannedModels) throws IOException {
 		Map<String, String> resetTargets = assignPlannerConstraintNames(plannedModels);
-		Set<String> categoricalAttributes = new TreeSet<String>();
-		for (AbstractModel model : plannedModels) {
-			if (model instanceof DeclareModel) {
-				((DeclareModel) model).getAttributeDomains().forEach((attribute, domain) -> {
-					if (domain.getType() == AttributeDomain.Type.CATEGORICAL) {
-						categoricalAttributes.add(attribute.toLowerCase());
-					}
-				});
-			}
-		}
 		EnhspPlanParser planParser = new EnhspPlanParser(new File(currentPath, GenerateDataAwarePDDLTask.OUTPUT_FOLDER), new File(currentPath, GenerateDataAwarePDDLTask.VARIABLE_VALUES_FILE),
-				GenerateDataAwarePDDLTask.ACTIVITY_MAPPING_FILE_PATTERN, categoricalAttributes, resetTargets);
+				GenerateDataAwarePDDLTask.ACTIVITY_MAPPING_FILE_PATTERN, getCategoricalAttributes(plannedModels), resetTargets);
 
 		for (int i = 0; i < prefixes.size(); i++) {
 			PrefixEntry entry = prefixes.get(i);
@@ -669,6 +950,21 @@ public class DataAwareController extends AbstractController {
 		updateSelectedModelVisualizations();
 	}
 
+	//Lowercased names of the attributes declared categorical (e.g. "categorical: c1, c2, c3") by any of the given Declare models
+	private static Set<String> getCategoricalAttributes(List<AbstractModel> models) {
+		Set<String> categoricalAttributes = new TreeSet<String>();
+		for (AbstractModel model : models) {
+			if (model instanceof DeclareModel) {
+				((DeclareModel) model).getAttributeDomains().forEach((attribute, domain) -> {
+					if (domain.getType() == AttributeDomain.Type.CATEGORICAL) {
+						categoricalAttributes.add(attribute.toLowerCase());
+					}
+				});
+			}
+		}
+		return categoricalAttributes;
+	}
+
 	private static void clearPlan(PrefixEntry entry) {
 		entry.plan = new ArrayList<String>();
 		entry.planAttributeValues = null;
@@ -677,11 +973,45 @@ public class DataAwareController extends AbstractController {
 		entry.planPresent = false;
 	}
 
-	//Gives every Declare constraint the name the PDDL generator uses for it: "<template>_<activation>[_<target>]" (spaces as "_"), with repeated
-	//names numbered "_2", "_3", ... across all Declare models passed to it, in order. Petri nets are named "pn" (single net) or "pn1", "pn2", ...
-	//(in the order passed). Returns, for the Petri nets, the reset activity their plan resets should replay (the Declare names are replayed as is).
+	//The name the PDDL generator gives each Declare constraint of the given models: "<template>_<activation>[_<target>]" (spaces as "_", activities
+	//spelled as in the model file), with repeated names numbered "_2", "_3", ... across all Declare models passed to it, in order.
+	//Activation and target are as in DeclareConstraint, i.e. already swapped for the Precedence templates ("Precedence[D, F]" -> "Precedence_F_D").
+	//Identity-keyed, since DeclareConstraint.equals only compares template and activities, and two models may contain the same constraint.
+	private static Map<DeclareConstraint, String> getPlannerConstraintNames(List<AbstractModel> plannedModels) {
+		Map<DeclareConstraint, String> plannerNames = new IdentityHashMap<DeclareConstraint, String>();
+		Map<String, Integer> nameCounts = new HashMap<String, Integer>(); //By lowercased name, as DeclareConstraint lowercases its activities
+		for (AbstractModel model : plannedModels) {
+			if (model instanceof DeclareModel) {
+				for (DeclareConstraint constraint : ((DeclareModel) model).getDeclareConstraints()) {
+					String activation = constraint.getActivationActivity();
+					String target = constraint.getTargetActivity();
+					//The original spelling only survives in the constraint line, e.g. "Precedence[ActivityD, ActivityF] |..."
+					Matcher argumentsMatcher = Pattern.compile("\\[(.*?)\\]").matcher(constraint.getConstraintString());
+					if (argumentsMatcher.find()) {
+						String[] arguments = argumentsMatcher.group(1).split(",");
+						if (arguments.length >= 2) {
+							boolean reversed = constraint.getTemplate().getReverseActivationTarget();
+							activation = (reversed ? arguments[1] : arguments[0]).trim();
+							target = (reversed ? arguments[0] : arguments[1]).trim();
+						} else if (arguments.length == 1) {
+							activation = arguments[0].trim();
+						}
+					}
+					String name = constraint.getTemplate().getTemplateName().replace(" ", "_") + "_" + activation
+							+ (target == null || target.isBlank() ? "" : "_" + target);
+					int count = nameCounts.merge(name.toLowerCase(), 1, Integer::sum);
+					plannerNames.put(constraint, count > 1 ? name + "_" + count : name);
+				}
+			}
+		}
+		return plannerNames;
+	}
+
+	//Gives every Declare constraint the name the PDDL generator uses for it (see getPlannerConstraintNames), so plan resets can be matched to it.
+	//Petri nets are named "pn" (single net) or "pn1", "pn2", ... (in the order passed). Returns, for the Petri nets, the reset activity their plan
+	//resets should replay (the Declare names are replayed as is).
 	private Map<String, String> assignPlannerConstraintNames(List<AbstractModel> plannedModels) {
-		Map<String, Integer> nameCounts = new HashMap<String, Integer>();
+		Map<DeclareConstraint, String> constraintNames = getPlannerConstraintNames(plannedModels);
 		List<PnModel> petriNets = new ArrayList<PnModel>();
 		for (AbstractModel model : ModelRegistry.getInstance().getModels()) {
 			if (model instanceof DeclareModel && !plannedModels.contains(model)) {
@@ -692,11 +1022,7 @@ public class DataAwareController extends AbstractController {
 			if (model instanceof DeclareModel) {
 				Map<String, DeclareConstraint> plannerNames = new HashMap<String, DeclareConstraint>();
 				for (DeclareConstraint constraint : ((DeclareModel) model).getDeclareConstraints()) {
-					String name = constraint.getTemplate().getTemplateName().replace(" ", "_") + "_" + constraint.getActivationActivity()
-							+ (constraint.getTargetActivity() == null || constraint.getTargetActivity().isBlank() ? "" : "_" + constraint.getTargetActivity());
-					name = name.toLowerCase();
-					int count = nameCounts.merge(name, 1, Integer::sum);
-					plannerNames.put(count > 1 ? name + "_" + count : name, constraint);
+					plannerNames.put(constraintNames.get(constraint).toLowerCase(), constraint); //Looked up case-insensitively
 				}
 				((DeclareModel) model).setPlannerConstraintNames(plannerNames);
 			} else if (model instanceof PnModel) {
@@ -758,23 +1084,13 @@ public class DataAwareController extends AbstractController {
 	//Writes every prefix as one trace (in prefixChoice order, so prefix <i> becomes problem<i>.pddl) of an XES log that the data-aware PDDL generator can read.
 	//The generator computes each event's time relative to the trace's first event and needs a timestamp on every event, so events without a
 	//(valid) "timestamp" attribute reuse the previous event's timestamp (or the trace's first known one / the export time, if there is none before them)
-	//Written with StAX rather than OpenXES' XesXmlSerializer, since the latter depends on the Spex library, which is not bundled with this application
 	private void writePrefixesAsXes(File file) throws IOException {
 		ZonedDateTime exportTime = ZonedDateTime.now().truncatedTo(ChronoUnit.SECONDS);
 
-		try (OutputStream out = new FileOutputStream(file)) {
-			XMLStreamWriter xml = XMLOutputFactory.newInstance().createXMLStreamWriter(out, "UTF-8");
-			xml.writeStartDocument("UTF-8", "1.0");
-			xml.writeStartElement("log");
-			xml.writeAttribute("xes.version", "1.0");
-			writeXesExtension(xml, "Concept", "concept", "http://www.xes-standard.org/concept.xesext");
-			writeXesExtension(xml, "Lifecycle", "lifecycle", "http://www.xes-standard.org/lifecycle.xesext");
-			writeXesExtension(xml, "Time", "time", "http://www.xes-standard.org/time.xesext");
-
+		try (XesWriter xes = new XesWriter(file, "Prefixes")) {
 			for (int p = 0; p < prefixes.size(); p++) {
 				PrefixEntry entry = prefixes.get(p);
-				xml.writeStartElement("trace");
-				writeXesAttribute(xml, "string", XConceptExtension.KEY_NAME, "Prefix " + (p + 1));
+				xes.startTrace("Prefix " + (p + 1));
 
 				ZonedDateTime previousTimestamp = null;
 				for (int i = 0; i < entry.prefixEvents.size() && previousTimestamp == null; i++) {
@@ -793,24 +1109,18 @@ public class DataAwareController extends AbstractController {
 					}
 					previousTimestamp = timestamp;
 
-					xml.writeStartElement("event");
-					writeXesAttribute(xml, "string", XConceptExtension.KEY_NAME, getActivityNameAsDefined(entry.prefixEvents.get(i)));
-					writeXesAttribute(xml, "string", XLifecycleExtension.KEY_TRANSITION, "complete");
-					writeXesAttribute(xml, "date", XTimeExtension.KEY_TIMESTAMP, timestamp.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+					xes.startEvent(getActivityNameAsDefined(entry.prefixEvents.get(i)));
 					for (Map.Entry<String, String> attributeValue : eventAttributeValues.entrySet()) {
 						String value = attributeValue.getValue() == null ? "" : attributeValue.getValue().strip();
 						if (!attributeValue.getKey().equals("timestamp") && !value.isEmpty()) {
-							writeXesAttribute(xml, getXesAttributeType(value), attributeValue.getKey(), value);
+							xes.writeAttribute(getXesAttributeType(value), attributeValue.getKey(), value);
 						}
 					}
-					xml.writeEndElement();
+					xes.writeTimestamp(timestamp);
+					xes.endElement();
 				}
-				xml.writeEndElement();
+				xes.endElement();
 			}
-
-			xml.writeEndElement();
-			xml.writeEndDocument();
-			xml.close();
 		} catch (XMLStreamException e) {
 			throw new IOException(e);
 		}
@@ -829,17 +1139,105 @@ public class DataAwareController extends AbstractController {
 		return activityName;
 	}
 
-	private static void writeXesExtension(XMLStreamWriter xml, String name, String prefix, String uri) throws XMLStreamException {
-		xml.writeEmptyElement("extension");
-		xml.writeAttribute("name", name);
-		xml.writeAttribute("prefix", prefix);
-		xml.writeAttribute("uri", uri);
-	}
+	//Writes an XES log laid out like the logs OpenXES produces (one element per line, tab-indented, same log header), using StAX rather than
+	//OpenXES' XesXmlSerializer, since the latter depends on the Spex library, which is not bundled with this application
+	private static class XesWriter implements AutoCloseable {
+		private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"); //Local time, e.g. "2023-08-07T02:08:50"
 
-	private static void writeXesAttribute(XMLStreamWriter xml, String type, String key, String value) throws XMLStreamException {
-		xml.writeEmptyElement(type);
-		xml.writeAttribute("key", key);
-		xml.writeAttribute("value", value);
+		private final OutputStream out;
+		private final XMLStreamWriter xml;
+		private int depth = 0;
+
+		XesWriter(File file, String logName) throws IOException, XMLStreamException {
+			out = new FileOutputStream(file);
+			xml = XMLOutputFactory.newInstance().createXMLStreamWriter(out, "UTF-8");
+			xml.writeStartDocument("UTF-8", "1.0");
+			newLine();
+			xml.writeStartElement("log");
+			xml.writeAttribute("xes.version", "1.0");
+			xml.writeAttribute("xes.features", "nested-attributes");
+			xml.writeDefaultNamespace("http://www.xes-standard.org/");
+			depth++;
+			writeExtension("Time", "time", "http://www.xes-standard.org/time.xesext");
+			writeExtension("Lifecycle", "lifecycle", "http://www.xes-standard.org/lifecycle.xesext");
+			writeExtension("Concept", "concept", "http://www.xes-standard.org/concept.xesext");
+			for (String scope : new String[] {"trace", "event"}) {
+				startElement("global");
+				xml.writeAttribute("scope", scope);
+				writeAttribute("string", XConceptExtension.KEY_NAME, "__INVALID__");
+				endElement();
+			}
+			newLine();
+			xml.writeEmptyElement("classifier");
+			xml.writeAttribute("name", "Event Name");
+			xml.writeAttribute("keys", XConceptExtension.KEY_NAME);
+			writeAttribute("string", XConceptExtension.KEY_NAME, logName);
+			writeAttribute("string", "lifecycle:model", "standard");
+		}
+
+		void startTrace(String name) throws XMLStreamException {
+			startElement("trace");
+			writeAttribute("string", XConceptExtension.KEY_NAME, name);
+		}
+
+		//concept:name and lifecycle:transition; the caller adds further attributes and calls endElement()
+		void startEvent(String activity) throws XMLStreamException {
+			startElement("event");
+			writeAttribute("string", XConceptExtension.KEY_NAME, activity);
+			writeAttribute("string", XLifecycleExtension.KEY_TRANSITION, "complete");
+		}
+
+		void writeTimestamp(ZonedDateTime timestamp) throws XMLStreamException {
+			writeAttribute("date", XTimeExtension.KEY_TIMESTAMP, timestamp.withZoneSameInstant(ZoneId.systemDefault()).format(TIMESTAMP_FORMATTER));
+		}
+
+		void writeAttribute(String type, String key, String value) throws XMLStreamException {
+			newLine();
+			xml.writeEmptyElement(type);
+			xml.writeAttribute("key", key);
+			xml.writeAttribute("value", value);
+		}
+
+		void endElement() throws XMLStreamException {
+			depth--;
+			newLine();
+			xml.writeEndElement();
+		}
+
+		private void writeExtension(String name, String prefix, String uri) throws XMLStreamException {
+			newLine();
+			xml.writeEmptyElement("extension");
+			xml.writeAttribute("name", name);
+			xml.writeAttribute("prefix", prefix);
+			xml.writeAttribute("uri", uri);
+		}
+
+		private void startElement(String name) throws XMLStreamException {
+			newLine();
+			xml.writeStartElement(name);
+			depth++;
+		}
+
+		private void newLine() throws XMLStreamException {
+			xml.writeCharacters("\n" + "\t".repeat(depth));
+		}
+
+		//Closes the log element and the file
+		@Override
+		public void close() throws IOException {
+			try {
+				while (depth > 0) {
+					endElement();
+				}
+				xml.writeCharacters("\n");
+				xml.writeEndDocument();
+				xml.close();
+			} catch (XMLStreamException e) {
+				throw new IOException(e);
+			} finally {
+				out.close();
+			}
+		}
 	}
 
 	//Parses a value in the "timestamp" attribute format EventCell's editor expects, or returns null if it is missing/invalid
@@ -852,6 +1250,146 @@ public class DataAwareController extends AbstractController {
 		} catch (DateTimeParseException e) {
 			System.err.println("Ignoring invalid timestamp: " + value);
 			return null;
+		}
+	}
+
+	//Prefixes whose continuation can be exported: only plans from the data-aware planner carry the attribute values (and times) an exported event needs,
+	//unlike a plan carried over from Data-Agnostic
+	private List<Integer> getExportableContinuationIndices() {
+		List<Integer> exportableIndices = new ArrayList<Integer>();
+		for (int i = 0; i < prefixes.size(); i++) {
+			if (prefixes.get(i).planPresent && prefixes.get(i).planAttributeValues != null) {
+				exportableIndices.add(i);
+			}
+		}
+		return exportableIndices;
+	}
+
+	//Export is only offered once the planner produced at least one continuation, and is withdrawn again when they are reset
+	private void updateExportButton() {
+		exportContinuationButton.setDisable(getExportableContinuationIndices().isEmpty());
+	}
+
+	//Whether a plan step ("action;activity") becomes an event of an exported continuation: only events of the models' alphabet (the Activities
+	//pane, i.e. the selected process specifications) are exported, which excludes resets; prefix events only if includePrefixEvents
+	private boolean isExportedPlanStep(String[] step, boolean includePrefixEvents) {
+		if (step.length < 2 || !activityToAttributes.containsKey(step[1].toLowerCase())) {
+			return false;
+		}
+		return step[0].equals(EnhspPlanParser.ADD_ACTION)
+				|| (includePrefixEvents && (step[0].equals(EnhspPlanParser.SYNC_ACTION) || step[0].equals(EnhspPlanParser.SKIP_ACTION)));
+	}
+
+	//Exports the continuations (plans) of the prefixes the user picks to an XES log, one trace per prefix
+	@FXML
+	private void onClickExportContinuations() {
+		if (selectedEntry != null) {
+			syncOutToEntry(selectedEntry);
+		}
+		List<Integer> exportableIndices = getExportableContinuationIndices();
+		if (exportableIndices.isEmpty()) { //The button is disabled in this case, see updateExportButton
+			return;
+		}
+		if (activityToAttributes.isEmpty()) {
+			AlertUtils.showWarning("Select the process specifications whose activities should be exported under Process Specifications.");
+			return;
+		}
+
+		Dialog<ButtonType> dialog = new Dialog<ButtonType>();
+		dialog.setTitle("Export Continuations");
+		dialog.setHeaderText("Select the continuations to export as XES");
+		dialog.initOwner(getStage());
+		dialog.getDialogPane().getStylesheets().add("/org/framedinterface/dialogPane.css");
+		dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+		CheckBox allCheckBox = new CheckBox("All continuations");
+		allCheckBox.setSelected(true);
+		List<CheckBox> prefixCheckBoxes = new ArrayList<CheckBox>();
+		for (int index : exportableIndices) {
+			long addedEvents = prefixes.get(index).plan.stream().filter(step -> isExportedPlanStep(step.split(";", 2), false)).count();
+			CheckBox prefixCheckBox = new CheckBox("Prefix " + (index + 1) + " (" + addedEvents + " added event" + (addedEvents == 1 ? "" : "s") + ")");
+			prefixCheckBox.setSelected(true);
+			prefixCheckBox.setOnAction(event -> allCheckBox.setSelected(prefixCheckBoxes.stream().allMatch(CheckBox::isSelected)));
+			prefixCheckBoxes.add(prefixCheckBox);
+		}
+		allCheckBox.setOnAction(event -> prefixCheckBoxes.forEach(prefixCheckBox -> prefixCheckBox.setSelected(allCheckBox.isSelected())));
+		CheckBox includePrefixCheckBox = new CheckBox("Include the prefix events (complete traces), not only the added events");
+		includePrefixCheckBox.setSelected(true);
+
+		VBox prefixList = new VBox(4);
+		prefixList.getChildren().addAll(prefixCheckBoxes);
+		ScrollPane prefixScrollPane = new ScrollPane(prefixList);
+		prefixScrollPane.setMaxHeight(300);
+		prefixScrollPane.setFitToWidth(true);
+		VBox content = new VBox(8, allCheckBox, new Separator(), prefixScrollPane, new Separator(), includePrefixCheckBox);
+		content.setPadding(new Insets(10));
+		dialog.getDialogPane().setContent(content);
+		dialog.getDialogPane().lookupButton(ButtonType.OK).disableProperty().bind(Bindings.createBooleanBinding(
+				() -> prefixCheckBoxes.stream().noneMatch(CheckBox::isSelected),
+				prefixCheckBoxes.stream().map(CheckBox::selectedProperty).toArray(Observable[]::new)));
+
+		if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+			return;
+		}
+		List<Integer> chosenIndices = new ArrayList<Integer>();
+		for (int i = 0; i < exportableIndices.size(); i++) {
+			if (prefixCheckBoxes.get(i).isSelected()) {
+				chosenIndices.add(exportableIndices.get(i));
+			}
+		}
+
+		File defaultFolder = new File(currentPath, CONTINUATION_OUTPUT_FOLDER);
+		defaultFolder.mkdirs();
+		File file = FileUtils.showXesSaveDialog(getStage(), defaultFolder, "continuations_" + LocalDateTime.now().format(PREFIX_FILE_TIMESTAMP_FORMATTER) + ".xes");
+		if (file == null) {
+			return;
+		}
+		try {
+			writeContinuationsAsXes(file, chosenIndices, includePrefixCheckBox.isSelected());
+			AlertUtils.showSuccess("Exported " + chosenIndices.size() + " continuation(s) to:\n" + file.getAbsolutePath());
+		} catch (IOException e) {
+			e.printStackTrace();
+			AlertUtils.showError("Could not export the continuations to XES: " + e.getMessage());
+		}
+	}
+
+	//Writes one trace per given prefix (named "Prefix <i>"): the events its plan added and, if includePrefixEvents, the prefix events it replayed,
+	//restricted to the models' alphabet (see isExportedPlanStep). Categorical attributes are written as strings and numeric ones as floats, e.g.
+	//<string key="categorical" value="c2"/> and <float key="integer" value="8"/>; each event's time is its plan time.
+	private void writeContinuationsAsXes(File file, List<Integer> prefixIndices, boolean includePrefixEvents) throws IOException {
+		Set<String> categoricalAttributes = getCategoricalAttributes(new ArrayList<AbstractModel>(ModelRegistry.getInstance().getModels()));
+
+		try (XesWriter xes = new XesWriter(file, "Continuations")) {
+			for (int index : prefixIndices) {
+				PrefixEntry entry = prefixes.get(index);
+				xes.startTrace("Prefix " + (index + 1));
+
+				for (int i = 0; i < entry.plan.size(); i++) {
+					String[] step = entry.plan.get(i).split(";", 2);
+					if (!isExportedPlanStep(step, includePrefixEvents)) {
+						continue;
+					}
+					Map<String, String> eventAttributeValues = i < entry.planAttributeValues.size() ? entry.planAttributeValues.get(i) : Collections.emptyMap();
+
+					xes.startEvent(getActivityNameAsDefined(step[1]));
+					for (Map.Entry<String, String> attributeValue : eventAttributeValues.entrySet()) {
+						String value = attributeValue.getValue() == null ? "" : attributeValue.getValue().strip();
+						if (!attributeValue.getKey().equals("timestamp") && !value.isEmpty()) {
+							String valueType = getXesAttributeType(value);
+							boolean isNumeric = !categoricalAttributes.contains(attributeValue.getKey().toLowerCase()) && (valueType.equals("int") || valueType.equals("float"));
+							xes.writeAttribute(isNumeric ? "float" : "string", attributeValue.getKey(), value);
+						}
+					}
+					ZonedDateTime timestamp = parseTimestamp(eventAttributeValues.get("timestamp"));
+					if (timestamp != null) {
+						xes.writeTimestamp(timestamp);
+					}
+					xes.endElement();
+				}
+				xes.endElement();
+			}
+		} catch (XMLStreamException e) {
+			throw new IOException(e);
 		}
 	}
 
@@ -873,6 +1411,40 @@ public class DataAwareController extends AbstractController {
 		pane.expandedProperty().addListener((observable, oldValue, expanded) -> VBox.setVgrow(pane, expanded ? Priority.ALWAYS : Priority.NEVER));
 	}
 
+	//Expands the specification panes on the left and every row within them (models, activities, their groups, attributes)
+	@FXML
+	private void onClickExpandAll() {
+		setSpecificationPanesExpanded(true);
+	}
+
+	//Collapses the specification panes on the left and every row within them, so they stay collapsed when the panes are opened again
+	@FXML
+	private void onClickCollapseAll() {
+		setSpecificationPanesExpanded(false);
+	}
+
+	private void setSpecificationPanesExpanded(boolean expanded) {
+		for (TitledPane pane : new TitledPane[] {modelRegistryPane, constraintsPane, activitiesAttributesPane, attributesPane}) {
+			pane.setExpanded(expanded);
+		}
+		setRowsExpanded(constraintsTreeTableView.getRoot(), expanded);
+		setRowsExpanded(activitiesTreeTableView.getRoot(), expanded);
+		setRowsExpanded(attributesTreeView.getRoot(), expanded);
+	}
+
+	//The (hidden) root itself stays expanded, otherwise none of its rows would be shown at all
+	private static void setRowsExpanded(TreeItem<?> root, boolean expanded) {
+		if (root == null) {
+			return;
+		}
+		for (TreeItem<?> child : root.getChildren()) {
+			if (!child.isLeaf()) {
+				child.setExpanded(expanded);
+				setRowsExpanded(child, expanded);
+			}
+		}
+	}
+
 	private BooleanProperty getModelSelectedProperty(AbstractModel model) {
 		return modelSelectionState.computeIfAbsent(model, m -> {
 			BooleanProperty selected = new SimpleBooleanProperty(false);
@@ -881,13 +1453,16 @@ public class DataAwareController extends AbstractController {
 		});
 	}
 
-	//Refreshes the Activities & Attributes panel with the unique (case-insensitive) activity labels, and their bound attributes (Declare models only), of the currently selected process specifications
+	//Refreshes the Activities panel with the unique (case-insensitive) activities of the currently selected process specifications: each with its cost,
+	//its bound attributes (Declare models only) and the models containing it
 	private void updateActivitiesListView() {
 		activityToAttributes.clear();
+		Map<String, List<AbstractModel>> activityToModels = new HashMap<String, List<AbstractModel>>();
 		timestampFieldVisible = false;
 		for (AbstractModel model : getSelectedModels()) {
 			for (String activity : model.getActivities()) {
 				String activityLabel = activity.toLowerCase();
+				activityToModels.computeIfAbsent(activityLabel, a -> new ArrayList<AbstractModel>()).add(model);
 				Set<String> attributes = activityToAttributes.computeIfAbsent(activityLabel, a -> new TreeSet<String>());
 				if (model instanceof DeclareModel) {
 					for (String attribute : ((DeclareModel) model).getAttributesForActivity(activityLabel)) {
@@ -900,23 +1475,305 @@ public class DataAwareController extends AbstractController {
 			}
 		}
 
-		TreeItem<String> activitiesRoot = new TreeItem<String>();
-		if (activityToAttributes.isEmpty()) {
-			activitiesRoot.getChildren().add(new TreeItem<String>("No process specifications selected")); //TreeView has no built-in placeholder support, unlike ListView/TableView
-		}
+		TreeItem<ActivityEntry> activitiesRoot = new TreeItem<ActivityEntry>();
 		for (Map.Entry<String, Set<String>> entry : activityToAttributes.entrySet()) {
-			TreeItem<String> activityItem = new TreeItem<String>(entry.getKey());
-			activityItem.setExpanded(true);
-			for (String attribute : entry.getValue()) {
-				activityItem.getChildren().add(new TreeItem<String>(attribute));
+			String activity = entry.getKey();
+			List<AbstractModel> models = activityToModels.get(activity);
+			String activityName = getActivityNameAsDefined(activity); //As spelled in the model files, which is what the planner works with
+			TreeItem<ActivityEntry> activityItem = new TreeItem<ActivityEntry>(new ActivityEntry(activityName, null, getActivityCost(activity)));
+
+			if (!entry.getValue().isEmpty()) {
+				TreeItem<ActivityEntry> attributesItem = new TreeItem<ActivityEntry>(new ActivityEntry("Attributes", null, null));
+				for (String attribute : entry.getValue()) {
+					attributesItem.getChildren().add(new TreeItem<ActivityEntry>(new ActivityEntry(attribute, null, null)));
+				}
+				keepExpansionState(attributesItem, collapsedActivityRows, activity + "/attributes");
+				activityItem.getChildren().add(attributesItem);
 			}
+			TreeItem<ActivityEntry> modelsItem = new TreeItem<ActivityEntry>(new ActivityEntry("Models", null, null));
+			for (AbstractModel model : models) {
+				modelsItem.getChildren().add(new TreeItem<ActivityEntry>(new ActivityEntry(model.getModelName(), model.getFilePath(), null)));
+			}
+			keepExpansionState(modelsItem, collapsedActivityRows, activity + "/models");
+			activityItem.getChildren().add(modelsItem);
+
+			keepExpansionState(activityItem, collapsedActivityRows, activity);
 			activitiesRoot.getChildren().add(activityItem);
 		}
-		activitiesTreeView.setRoot(activitiesRoot);
+		activitiesTreeTableView.setRoot(activitiesRoot); //An empty root shows the placeholder
 
 		planListView.refresh(); //Already-rendered prefix events need to re-check attribute availability now that the selected models (and thus known attributes) may have changed
+		updateConstraintsTableView();
 		updateAttributesTreeView();
 	}
+
+	//Refreshes the Constraints panel with the constraints of the currently selected process specifications: one collapsible row per model (in model
+	//order), holding its constraints in file order - or, for a Petri net, a single row for the net itself
+	private void updateConstraintsTableView() {
+		TreeItem<ConstraintEntry> constraintsRoot = new TreeItem<ConstraintEntry>();
+		for (AbstractModel model : getSelectedModels()) {
+			TreeItem<ConstraintEntry> modelItem = new TreeItem<ConstraintEntry>(ConstraintEntry.modelRow(model));
+			if (model instanceof DeclareModel) {
+				for (DeclareConstraint constraint : ((DeclareModel) model).getDeclareConstraints()) {
+					modelItem.getChildren().add(new TreeItem<ConstraintEntry>(new ConstraintEntry(model, constraint, getViolationCost(constraint), getHardProperty(constraint))));
+				}
+			} else if (model instanceof PnModel) {
+				modelItem.getChildren().add(new TreeItem<ConstraintEntry>(new ConstraintEntry(model, null, getViolationCost(model), getHardProperty(model))));
+			}
+			modelItem.setExpanded(!collapsedConstraintModels.contains(model));
+			modelItem.expandedProperty().addListener((observable, oldValue, expanded) -> {
+				if (expanded) {
+					collapsedConstraintModels.remove(model);
+				} else {
+					collapsedConstraintModels.add(model);
+				}
+			});
+			constraintsRoot.getChildren().add(modelItem);
+		}
+		constraintsTreeTableView.setRoot(constraintsRoot); //An empty root shows the placeholder
+	}
+
+	//Makes costColumn show and edit the cost of each row that has one (costOf returns null for rows without): Enter confirms, and input that
+	//isn't a non-negative number is rejected, showing the previous cost again. Rows isLocked holds for show their cost greyed out and can't be edited
+	private static <T> void setupCostColumn(TreeTableView<T> treeTableView, TreeTableColumn<T, Double> costColumn, Function<T, DoubleProperty> costOf, Predicate<T> isLocked) {
+		costColumn.setCellValueFactory(data -> {
+			DoubleProperty cost = data.getValue().getValue() == null ? null : costOf.apply(data.getValue().getValue());
+			return cost == null ? new ReadOnlyObjectWrapper<Double>(null) : cost.asObject();
+		});
+		costColumn.setCellFactory(column -> new TextFieldTreeTableCell<T, Double>(COST_CONVERTER) {
+			@Override
+			public void startEdit() {
+				T rowValue = getRowValue();
+				if (rowValue != null && costOf.apply(rowValue) != null && !isLocked.test(rowValue)) {
+					super.startEdit();
+				}
+			}
+			@Override
+			public void updateItem(Double item, boolean empty) {
+				super.updateItem(item, empty);
+				T rowValue = getRowValue();
+				pseudoClassStateChanged(LOCKED_PSEUDO_CLASS, !empty && rowValue != null && isLocked.test(rowValue));
+			}
+			private T getRowValue() {
+				TreeItem<T> treeItem = getTreeTableRow() == null ? null : getTreeTableRow().getTreeItem();
+				return treeItem == null ? null : treeItem.getValue();
+			}
+		});
+		costColumn.setOnEditCommit(event -> {
+			DoubleProperty cost = costOf.apply(event.getRowValue().getValue());
+			if (event.getNewValue() != null && cost != null) {
+				cost.set(event.getNewValue());
+			}
+			treeTableView.refresh();
+		});
+	}
+
+	//Makes the Hard column show a checkbox for each constraint (and Petri net), but none for the model rows
+	private void setupHardColumn() {
+		constraintHardColumn.setCellValueFactory(data -> {
+			BooleanProperty hard = data.getValue().getValue() == null ? null : data.getValue().getValue().hard;
+			return hard == null ? new ReadOnlyObjectWrapper<Boolean>(null) : hard;
+		});
+		constraintHardColumn.setCellFactory(column -> new CheckBoxTreeTableCell<ConstraintEntry, Boolean>() {
+			@Override
+			public void updateItem(Boolean item, boolean empty) {
+				super.updateItem(item, empty);
+				if (item == null) {
+					setGraphic(null);
+				}
+			}
+		});
+	}
+
+	//Adds context menu entries to mark the selected constraints as hard or soft at once (a selected model row stands for all of its constraints)
+	private void setupBulkHardEditing() {
+		MenuItem markHardItem = new MenuItem("Mark Selected Constraints as Hard");
+		markHardItem.setOnAction(event -> getRowProperties(constraintsTreeTableView, entry -> entry.hard, true).forEach(hard -> hard.set(true)));
+		MenuItem markSoftItem = new MenuItem("Mark Selected Constraints as Soft");
+		markSoftItem.setOnAction(event -> getRowProperties(constraintsTreeTableView, entry -> entry.hard, true).forEach(hard -> hard.set(false)));
+		markHardItem.disableProperty().bind(Bindings.isEmpty(constraintsTreeTableView.getSelectionModel().getSelectedItems()));
+		markSoftItem.disableProperty().bind(markHardItem.disableProperty());
+		constraintsTreeTableView.getContextMenu().getItems().addAll(new SeparatorMenuItem(), markHardItem, markSoftItem);
+	}
+
+	//Sets the cost of the selected constraints, or of all constraints if none are selected (hard constraints excluded)
+	@FXML
+	private void onClickSetConstraintCosts() {
+		promptCostsOfSelectionOrAll(constraintsTreeTableView, ConstraintEntry::getEditableViolationCost, "constraint", "constraints");
+	}
+
+	//Sets the cost of the selected activities, or of all activities if none are selected
+	@FXML
+	private void onClickSetActivityCosts() {
+		promptCostsOfSelectionOrAll(activitiesTreeTableView, entry -> entry.cost, "activity", "activities");
+	}
+
+	//Lets several rows of the tree be selected, and adds a context menu to set the cost of the selected / all items (e.g. "constraints") at once
+	private <T> void setupBulkCostEditing(TreeTableView<T> treeTableView, Function<T, DoubleProperty> costOf, String itemName, String itemsName) {
+		treeTableView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+		String capitalizedItems = Character.toUpperCase(itemsName.charAt(0)) + itemsName.substring(1);
+		MenuItem setSelectedCostsItem = new MenuItem("Set Cost of Selected " + capitalizedItems + "...");
+		setSelectedCostsItem.setOnAction(event -> promptCosts(treeTableView, getRowProperties(treeTableView, costOf, true), "the selected", itemName, itemsName));
+		MenuItem setAllCostsItem = new MenuItem("Set Cost of All " + capitalizedItems + "...");
+		setAllCostsItem.setOnAction(event -> promptCosts(treeTableView, getRowProperties(treeTableView, costOf, false), "all", itemName, itemsName));
+		ContextMenu contextMenu = new ContextMenu(setSelectedCostsItem, setAllCostsItem);
+		contextMenu.setOnShowing(event -> setSelectedCostsItem.setDisable(treeTableView.getSelectionModel().getSelectedItems().isEmpty()));
+		treeTableView.setContextMenu(contextMenu);
+	}
+
+	//Decided by the selected rows rather than their costs, so that selecting only rows without an editable cost (hard constraints) doesn't fall back to all
+	private <T> void promptCostsOfSelectionOrAll(TreeTableView<T> treeTableView, Function<T, DoubleProperty> costOf, String itemName, String itemsName) {
+		if (treeTableView.getSelectionModel().getSelectedItems().isEmpty()) {
+			promptCosts(treeTableView, getRowProperties(treeTableView, costOf, false), "all", itemName, itemsName);
+		} else {
+			promptCosts(treeTableView, getRowProperties(treeTableView, costOf, true), "the selected", itemName, itemsName);
+		}
+	}
+
+	//The properties (e.g. costs) of the selected rows (or of all rows), each once. A row without one of its own stands for the nearest ancestor that has one
+	//(e.g. an activity's attribute/model rows) or, failing that, for all descendants that have one (e.g. a model row for its constraints)
+	private static <T, P> List<P> getRowProperties(TreeTableView<T> treeTableView, Function<T, P> propertyOf, boolean selectedOnly) {
+		List<TreeItem<T>> rows = new ArrayList<TreeItem<T>>();
+		if (selectedOnly) {
+			rows.addAll(treeTableView.getSelectionModel().getSelectedItems());
+		} else if (treeTableView.getRoot() != null) {
+			rows.addAll(treeTableView.getRoot().getChildren());
+		}
+		Set<P> properties = new LinkedHashSet<P>(); //Identity-based (properties don't override equals)
+		for (TreeItem<T> row : rows) {
+			P ownOrAncestorProperty = null;
+			for (TreeItem<T> item = row; item != null && ownOrAncestorProperty == null; item = item.getParent()) {
+				ownOrAncestorProperty = item.getValue() == null ? null : propertyOf.apply(item.getValue());
+			}
+			if (ownOrAncestorProperty != null) {
+				properties.add(ownOrAncestorProperty);
+			} else if (row != null) {
+				addDescendantProperties(row, propertyOf, properties);
+			}
+		}
+		return new ArrayList<P>(properties);
+	}
+
+	private static <T, P> void addDescendantProperties(TreeItem<T> item, Function<T, P> propertyOf, Set<P> properties) {
+		for (TreeItem<T> child : item.getChildren()) {
+			P property = child.getValue() == null ? null : propertyOf.apply(child.getValue());
+			if (property != null) {
+				properties.add(property);
+			} else {
+				addDescendantProperties(child, propertyOf, properties);
+			}
+		}
+	}
+
+	//Asks for a cost (pre-filled if the given costs are currently equal) and sets all of them to it; scope (e.g. "the selected"/"all") is only used in the prompt
+	private void promptCosts(TreeTableView<?> treeTableView, List<DoubleProperty> costs, String scope, String itemName, String itemsName) {
+		if (costs.isEmpty()) {
+			boolean noRows = treeTableView.getRoot() == null || treeTableView.getRoot().getChildren().isEmpty();
+			AlertUtils.showWarning(noRows ? "There are no " + itemsName + " to set the cost of. Select process specifications under Process Specifications first."
+					: "Hard constraints have no cost to set, and " + scope + " " + itemsName + " are hard."); //Every activity has a cost, so only constraints get here
+			return;
+		}
+		double firstCost = costs.get(0).get();
+		boolean sharedCost = costs.stream().allMatch(cost -> cost.get() == firstCost);
+
+		TextInputDialog dialog = new TextInputDialog(sharedCost ? COST_CONVERTER.toString(firstCost) : "");
+		dialog.setTitle("Set " + Character.toUpperCase(itemName.charAt(0)) + itemName.substring(1) + " Costs");
+		dialog.setHeaderText("Set the cost of " + scope + " " + costs.size() + " " + (costs.size() == 1 ? itemName : itemsName)
+				+ (sharedCost ? "" : System.lineSeparator() + "(their costs currently differ)"));
+		dialog.setContentText("Cost:");
+		dialog.initOwner(getStage());
+		dialog.getDialogPane().getStylesheets().add("/org/framedinterface/dialogPane.css");
+		dialog.getDialogPane().lookupButton(ButtonType.OK).disableProperty().bind(Bindings.createBooleanBinding(
+				() -> COST_CONVERTER.fromString(dialog.getEditor().getText()) == null, dialog.getEditor().textProperty())); //Only non-negative numbers
+
+		dialog.showAndWait().map(COST_CONVERTER::fromString).ifPresent(newCost -> {
+			costs.forEach(cost -> cost.set(newCost));
+			treeTableView.refresh();
+		});
+	}
+
+	//The cost model handed to the PDDL generator: one "<ActivityName> <activityCost> 0" line per activity of the Activities pane (i.e. of the selected
+	//process specifications), spelled as in the model files, since the generator matches activity names case-sensitively
+	private List<String> buildCostModelLines() {
+		List<String> lines = new ArrayList<String>();
+		for (String activity : activityToAttributes.keySet()) {
+			lines.add(getActivityNameAsDefined(activity) + " " + COST_CONVERTER.toString(getActivityCost(activity).get()) + " 0");
+		}
+		return lines;
+	}
+
+	//The violation costs handed to the PDDL generator, from the Constraints pane: "<model file>|<constraint name> <cost>" per Declare constraint
+	//(named as the generator names it, see getPlannerConstraintNames) and "<model file> <cost>" per Petri net, with HARD_CONSTRAINT_COST as the cost of hard ones
+	private List<String> buildViolationCostLines(List<AbstractModel> plannedModels) {
+		Map<DeclareConstraint, String> constraintNames = getPlannerConstraintNames(plannedModels);
+		List<String> lines = new ArrayList<String>();
+		for (AbstractModel model : plannedModels) {
+			String modelFileName = Paths.get(model.getFilePath()).getFileName().toString();
+			if (model instanceof DeclareModel) {
+				for (DeclareConstraint constraint : ((DeclareModel) model).getDeclareConstraints()) {
+					lines.add(modelFileName + "|" + constraintNames.get(constraint) + " " + getViolationCostString(constraint));
+				}
+			} else if (model instanceof PnModel) {
+				lines.add(modelFileName + " " + getViolationCostString(model));
+			}
+		}
+		return lines;
+	}
+
+	private String getViolationCostString(Object constraintOrPetriNet) {
+		return getHardProperty(constraintOrPetriNet).get() ? HARD_CONSTRAINT_COST : COST_CONVERTER.toString(getViolationCost(constraintOrPetriNet).get());
+	}
+
+	//Cost of an activity (case-insensitive); DEFAULT_ACTIVITY_COST until edited in the Activities pane
+	private DoubleProperty getActivityCost(String activity) {
+		return activityCosts.computeIfAbsent(activity.toLowerCase(), key -> new SimpleDoubleProperty(DEFAULT_ACTIVITY_COST));
+	}
+
+	//Restores whether the user had collapsed the row with the given key, and keeps track of it from now on
+	private static void keepExpansionState(TreeItem<?> item, Set<String> collapsedKeys, String key) {
+		item.setExpanded(!collapsedKeys.contains(key));
+		item.expandedProperty().addListener((observable, oldValue, expanded) -> {
+			if (expanded) {
+				collapsedKeys.remove(key);
+			} else {
+				collapsedKeys.add(key);
+			}
+		});
+	}
+
+	//Violation cost of a Declare constraint, or of a Petri net (keyed by its model); DEFAULT_VIOLATION_COST until edited in the Constraints pane
+	private DoubleProperty getViolationCost(Object constraintOrPetriNet) {
+		return violationCosts.computeIfAbsent(constraintOrPetriNet, key -> new SimpleDoubleProperty(DEFAULT_VIOLATION_COST));
+	}
+
+	//Whether a Declare constraint, or a Petri net (keyed by its model), is hard; soft until marked in the Constraints pane
+	private BooleanProperty getHardProperty(Object constraintOrPetriNet) {
+		return hardConstraints.computeIfAbsent(constraintOrPetriNet, key -> {
+			BooleanProperty hard = new SimpleBooleanProperty(false);
+			hard.addListener(observable -> constraintsTreeTableView.refresh()); //Greys out / re-enables the constraint's cost cell
+			return hard;
+		});
+	}
+
+	//Shows whole costs without a fraction ("1" rather than "1.0"); unparseable or negative input yields null, which rejects the edit
+	private static final StringConverter<Double> COST_CONVERTER = new StringConverter<Double>() {
+		@Override
+		public String toString(Double cost) {
+			if (cost == null) {
+				return "";
+			}
+			return cost == Math.rint(cost) ? Long.toString(cost.longValue()) : cost.toString();
+		}
+		@Override
+		public Double fromString(String string) {
+			try {
+				double cost = Double.parseDouble(string.strip());
+				return cost >= 0 && Double.isFinite(cost) ? cost : null;
+			} catch (NumberFormatException | NullPointerException e) {
+				return null;
+			}
+		}
+	};
 
 	//Refreshes the Attributes panel with the declared value range/set of each attribute, merged (widest range / union of values) across the currently selected Declare models
 	private void updateAttributesTreeView() {
@@ -935,7 +1792,7 @@ public class DataAwareController extends AbstractController {
 		}
 		for (Map.Entry<String, AttributeDomain> entry : mergedDomains.entrySet()) {
 			TreeItem<String> attributeItem = new TreeItem<String>(entry.getKey());
-			attributeItem.setExpanded(true);
+			keepExpansionState(attributeItem, collapsedAttributeRows, entry.getKey().toLowerCase());
 			attributeItem.getChildren().add(new TreeItem<String>(entry.getValue().describe()));
 			attributesRoot.getChildren().add(attributeItem);
 		}
@@ -1050,6 +1907,7 @@ public class DataAwareController extends AbstractController {
 		refreshListStatistics();
 		selectTimelineIndex(0);
 		labelCost.setText(PlannerSession.getInstance().isPlanPresent() && selectedEntry != null ? selectedEntry.planCost : "");
+		updateExportButton();
 		updateTimelineControls(activeTrace);
 
 		if (selectIndex != null) {
@@ -1577,7 +2435,10 @@ public class DataAwareController extends AbstractController {
 			new Label("\t i) \tsync: A prefix event, replayed as is"),
 			new Label("\t ii) \tskip: A prefix event that none of the process models refer to"),
 			new Label("\t iii) \tadd: An event added by the planner, with the attribute values it chose"),
-			new Label("\t iv) \treset constraint: The constraint (or Petri net) was violated and is reset to its initial state"),
+			new Label("\t iv) \treset constraint: The constraint (or Petri net) was violated and is reset to its initial state (Reset recovery strategy)"),
+			new Label(""),
+			new Label("The planner settings (gear button next to Run Planner) set the Recovery strategy, which decides how the planner handles violated constraints,"),
+			new Label("and the Waiting cost, the cost of waiting one time unit; hover over the button to see the current settings."),
 			new Label(""),
 			new Label("Reset discards the selected prefix's plan (making the prefix editable again); pressing it again clears the prefix.")
 		);

@@ -137,7 +137,7 @@ public class EnhspPlanParser {
 
 				switch (action[0]) {
 				case "sync-actions": //(sync-actions t<i> t<i+1> a)
-				case "skip-unused": //(skip-unused t<i> a t<i+1>)
+				case "skip": //(skip-unused t<i> a t<i+1>)
 					int prefixIndex = parseTraceState(action[1]);
 					boolean isSync = action[0].equals("sync-actions");
 					String activity = prefixIndex >= 0 && prefixIndex < prefixEvents.size() ? prefixEvents.get(prefixIndex) : decodeActivity(isSync ? action[3] : action[2]);

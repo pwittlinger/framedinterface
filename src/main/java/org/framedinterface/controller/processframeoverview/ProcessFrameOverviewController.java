@@ -25,6 +25,8 @@ import javafx.beans.binding.Bindings;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Worker;
 import javafx.event.ActionEvent;
@@ -185,7 +187,17 @@ public class ProcessFrameOverviewController extends AbstractController {
 		declWebViewZoomObject = declWebView.zoomProperty().asObject();
 		pnWebViewZoomObject = pnWebView.zoomProperty().asObject();
 		setupWebView(declWebView, ModelType.DECLARE, declZoomSlider, declZoomSliderValueObject, declZoomValueField, declWebViewZoomObject);
-		setupWebView(pnWebView, ModelType.PN, pnZoomSlider, pnZoomSliderValueObject, pnZoomValueField, pnWebViewZoomObject);
+		//Loading both WebViews at once leaves pnWebView empty when this is the first page opened, so (same as Data-Agnostic and Data-Aware)
+		//pnWebView is only loaded after declWebView is already loaded. A PN visualization requested before then is kept in initialPnWebViewScript
+		declWebView.getEngine().getLoadWorker().stateProperty().addListener(new ChangeListener<Worker.State>() {
+			@Override
+			public void changed(ObservableValue<? extends Worker.State> observable, Worker.State oldValue, Worker.State newValue) {
+				if (newValue == Worker.State.SUCCEEDED) {
+					setupWebView(pnWebView, ModelType.PN, pnZoomSlider, pnZoomSliderValueObject, pnZoomValueField, pnWebViewZoomObject);
+					observable.removeListener(this);
+				}
+			}
+		});
 
 		//Triggering visualization update when the model selection is changed
 		declModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
