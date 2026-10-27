@@ -38,7 +38,7 @@ public class AutomatonUtils {
 			DeterministicAutomaton automaton = conjunction.getAutomaton().op.determinize().op.complete();
 			return new ExecutableAutomaton(automaton);
 		} catch (SyntaxParserException e) {
-			System.err.println("Cannot create automatn for constraint: " + declareConstraint.toString());
+			System.err.println("Cannot create automaton for constraint: " + declareConstraint.toString());
 			e.printStackTrace();
 			return null;
 		}

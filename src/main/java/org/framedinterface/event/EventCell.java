@@ -48,7 +48,7 @@ public class EventCell extends ListCell<EventData> {
 	private static final String TIMESTAMP_ATTRIBUTE = "timestamp";
 	private static final String TIMESTAMP_PATTERN = "yyyy-MM-dd'T'HH:mm:ss";
 	private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern(TIMESTAMP_PATTERN);
-	private static final Pattern TIMESTAMP_SHAPE_PATTERN = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}$");
+	private static final Pattern TIMESTAMP_SHAPE_PATTERN = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$");
 
 	private int eventNumber;
 	private Consumer<Integer> selectionCallback;
@@ -207,20 +207,26 @@ public class EventCell extends ListCell<EventData> {
 
 	//The "timestamp" field is not bound to the event's activity (unlike the other attributes above) - it is offered on every prefix event
 	//whenever any selected Declare model has a time condition, since any event may need to participate in a time condition's evaluation
-	private HBox buildTimestampRow(EventData item, Map<String, String> values) {
+	private VBox buildTimestampRow(EventData item, Map<String, String> values) {
 		HBox row = new HBox(6);
 		row.setAlignment(Pos.CENTER_LEFT);
-		String defaultValue = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
-		TextField valueField = new TextField(values.getOrDefault(TIMESTAMP_ATTRIBUTE, defaultValue));
+		TextField valueField = new TextField(values.getOrDefault(TIMESTAMP_ATTRIBUTE, suggestTimestamp()));
 		valueField.setPromptText(TIMESTAMP_PATTERN);
 		Button confirmButton = new Button();
 		confirmButton.getStyleClass().add("small-button");
 		FontIcon confirmIcon = new FontIcon("fa-check");
 		confirmIcon.getStyleClass().add("small-button__icon");
 		confirmButton.setGraphic(confirmIcon);
+		Label errorLabel = new Label(); //Says why the entered timestamp was rejected
+		errorLabel.setStyle("-fx-text-fill: red;");
+		errorLabel.setWrapText(true);
+		errorLabel.maxWidthProperty().bind(row.widthProperty());
+		errorLabel.setVisible(false);
+		errorLabel.setManaged(false);
 		Runnable confirmValue = () -> {
-			String text = valueField.getText();
-			if (isValidTimestamp(text)) {
+			String text = valueField.getText().strip();
+			String error = validateTimestamp(text);
+			if (error == null) {
 				valueField.setStyle("");
 				values.put(TIMESTAMP_ATTRIBUTE, text);
 				if (attributeChangeCallback != null) {
@@ -229,24 +235,62 @@ public class EventCell extends ListCell<EventData> {
 			} else {
 				valueField.setStyle("-fx-border-color: red; -fx-border-width: 1.5px;");
 			}
+			errorLabel.setText(error);
+			errorLabel.setVisible(error != null);
+			errorLabel.setManaged(error != null);
 		};
 		confirmButton.setOnAction(event -> confirmValue.run());
 		valueField.setOnAction(event -> confirmValue.run()); //Enter key also confirms
 		row.getChildren().addAll(new Label(TIMESTAMP_ATTRIBUTE + ":"), valueField, confirmButton);
-		return row;
+		return new VBox(4, row, errorLabel);
 	}
 
-	//Rudimentary format check followed by an actual parse, so e.g. "2023-02-30T10:00:00.000" (not a real date) is also rejected
-	private static boolean isValidTimestamp(String text) {
+	//Only used if the event has no timestamp yet (the Data-Aware page gives every prefix event one as it is added): now, or the preceding
+	//event's timestamp if that is later, since an event can't happen before the one preceding it
+	private String suggestTimestamp() {
+		LocalDateTime now = LocalDateTime.now();
+		LocalDateTime previous = getNeighborTimestamp(-1);
+		return (previous != null && previous.isAfter(now) ? previous : now).format(TIMESTAMP_FORMATTER);
+	}
+
+	//Returns why the given timestamp can't be used for this event, or null if it can: it must be a real date/time in TIMESTAMP_PATTERN,
+	//and not before the event directly preceding this one, nor after the one directly following it
+	private String validateTimestamp(String text) {
+		LocalDateTime timestamp = parseTimestamp(text);
+		if (timestamp == null) {
+			return "Not a valid timestamp (" + TIMESTAMP_PATTERN.replace("'", "") + ")";
+		}
+		LocalDateTime previous = getNeighborTimestamp(-1);
+		if (previous != null && timestamp.isBefore(previous)) {
+			return "Can't be before the previous event (" + previous.format(TIMESTAMP_FORMATTER) + ")";
+		}
+		LocalDateTime next = getNeighborTimestamp(1);
+		if (next != null && timestamp.isAfter(next)) {
+			return "Can't be after the next event (" + next.format(TIMESTAMP_FORMATTER) + ")";
+		}
+		return null;
+	}
+
+	//Rudimentary format check followed by an actual parse, so e.g. "2023-02-30T10:00:00" (not a real date) is also rejected; null if invalid
+	private static LocalDateTime parseTimestamp(String text) {
 		if (text == null || !TIMESTAMP_SHAPE_PATTERN.matcher(text).matches()) {
-			return false;
+			return null;
 		}
 		try {
-			LocalDateTime.parse(text, TIMESTAMP_FORMATTER);
-			return true;
+			return LocalDateTime.parse(text, TIMESTAMP_FORMATTER);
 		} catch (DateTimeParseException e) {
-			return false;
+			return null;
 		}
+	}
+
+	//The timestamp of the event the given number of rows away from this one, or null if that row is not a prefix event (e.g. the trace start/end) or has no valid timestamp
+	private LocalDateTime getNeighborTimestamp(int offset) {
+		int index = getIndex() + offset;
+		if (getListView() == null || index < 0 || index >= getListView().getItems().size()) {
+			return null;
+		}
+		Map<String, String> neighborValues = getListView().getItems().get(index).getAttributeValues();
+		return neighborValues == null ? null : parseTimestamp(neighborValues.get(TIMESTAMP_ATTRIBUTE));
 	}
 
 

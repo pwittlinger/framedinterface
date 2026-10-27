@@ -1082,8 +1082,8 @@ public class DataAwareController extends AbstractController {
 	}
 
 	//Writes every prefix as one trace (in prefixChoice order, so prefix <i> becomes problem<i>.pddl) of an XES log that the data-aware PDDL generator can read.
-	//The generator computes each event's time relative to the trace's first event and needs a timestamp on every event, so events without a
-	//(valid) "timestamp" attribute reuse the previous event's timestamp (or the trace's first known one / the export time, if there is none before them)
+	//The generator computes each event's time relative to the trace's first event and needs a timestamp on every event; events still without one (e.g. of an
+	//imported prefix that was never selected) get one here, the same way updateTrace() gives one to the selected prefix's events
 	private void writePrefixesAsXes(File file) throws IOException {
 		ZonedDateTime exportTime = ZonedDateTime.now().truncatedTo(ChronoUnit.SECONDS);
 
@@ -1092,23 +1092,11 @@ public class DataAwareController extends AbstractController {
 				PrefixEntry entry = prefixes.get(p);
 				xes.startTrace("Prefix " + (p + 1));
 
-				ZonedDateTime previousTimestamp = null;
-				for (int i = 0; i < entry.prefixEvents.size() && previousTimestamp == null; i++) {
-					previousTimestamp = parseTimestamp(entry.attributeValues.getOrDefault(i + 1, Collections.emptyMap()).get("timestamp"));
-				}
-				if (previousTimestamp == null) {
-					previousTimestamp = exportTime;
-				}
-				entry.exportStartTime = previousTimestamp; //The generator times events relative to the first one, so this is what plan times are relative to
+				List<ZonedDateTime> timestamps = fillMissingTimestamps(entry.prefixEvents, entry.attributeValues, exportTime);
+				entry.exportStartTime = timestamps.isEmpty() ? exportTime : timestamps.get(0); //The generator times events relative to the first one, so this is what plan times are relative to
 
 				for (int i = 0; i < entry.prefixEvents.size(); i++) {
-					Map<String, String> eventAttributeValues = entry.attributeValues.getOrDefault(i + 1, Collections.emptyMap());
-					ZonedDateTime timestamp = parseTimestamp(eventAttributeValues.get("timestamp"));
-					if (timestamp == null) {
-						timestamp = previousTimestamp;
-					}
-					previousTimestamp = timestamp;
-
+					Map<String, String> eventAttributeValues = entry.attributeValues.get(i + 1);
 					xes.startEvent(getActivityNameAsDefined(entry.prefixEvents.get(i)));
 					for (Map.Entry<String, String> attributeValue : eventAttributeValues.entrySet()) {
 						String value = attributeValue.getValue() == null ? "" : attributeValue.getValue().strip();
@@ -1116,7 +1104,7 @@ public class DataAwareController extends AbstractController {
 							xes.writeAttribute(getXesAttributeType(value), attributeValue.getKey(), value);
 						}
 					}
-					xes.writeTimestamp(timestamp);
+					xes.writeTimestamp(timestamps.get(i));
 					xes.endElement();
 				}
 				xes.endElement();
@@ -1238,6 +1226,25 @@ public class DataAwareController extends AbstractController {
 				out.close();
 			}
 		}
+	}
+
+	//Gives every prefix event without a (valid) "timestamp" attribute one: the given time, or the preceding event's timestamp if that is later, since an
+	//event can't happen before the one preceding it. It is stored rather than only exported, so the timestamp EventCell's editor shows for an event is
+	//the one exported to the planner, whether or not it was ever confirmed. Returns every event's timestamp, in prefix order.
+	private static List<ZonedDateTime> fillMissingTimestamps(List<String> prefixEvents, Map<Integer, Map<String, String>> attributeValues, ZonedDateTime time) {
+		ZonedDateTime fallbackTime = time.truncatedTo(ChronoUnit.SECONDS); //The stored format has no fraction of a second
+		List<ZonedDateTime> timestamps = new ArrayList<ZonedDateTime>();
+		for (int i = 0; i < prefixEvents.size(); i++) {
+			Map<String, String> eventAttributeValues = attributeValues.computeIfAbsent(i + 1, n -> new LinkedHashMap<String, String>());
+			ZonedDateTime timestamp = parseTimestamp(eventAttributeValues.get("timestamp"));
+			if (timestamp == null) {
+				ZonedDateTime previousTimestamp = i == 0 ? null : timestamps.get(i - 1);
+				timestamp = previousTimestamp != null && previousTimestamp.isAfter(fallbackTime) ? previousTimestamp : fallbackTime;
+				eventAttributeValues.put("timestamp", XES_TIMESTAMP_FORMATTER.format(timestamp));
+			}
+			timestamps.add(timestamp);
+		}
+		return timestamps;
 	}
 
 	//Parses a value in the "timestamp" attribute format EventCell's editor expects, or returns null if it is missing/invalid
@@ -1891,6 +1898,8 @@ public class DataAwareController extends AbstractController {
 	//Resets all models against whatever trace is currently active (plan continuation if present, otherwise the manually-built prefix) and refreshes the plan list / timeline
 	//Declare models replay data conditions against attribute values here (Data-Aware page only); Petri net models have no data conditions to consider
 	private void updateTrace(Integer selectIndex) {
+		//A newly added (or carried over / imported, timestamp-less) prefix event gets its timestamp right away, which is then shown and exported as is
+		fillMissingTimestamps(PlannerSession.getInstance().getCurrentPrefix(), PlannerSession.getInstance().getPrefixAttributeValuesMap(), ZonedDateTime.now());
 		List<String> activeTrace = PlannerSession.getInstance().getActiveTrace();
 		List<Map<String, String>> attributeValuesPerEvent = buildAttributeValuesPerEvent(activeTrace);
 
