@@ -61,6 +61,8 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 		//Files left over from a previous run must not be mistaken for the ones generated now. This includes the variable files,
 		//which the generator only creates if they don't exist yet (and would otherwise silently reuse for different models)
 		deleteFiles(new File(currentPath, PDDL_OUTPUT_FOLDER), "problem\\d+\\.pddl");
+		//Same for the clauses domain: if it's still there from an old run, RunEnhspTask would pick it up
+		deleteFiles(new File(currentPath, PDDL_OUTPUT_FOLDER), "domain_.*_clauses\\.pddl");
 		deleteFiles(new File(currentPath, OUTPUT_FOLDER), ACTIVITY_MAPPING_FILE_PATTERN);
 		new File(currentPath, VARIABLE_VALUES_FILE).delete();
 		new File(currentPath, VARIABLE_SUBSTITUTIONS_FILE).delete();

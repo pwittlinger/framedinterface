@@ -276,7 +276,7 @@ public class DataAgnosticController extends AbstractController {
 		declModelChoice.getItems().addListener(new InvalidationListener() {
 			@Override
 			public void invalidated(Observable observable) { //Behavior when new model is added while there is no selection and behavior when a selected model is removed
-				if (declModelChoice.getSelectionModel().getSelectedIndex()==-1 || !declModelChoice.getItems().contains(declModelChoice.getSelectionModel().getSelectedItem())) {
+				if (!declModelChoice.getItems().isEmpty() && (declModelChoice.getSelectionModel().getSelectedIndex()==-1 || !declModelChoice.getItems().contains(declModelChoice.getSelectionModel().getSelectedItem()))) {
 					declModelChoice.getSelectionModel().selectFirst();
 				}
 			}
@@ -284,7 +284,7 @@ public class DataAgnosticController extends AbstractController {
 		pnModelChoice.getItems().addListener(new InvalidationListener() {
 			@Override
 			public void invalidated(Observable observable) { //Behavior when new model is added while there is no selection and behavior when a selected model is removed
-				if (pnModelChoice.getSelectionModel().getSelectedIndex()==-1 || !pnModelChoice.getItems().contains(pnModelChoice.getSelectionModel().getSelectedItem())) {
+				if (!pnModelChoice.getItems().isEmpty() && (pnModelChoice.getSelectionModel().getSelectedIndex()==-1 || !pnModelChoice.getItems().contains(pnModelChoice.getSelectionModel().getSelectedItem()))) {
 					pnModelChoice.getSelectionModel().selectFirst();
 				}
 			}
