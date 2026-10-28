@@ -2,6 +2,7 @@ package org.framedinterface.utils;
 
 import java.io.File;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.time.ZonedDateTime;
@@ -71,16 +72,20 @@ public class EnhspPlanParser {
 	private Map<String, String> variableValues = new HashMap<String, String>(); //Value encoding (e.g. "integer550") -> value (e.g. "55")
 	private Set<String> categoricalAttributes; //Lowercased; their value encodings are the categorical values themselves
 	private Map<String, String> resetTargets; //Lowercased PDDL constraint name -> the activity a reset step should carry (default: the name itself)
+	private BigDecimal costFactor; //The plan cost is the planner's metric times this
 
 	/**
 	 * @param outputFolder the generator's output folder, holding its activity mapping files (activityMappingFilePattern)
 	 * @param variableValuesFile the generator's value encodings (e.g. "integer550 55")
 	 * @param categoricalAttributes lowercased names of categorical attributes, whose value encodings are used as is
 	 * @param resetTargets lowercased PDDL constraint name -> activity for its reset steps (e.g. a Petri net's reset activity)
+	 * @param costFactor the planner's metric is multiplied with it to get the plan cost (the generator scales costs relative to its default waiting cost)
 	 */
-	public EnhspPlanParser(File outputFolder, File variableValuesFile, String activityMappingFilePattern, Set<String> categoricalAttributes, Map<String, String> resetTargets) throws IOException {
+	public EnhspPlanParser(File outputFolder, File variableValuesFile, String activityMappingFilePattern, Set<String> categoricalAttributes, Map<String, String> resetTargets,
+			BigDecimal costFactor) throws IOException {
 		this.categoricalAttributes = categoricalAttributes;
 		this.resetTargets = resetTargets;
+		this.costFactor = costFactor;
 
 		File[] mappingFiles = outputFolder.listFiles((dir, name) -> name.matches(activityMappingFilePattern));
 		if (mappingFiles != null) {
@@ -210,8 +215,13 @@ public class EnhspPlanParser {
 	}
 
 	//"4061.0" -> "4061"
-	private static String formatCost(String cost) {
-		return cost.endsWith(".0") ? cost.substring(0, cost.length() - 2) : cost;
+	//The metric times costFactor, without trailing zeros (e.g. "400" rather than "400.0"); a metric that isn't a number is shown as is
+	private String formatCost(String metric) {
+		try {
+			return new BigDecimal(metric).multiply(costFactor).stripTrailingZeros().toPlainString();
+		} catch (NumberFormatException e) {
+			return metric;
+		}
 	}
 
 	private static List<String> readLines(File file) throws IOException {

@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -14,6 +16,7 @@ import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -28,6 +31,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.framedinterface.controller.ProgressLayerController;
 import org.framedinterface.controller.common.AbstractController;
@@ -48,7 +52,11 @@ import org.framedinterface.utils.EnhspPlanParser;
 import org.framedinterface.utils.FileUtils;
 import org.framedinterface.utils.ValidationUtils;
 import org.framedinterface.utils.enums.MonitoringState;
+import org.framedinterface.utils.enums.OptimizationTarget;
 import org.framedinterface.utils.enums.RecoveryStrategy;
+import org.framedinterface.utils.enums.SearchHeuristic;
+import org.framedinterface.utils.enums.SearchStrategy;
+import org.controlsfx.control.CheckComboBox;
 import org.controlsfx.control.ToggleSwitch;
 import org.deckfour.xes.extension.std.XConceptExtension;
 import org.deckfour.xes.extension.std.XLifecycleExtension;
@@ -113,6 +121,8 @@ import javafx.scene.control.Separator;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Slider;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
@@ -195,6 +205,15 @@ public class DataAwareController extends AbstractController {
 	private RecoveryStrategy recoveryStrategy = RecoveryStrategy.RESET;
 	private Double waitingCost = null; //Cost of waiting one time unit; null to use the generator's default
 	private static final String GENERATOR_DEFAULT_WAITING_COST = "10"; //Only shown to the user, the generator applies it itself when --waiting_cost is omitted
+	//Always contains CONSTRAINT_VIOLATION. Without ACTIVITY_COST the generator gets a cost model of zero costs, without EXECUTION_TIME it ignores time conditions
+	private Set<OptimizationTarget> optimizationTargets = EnumSet.allOf(OptimizationTarget.class);
+	//ENHSP options
+	private SearchStrategy searchStrategy = SearchStrategy.WASTAR;
+	private SearchHeuristic searchHeuristic = SearchHeuristic.BLIND;
+	private int plannerMemoryGb = DEFAULT_PLANNER_MEMORY_GB;
+	private static final int MIN_PLANNER_MEMORY_GB = 4;
+	private static final int MAX_PLANNER_MEMORY_GB = 32;
+	private static final int DEFAULT_PLANNER_MEMORY_GB = 8;
 	private static final PseudoClass ERROR_PSEUDO_CLASS = PseudoClass.getPseudoClass("error");
 
 	//Models whose constraints the user collapsed in the Constraints pane, so the pane keeps them collapsed when it is rebuilt
@@ -206,6 +225,10 @@ public class DataAwareController extends AbstractController {
 	private TitledPane activitiesAttributesPane;
 	@FXML
 	private TreeTableView<ActivityEntry> activitiesTreeTableView;
+	@FXML
+	private Button setActivityCostsButton;
+	@FXML
+	private Label activityCostIgnoredLabel; //Shown, along with an icon in the pane's title, while Activity Cost isn't an optimization target
 	@FXML
 	private TreeTableColumn<ActivityEntry, String> activityNameColumn;
 	@FXML
@@ -742,7 +765,8 @@ public class DataAwareController extends AbstractController {
 		return attribute.toString();
 	}
 
-	//Lets the user change the settings the planner runs with: the recovery strategy and the waiting cost (left empty to use the generator's default)
+	//Lets the user change the settings the planner runs with. General tab: the optimization targets, the recovery strategy and the waiting cost (left
+	//empty to use the generator's default). ENHSP tab: the planner's search strategy, heuristic and memory
 	@FXML
 	private void onClickPlannerSettings() {
 		Dialog<ButtonType> dialog = new Dialog<ButtonType>();
@@ -751,6 +775,35 @@ public class DataAwareController extends AbstractController {
 		dialog.initOwner(getStage());
 		dialog.getDialogPane().getStylesheets().add("/org/framedinterface/dialogPane.css");
 		dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+		Runnable fitDialogToContent = () -> Platform.runLater(() -> dialog.getDialogPane().getScene().getWindow().sizeToScene()); //It doesn't grow or shrink with its notes by itself
+
+		CheckComboBox<OptimizationTarget> optimizationChoice = new CheckComboBox<OptimizationTarget>(FXCollections.observableArrayList(OptimizationTarget.values()));
+		optimizationTargets.forEach(target -> optimizationChoice.getCheckModel().check(target));
+		optimizationChoice.setMaxWidth(Double.MAX_VALUE);
+		Label optimizationDescription = new Label("Constraint Violation is always optimized. Execution Time only matters for Declare models with temporal constraints.");
+		Label optimizationNote = new Label(); //Explains the consequences of the unchecked targets
+		optimizationNote.getStyleClass().add("dialog-note");
+		Runnable updateOptimizationNote = () -> {
+			List<String> notes = new ArrayList<String>();
+			if (!optimizationChoice.getCheckModel().isChecked(OptimizationTarget.ACTIVITY_COST)) {
+				notes.add("Without Activity Cost, the cost model is ignored: every activity costs 0, whatever its cost in the Activities pane.");
+			}
+			if (!optimizationChoice.getCheckModel().isChecked(OptimizationTarget.EXECUTION_TIME)) {
+				notes.add("Without Execution Time, all temporal constraints in the Declare models are discarded as well. Time doesn't advance, so the waiting cost doesn't apply.");
+			}
+			optimizationNote.setText(String.join(System.lineSeparator(), notes));
+			optimizationNote.setVisible(!notes.isEmpty());
+			optimizationNote.setManaged(!notes.isEmpty());
+		};
+		updateOptimizationNote.run();
+		optimizationChoice.getCheckModel().getCheckedItems().addListener((Observable observable) -> {
+			if (!optimizationChoice.getCheckModel().isChecked(OptimizationTarget.CONSTRAINT_VIOLATION)) {
+				//Mandatory, so unchecking it is undone; only afterwards, as the check box is still being updated from this change
+				Platform.runLater(() -> optimizationChoice.getCheckModel().check(OptimizationTarget.CONSTRAINT_VIOLATION));
+			}
+			updateOptimizationNote.run();
+			fitDialogToContent.run();
+		});
 
 		ChoiceBox<RecoveryStrategy> recoveryChoice = new ChoiceBox<RecoveryStrategy>();
 		recoveryChoice.getItems().setAll(RecoveryStrategy.values());
@@ -768,27 +821,108 @@ public class DataAwareController extends AbstractController {
 		waitingCostInvalid.addListener((observable, wasInvalid, isInvalid) -> waitingCostField.pseudoClassStateChanged(ERROR_PSEUDO_CLASS, isInvalid));
 		dialog.getDialogPane().lookupButton(ButtonType.OK).disableProperty().bind(waitingCostInvalid);
 
-		for (Label description : List.of(recoveryDescription, waitingCostDescription)) {
+		ChoiceBox<SearchStrategy> searchStrategyChoice = new ChoiceBox<SearchStrategy>();
+		searchStrategyChoice.getItems().setAll(SearchStrategy.values());
+		searchStrategyChoice.getSelectionModel().select(searchStrategy);
+		ChoiceBox<SearchHeuristic> searchHeuristicChoice = new ChoiceBox<SearchHeuristic>();
+		searchHeuristicChoice.getItems().setAll(SearchHeuristic.values());
+		searchHeuristicChoice.getSelectionModel().select(searchHeuristic);
+		Label searchDescription = new Label("An optimal search strategy with an optimal heuristic finds a plan with the lowest cost.");
+		Label optimalityNote = new Label(); //Warns about the non-optimal choices
+		optimalityNote.getStyleClass().add("dialog-note");
+		Runnable updateOptimalityNote = () -> {
+			List<String> nonOptimal = new ArrayList<String>();
+			if (!searchStrategyChoice.getValue().isOptimal()) {
+				nonOptimal.add(searchStrategyChoice.getValue().getCliValue());
+			}
+			if (!searchHeuristicChoice.getValue().isOptimal()) {
+				nonOptimal.add(searchHeuristicChoice.getValue().getCliValue());
+			}
+			optimalityNote.setText(String.join(" and ", nonOptimal) + (nonOptimal.size() == 1 ? " is" : " are") + " not optimal: the plan found may not have the lowest cost.");
+			optimalityNote.setVisible(!nonOptimal.isEmpty());
+			optimalityNote.setManaged(!nonOptimal.isEmpty());
+		};
+		updateOptimalityNote.run();
+		for (ChoiceBox<?> searchChoice : List.of(searchStrategyChoice, searchHeuristicChoice)) {
+			searchChoice.valueProperty().addListener(observable -> {
+				updateOptimalityNote.run();
+				fitDialogToContent.run();
+			});
+		}
+
+		Slider memorySlider = new Slider(MIN_PLANNER_MEMORY_GB, MAX_PLANNER_MEMORY_GB, plannerMemoryGb);
+		memorySlider.setMajorTickUnit(4);
+		memorySlider.setMinorTickCount(3); //Whole GB
+		memorySlider.setSnapToTicks(true);
+		memorySlider.setBlockIncrement(1);
+		memorySlider.setShowTickMarks(true);
+		memorySlider.setShowTickLabels(true);
+		Label memoryValue = new Label();
+		memoryValue.setMinWidth(Region.USE_PREF_SIZE);
+		memoryValue.textProperty().bind(Bindings.createStringBinding(() -> Math.round(memorySlider.getValue()) + " GB", memorySlider.valueProperty()));
+		HBox memoryBox = new HBox(8, memorySlider, memoryValue);
+		HBox.setHgrow(memorySlider, Priority.ALWAYS);
+		Label memoryDescription = new Label("The most memory the planner may use (Java heap).");
+
+		for (Label description : List.of(optimizationDescription, optimizationNote, recoveryDescription, waitingCostDescription, searchDescription, optimalityNote, memoryDescription)) {
 			description.setWrapText(true);
 			description.setPrefWidth(320);
 			description.setMinHeight(Region.USE_PREF_SIZE);
 		}
-		GridPane content = new GridPane();
-		content.setHgap(10);
-		content.setVgap(6);
-		content.setPadding(new Insets(10));
-		content.addRow(0, new Label("Recovery:"), recoveryChoice);
-		content.add(recoveryDescription, 1, 1);
-		content.addRow(2, new Label("Waiting cost:"), waitingCostField);
-		content.add(waitingCostDescription, 1, 3);
-		dialog.getDialogPane().setContent(content);
+		GridPane generalContent = createSettingsGrid();
+		generalContent.addRow(0, new Label("Optimize:"), optimizationChoice);
+		generalContent.add(optimizationDescription, 1, 1);
+		generalContent.add(optimizationNote, 1, 2);
+		generalContent.addRow(3, new Label("Recovery:"), recoveryChoice);
+		generalContent.add(recoveryDescription, 1, 4);
+		generalContent.addRow(5, new Label("Waiting cost:"), waitingCostField);
+		generalContent.add(waitingCostDescription, 1, 6);
+		GridPane enhspContent = createSettingsGrid();
+		enhspContent.addRow(0, new Label("Search strategy:"), searchStrategyChoice);
+		enhspContent.addRow(1, new Label("Heuristic:"), searchHeuristicChoice);
+		enhspContent.add(searchDescription, 1, 2);
+		enhspContent.add(optimalityNote, 1, 3);
+		enhspContent.addRow(4, new Label("Memory:"), memoryBox);
+		enhspContent.add(memoryDescription, 1, 5);
+		TabPane tabs = new TabPane(new Tab("General", generalContent), new Tab("ENHSP", enhspContent));
+		tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+		dialog.getDialogPane().setContent(tabs);
 
 		if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
 			return;
 		}
+		optimizationTargets = EnumSet.of(OptimizationTarget.CONSTRAINT_VIOLATION);
+		optimizationTargets.addAll(optimizationChoice.getCheckModel().getCheckedItems());
 		recoveryStrategy = recoveryChoice.getValue();
 		waitingCost = waitingCostField.getText().isBlank() ? null : COST_CONVERTER.fromString(waitingCostField.getText());
+		searchStrategy = searchStrategyChoice.getValue();
+		searchHeuristic = searchHeuristicChoice.getValue();
+		plannerMemoryGb = (int) Math.round(memorySlider.getValue());
+		updateActivitiesPaneState();
 		updatePlannerSettingsTooltip();
+	}
+
+	//A label column and a column of controls with their descriptions below them, as on the planner settings' tabs
+	private static GridPane createSettingsGrid() {
+		GridPane grid = new GridPane();
+		grid.setHgap(10);
+		grid.setVgap(6);
+		grid.setPadding(new Insets(10));
+		return grid;
+	}
+
+	//Without Activity Cost as an optimization target the activity costs are ignored (see buildCostModelLines), so the Activities pane's costs are greyed
+	//out and a warning explains why: in the pane, and as an icon in its title (which stays visible when the pane is collapsed)
+	private void updateActivitiesPaneState() {
+		boolean activityCostIgnored = !optimizationTargets.contains(OptimizationTarget.ACTIVITY_COST);
+		activitiesTreeTableView.setDisable(activityCostIgnored);
+		setActivityCostsButton.setDisable(activityCostIgnored);
+		activityCostIgnoredLabel.setVisible(activityCostIgnored);
+		activityCostIgnoredLabel.setManaged(activityCostIgnored);
+		FontIcon warningIcon = new FontIcon("fa-exclamation-triangle");
+		warningIcon.getStyleClass().add("warning-note__icon");
+		Tooltip.install(warningIcon, new Tooltip(activityCostIgnoredLabel.getText()));
+		activitiesAttributesPane.setGraphic(activityCostIgnored ? warningIcon : null);
 	}
 
 	//Empty (the generator's default is used) or a positive number
@@ -803,8 +937,12 @@ public class DataAwareController extends AbstractController {
 	//The planner settings are only visible in their dialog, so the gear button's tooltip summarizes them
 	private void updatePlannerSettingsTooltip() {
 		plannerSettingsButton.getTooltip().setText("Planner settings" + System.lineSeparator()
+				+ "Optimize: " + optimizationTargets.stream().map(OptimizationTarget::toString).collect(Collectors.joining(", ")) + System.lineSeparator()
 				+ "Recovery: " + recoveryStrategy + System.lineSeparator()
-				+ "Waiting cost: " + (waitingCost == null ? GENERATOR_DEFAULT_WAITING_COST + " (default)" : COST_CONVERTER.toString(waitingCost)));
+				+ "Waiting cost: " + (waitingCost == null ? GENERATOR_DEFAULT_WAITING_COST + " (default)" : COST_CONVERTER.toString(waitingCost)) + System.lineSeparator()
+				+ "Search strategy: " + searchStrategy + System.lineSeparator()
+				+ "Heuristic: " + searchHeuristic + System.lineSeparator()
+				+ "Memory: " + plannerMemoryGb + " GB");
 	}
 
 	//Exports all prefixes to an XES log (output/prefixes/prefixes_<timestamp>.xes), generates one PDDL problem per prefix (output/pddl/problem<i>.pddl) with the
@@ -859,15 +997,19 @@ public class DataAwareController extends AbstractController {
 		loadProgressLayer();
 		setUiBusy(true, "Generating PDDL...");
 
+		String waitingCostArgument = waitingCost == null ? null : COST_CONVERTER.toString(waitingCost);
+		//The planner's metric is relative to the generator's default waiting cost, so the plan cost is the metric times this factor (computed as the generator does)
+		BigDecimal planCostFactor = waitingCostArgument == null ? BigDecimal.ONE
+				: new BigDecimal(waitingCostArgument).divide(new BigDecimal(GENERATOR_DEFAULT_WAITING_COST), MathContext.DECIMAL64).stripTrailingZeros();
 		GenerateDataAwarePDDLTask generatePDDLTask = new GenerateDataAwarePDDLTask(currentPath, declPaths, pnPaths, logFile.getAbsolutePath(), recoveryStrategy, buildCostModelLines(), buildViolationCostLines(plannedModels),
-				waitingCost == null ? null : COST_CONVERTER.toString(waitingCost));
+				waitingCostArgument, !optimizationTargets.contains(OptimizationTarget.EXECUTION_TIME));
 		generatePDDLTask.setOnCancelled(taskEvent -> setUiBusy(false, null));
 		generatePDDLTask.setOnFailed(taskEvent -> {
 			setUiBusy(false, null);
 			AlertUtils.showError("Generating PDDL failed: " + generatePDDLTask.getException().getMessage());
 		});
 		generatePDDLTask.setOnSucceeded(taskEvent -> {
-			RunEnhspTask runEnhspTask = new RunEnhspTask(currentPath, prefixCount, recoveryStrategy);
+			RunEnhspTask runEnhspTask = new RunEnhspTask(currentPath, prefixCount, recoveryStrategy, searchStrategy, searchHeuristic, plannerMemoryGb);
 			if (progressLayerController != null) {
 				progressLayerController.getProgressTextLabel().textProperty().bind(runEnhspTask.messageProperty());
 			}
@@ -880,7 +1022,7 @@ public class DataAwareController extends AbstractController {
 				setUiBusy(false, null);
 				String planLoadError = null;
 				try {
-					loadPlans(plannedModels);
+					loadPlans(plannedModels, planCostFactor);
 				} catch (Exception e) {
 					e.printStackTrace();
 					planLoadError = e.getMessage();
@@ -920,11 +1062,11 @@ public class DataAwareController extends AbstractController {
 	}
 
 	//Replaces every prefix's continuation with its plan from output/plans/plan<i>.txt (prefix i), decoded with the generator's encodings,
-	//and replays the selected prefix's plan. Prefixes without a (solved) plan are left without a continuation.
-	private void loadPlans(List<AbstractModel> plannedModels) throws IOException {
+	//and replays the selected prefix's plan. Prefixes without a (solved) plan are left without a continuation. Plan costs are the planner's metric times planCostFactor.
+	private void loadPlans(List<AbstractModel> plannedModels, BigDecimal planCostFactor) throws IOException {
 		Map<String, String> resetTargets = assignPlannerConstraintNames(plannedModels);
 		EnhspPlanParser planParser = new EnhspPlanParser(new File(currentPath, GenerateDataAwarePDDLTask.OUTPUT_FOLDER), new File(currentPath, GenerateDataAwarePDDLTask.VARIABLE_VALUES_FILE),
-				GenerateDataAwarePDDLTask.ACTIVITY_MAPPING_FILE_PATTERN, getCategoricalAttributes(plannedModels), resetTargets);
+				GenerateDataAwarePDDLTask.ACTIVITY_MAPPING_FILE_PATTERN, getCategoricalAttributes(plannedModels), resetTargets, planCostFactor);
 
 		for (int i = 0; i < prefixes.size(); i++) {
 			PrefixEntry entry = prefixes.get(i);
@@ -1700,11 +1842,13 @@ public class DataAwareController extends AbstractController {
 	}
 
 	//The cost model handed to the PDDL generator: one "<ActivityName> <activityCost> 0" line per activity of the Activities pane (i.e. of the selected
-	//process specifications), spelled as in the model files, since the generator matches activity names case-sensitively
+	//process specifications), spelled as in the model files, since the generator matches activity names case-sensitively. Every activity costs 0
+	//unless Activity Cost is an optimization target (the costs set in the Activities pane are kept, for when it is again)
 	private List<String> buildCostModelLines() {
+		boolean activityCostOptimized = optimizationTargets.contains(OptimizationTarget.ACTIVITY_COST);
 		List<String> lines = new ArrayList<String>();
 		for (String activity : activityToAttributes.keySet()) {
-			lines.add(getActivityNameAsDefined(activity) + " " + COST_CONVERTER.toString(getActivityCost(activity).get()) + " 0");
+			lines.add(getActivityNameAsDefined(activity) + " " + (activityCostOptimized ? COST_CONVERTER.toString(getActivityCost(activity).get()) : "0") + " 0");
 		}
 		return lines;
 	}
@@ -2446,8 +2590,9 @@ public class DataAwareController extends AbstractController {
 			new Label("\t iii) \tadd: An event added by the planner, with the attribute values it chose"),
 			new Label("\t iv) \treset constraint: The constraint (or Petri net) was violated and is reset to its initial state (Reset recovery strategy)"),
 			new Label(""),
-			new Label("The planner settings (gear button next to Run Planner) set the Recovery strategy, which decides how the planner handles violated constraints,"),
-			new Label("and the Waiting cost, the cost of waiting one time unit; hover over the button to see the current settings."),
+			new Label("The planner settings (gear button next to Run Planner) set what the planner optimizes, the Recovery strategy, which decides how the planner"),
+			new Label("handles violated constraints, and the Waiting cost, the cost of waiting one time unit. Its ENHSP tab sets the planner's search strategy, heuristic"),
+			new Label("and memory; hover over the button to see the current settings."),
 			new Label(""),
 			new Label("Reset discards the selected prefix's plan (making the prefix editable again); pressing it again clears the prefix.")
 		);

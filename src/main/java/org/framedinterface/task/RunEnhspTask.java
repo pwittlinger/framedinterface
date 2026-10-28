@@ -14,12 +14,14 @@ import java.util.List;
 
 import org.framedinterface.utils.RunnerUtils;
 import org.framedinterface.utils.enums.RecoveryStrategy;
+import org.framedinterface.utils.enums.SearchHeuristic;
+import org.framedinterface.utils.enums.SearchStrategy;
 
 import javafx.concurrent.Task;
 
 /**
- * Runs the ENHSP planner, with the recovery strategy's domain, on output/pddl/problem1.pddl ... problem<problemCount>.pddl, one after another, writing the
- * planner output for problem<i>.pddl to output/plans/plan<i>.txt.
+ * Runs the ENHSP planner, with the recovery strategy's domain and the given search strategy, heuristic and memory, on output/pddl/problem1.pddl ...
+ * problem<problemCount>.pddl, one after another, writing the planner output for problem<i>.pddl to output/plans/plan<i>.txt.
  * The result is the list of problem numbers for which no plan was found.
  *
  * Solved problems go in a cache (~/.fraim/plan-cache), keyed by the domain, the problem and the planner. When we get
@@ -31,16 +33,21 @@ public class RunEnhspTask extends Task<List<Integer>> {
 	public static final String DOMAIN_FOLDER = "dependencies"; //Holds one PDDL domain per recovery strategy (see RecoveryStrategy.getDomainFileName)
 	public static final String PLAN_OUTPUT_FOLDER = "output/plans";
 	public static final Path PLAN_CACHE = Path.of(System.getProperty("user.home"), ".fraim", "plan-cache");
-	private static final List<String> PLANNER_OPTIONS = List.of("-planner", "opt-blind");
 
 	private String currentPath;
 	private int problemCount;
 	private RecoveryStrategy recoveryStrategy;
+	private SearchStrategy searchStrategy;
+	private SearchHeuristic searchHeuristic;
+	private int memoryGb; //Maximum Java heap of the planner (-Xmx)
 
-	public RunEnhspTask(String currentPath, int problemCount, RecoveryStrategy recoveryStrategy) {
+	public RunEnhspTask(String currentPath, int problemCount, RecoveryStrategy recoveryStrategy, SearchStrategy searchStrategy, SearchHeuristic searchHeuristic, int memoryGb) {
 		this.currentPath = currentPath;
 		this.problemCount = problemCount;
 		this.recoveryStrategy = recoveryStrategy;
+		this.searchStrategy = searchStrategy;
+		this.searchHeuristic = searchHeuristic;
+		this.memoryGb = memoryGb;
 	}
 
 	public static File getDomainFile(String currentPath, RecoveryStrategy recoveryStrategy) {
@@ -63,7 +70,9 @@ public class RunEnhspTask extends Task<List<Integer>> {
 		File domain = findDomain();
 		System.out.println("RunEnhspTask: using domain " + domain.getAbsolutePath());
 
-		List<String> plannerOptions = new ArrayList<String>(PLANNER_OPTIONS);
+		//-dap is always passed, -sdac only for the domains with conditional violation costs. The memory isn't a planner option, as it doesn't change the plan
+		//(and so isn't part of the cache key either)
+		List<String> plannerOptions = new ArrayList<String>(List.of("-s", searchStrategy.getCliValue(), "-h", searchHeuristic.getCliValue(), "-dap"));
 		if (recoveryStrategy.getCliValue().contains("discard") | recoveryStrategy.getCliValue().contains("skip")) {
 			plannerOptions.add("-sdac");
 		}
@@ -105,6 +114,7 @@ public class RunEnhspTask extends Task<List<Integer>> {
 			ArrayList<String> command = new ArrayList<String>();
 			command.add("java");
 			command.add("-jar");
+			command.add("-Xmx" + memoryGb + "G");
 			command.add(jar.getAbsolutePath());
 			command.add("-o");
 			command.add(domain.getAbsolutePath());

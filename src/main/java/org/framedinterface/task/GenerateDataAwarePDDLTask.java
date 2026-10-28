@@ -38,9 +38,11 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 	private List<String> costModelLines;
 	private List<String> violationCostLines;
 	private String waitingCost; //Cost of waiting one time unit; null to use the generator's default
+	//Drops the Declare constraints' time conditions and gives every event the timestamp 0, so time never advances (and no waiting costs are charged)
+	private boolean ignoreTimeConditions;
 
 	public GenerateDataAwarePDDLTask(String currentPath, List<String> declPaths, List<String> pnPaths, String logPath, RecoveryStrategy recoveryStrategy,
-			List<String> costModelLines, List<String> violationCostLines, String waitingCost) {
+			List<String> costModelLines, List<String> violationCostLines, String waitingCost, boolean ignoreTimeConditions) {
 		this.currentPath = currentPath;
 		this.declPaths = declPaths;
 		this.pnPaths = pnPaths;
@@ -49,6 +51,7 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 		this.costModelLines = costModelLines;
 		this.violationCostLines = violationCostLines;
 		this.waitingCost = waitingCost;
+		this.ignoreTimeConditions = ignoreTimeConditions;
 	}
 
 	@Override
@@ -97,6 +100,9 @@ public class GenerateDataAwarePDDLTask extends Task<Integer> {
 		if (waitingCost != null) {
 			command.add("--waiting_cost");
 			command.add(waitingCost);
+		}
+		if (ignoreTimeConditions) {
+			command.add("--ignore_time_conditions");
 		}
 
 		int exitCode = RunnerUtils.runProcess(command, new File(currentPath), null);

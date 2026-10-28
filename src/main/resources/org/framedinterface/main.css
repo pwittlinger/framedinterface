@@ -734,6 +734,16 @@
 	-fx-alignment: center_left;
 }
 
+/* Warns that something is currently ignored, e.g. the activity costs on the Data-Aware page when Activity Cost isn't optimized */
+.warning-note {
+	-fx-text-fill: #b35a00;
+}
+
+.warning-note__icon {
+	-fx-icon-color: #b35a00;
+	-fx-icon-size: 14;
+}
+
 /* Cost cells that can't be edited, e.g. the cost of a hard constraint on the Data-Aware page */
 .tree-table-cell:locked {
 	-fx-text-fill: #a0a0a0;

@@ -89,10 +89,15 @@
                               </VBox>
                            </content>
                         </TitledPane>
-                        <TitledPane fx:id="activitiesAttributesPane" animated="false" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Activities" VBox.vgrow="ALWAYS">
+                        <TitledPane fx:id="activitiesAttributesPane" animated="false" contentDisplay="RIGHT" expanded="true" maxHeight="1.7976931348623157E308" styleClass="parameters-pane" text="Activities" VBox.vgrow="ALWAYS">
                            <content>
                               <VBox spacing="4.0">
                                  <children>
+                                    <Label fx:id="activityCostIgnoredLabel" managed="false" minHeight="-Infinity" styleClass="warning-note" text="Activity Cost unselected from Optimization Goal (planner settings): these costs are ignored." visible="false" wrapText="true">
+                                       <graphic>
+                                          <FontIcon iconLiteral="fa-exclamation-triangle" styleClass="warning-note__icon" />
+                                       </graphic>
+                                    </Label>
                                     <TreeTableView fx:id="activitiesTreeTableView" editable="true" maxHeight="1.7976931348623157E308" showRoot="false" VBox.vgrow="ALWAYS">
                                       <columns>
                                         <TreeTableColumn fx:id="activityNameColumn" editable="false" prefWidth="215.0" sortable="false" text="Activity" />
@@ -283,13 +288,18 @@
                                        </children>
                                     </HBox>
                                     <Region maxWidth="20.0" HBox.hgrow="ALWAYS" />
-                                    <Button fx:id="plannerSettingsButton" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#onClickPlannerSettings" styleClass="standard-button">
-                                       <graphic>
-                                          <FontIcon iconLiteral="fa-cog" styleClass="standard-button__icon" />
-                                       </graphic>
-                                    </Button>
-                                    <Button fx:id="buttonRunPlanner" mnemonicParsing="false" onAction="#onClickPlanner" styleClass="standard-button" text="Run Planner" />
-                                    <Button fx:id="buttonPrefix" mnemonicParsing="false" onAction="#onClickPrefix" styleClass="standard-button" text="Reset" />
+                                    <!-- Kept at the buttons' height (also when the panes above are collapsed), so the settings button only stretches to the text buttons' height -->
+                                    <HBox alignment="CENTER" maxHeight="-Infinity" spacing="4.0">
+                                       <children>
+                                          <Button fx:id="plannerSettingsButton" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#onClickPlannerSettings" styleClass="standard-button">
+                                             <graphic>
+                                                <FontIcon iconLiteral="fa-cog" styleClass="standard-button__icon" />
+                                             </graphic>
+                                          </Button>
+                                          <Button fx:id="buttonRunPlanner" mnemonicParsing="false" onAction="#onClickPlanner" styleClass="standard-button" text="Run Planner" />
+                                          <Button fx:id="buttonPrefix" mnemonicParsing="false" onAction="#onClickPrefix" styleClass="standard-button" text="Reset" />
+                                       </children>
+                                    </HBox>
                                  </children>
                               </HBox>
                            </children>

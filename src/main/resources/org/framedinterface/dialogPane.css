@@ -75,6 +75,11 @@
 	-fx-text-fill: #393939;
 }
 
+/* Hints about the consequences of a setting, e.g. in the planner settings */
+.dialog-pane .label.dialog-note {
+	-fx-text-fill: #b35a00;
+}
+
 /* Same as in main.css, for text fields with invalid input */
 .dialog-pane .text-field:error {
 	-fx-text-box-border: #d35244;
