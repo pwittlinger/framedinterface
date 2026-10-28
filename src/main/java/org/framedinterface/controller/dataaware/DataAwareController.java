@@ -523,7 +523,7 @@ public class DataAwareController extends AbstractController {
 		declModelChoice.getItems().addListener(new InvalidationListener() {
 			@Override
 			public void invalidated(Observable observable) {
-				if (declModelChoice.getSelectionModel().getSelectedIndex()==-1 || !declModelChoice.getItems().contains(declModelChoice.getSelectionModel().getSelectedItem())) {
+				if (!declModelChoice.getItems().isEmpty() && (declModelChoice.getSelectionModel().getSelectedIndex()==-1 || !declModelChoice.getItems().contains(declModelChoice.getSelectionModel().getSelectedItem()))) {
 					declModelChoice.getSelectionModel().selectFirst();
 				}
 			}
@@ -531,7 +531,7 @@ public class DataAwareController extends AbstractController {
 		pnModelChoice.getItems().addListener(new InvalidationListener() {
 			@Override
 			public void invalidated(Observable observable) {
-				if (pnModelChoice.getSelectionModel().getSelectedIndex()==-1 || !pnModelChoice.getItems().contains(pnModelChoice.getSelectionModel().getSelectedItem())) {
+				if (!pnModelChoice.getItems().isEmpty() && (pnModelChoice.getSelectionModel().getSelectedIndex()==-1 || !pnModelChoice.getItems().contains(pnModelChoice.getSelectionModel().getSelectedItem()))) {
 					pnModelChoice.getSelectionModel().selectFirst();
 				}
 			}
