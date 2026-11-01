@@ -54,6 +54,15 @@
          </styleClass>
       </Button>
       <Region VBox.vgrow="ALWAYS" />
+      <Button fx:id="tourButton" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#startTour" text="Tour">
+         <graphic>
+            <FontIcon iconLiteral="fa-question-circle" styleClass="primary-nav__icon" wrappingWidth="35.0" />
+         </graphic>
+         <styleClass>
+            <String fx:value="primary-nav__button" />
+            <String fx:value="primary-nav__button--menu" />
+         </styleClass>
+      </Button>
       <Button maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#toggleMinimize" text="Minimize">
          <graphic>
             <FontIcon fx:id="minimizeIcon" iconLiteral="fa-angle-double-left" styleClass="primary-nav__icon" textAlignment="CENTER" wrappingWidth="30.0" />

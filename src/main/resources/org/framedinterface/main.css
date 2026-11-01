@@ -1642,3 +1642,30 @@
   left: 44px;
   background: #000;
 }
+
+/* Guided tour */
+
+.tour-card {
+	-fx-background-color: #ffffff;
+	-fx-background-radius: 6px;
+	-fx-padding: 14px;
+	-fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.45), 18, 0, 0, 4);
+}
+
+.tour-card__progress {
+	-fx-font-size: 12px;
+	-fx-text-fill: #666666;
+}
+
+.tour-card__title {
+	-fx-font-size: 16px;
+	-fx-font-weight: bold;
+}
+
+.tour-ring {
+	-fx-fill: transparent;
+	-fx-stroke: #ffb300;
+	-fx-stroke-width: 3px;
+	-fx-arc-width: 10px;
+	-fx-arc-height: 10px;
+}

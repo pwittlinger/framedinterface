@@ -27,6 +27,10 @@ public class RootLayoutController extends AbstractController {
 		navigationSidebarController.setNavigationCallback(pageType -> navigateToPage(pageType));
 	}
 
+	public void setTourCallback(Runnable tourCallback) {
+		navigationSidebarController.setTourCallback(tourCallback);
+	}
+
 	// Called explicitly by App.java after setStage(), so that the default page's controller
 	// already has access to the stage (e.g. for file choosers) once it is loaded.
 	public void showDefaultPage() {

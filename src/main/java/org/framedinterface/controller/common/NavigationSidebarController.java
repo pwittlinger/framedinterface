@@ -31,9 +31,21 @@ public class NavigationSidebarController extends AbstractController {
 	private Button currentlyHighlighted;
 
 	private Consumer<PageType> navigationCallback;
+	private Runnable tourCallback;
 
 	public void setNavigationCallback(Consumer<PageType> navigationCallback) {
 		this.navigationCallback = navigationCallback;
+	}
+
+	public void setTourCallback(Runnable tourCallback) {
+		this.tourCallback = tourCallback;
+	}
+
+	@FXML
+	private void startTour() {
+		if (tourCallback != null) {
+			tourCallback.run();
+		}
 	}
 
 	/*
