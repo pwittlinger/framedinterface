@@ -7,6 +7,7 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
+import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 
@@ -14,6 +15,7 @@ import java.io.IOException;
 import java.util.Locale;
 
 import org.framedinterface.controller.common.RootLayoutController;
+import org.framedinterface.tour.GuidedTour;
 
 /**
  * JavaFX App
@@ -31,7 +33,10 @@ public class App extends Application {
         rootLayoutController.setStage(stage);
         rootLayoutController.showDefaultPage();
         Locale.setDefault(Locale.UK);
-        scene = new Scene(parent);
+        GuidedTour tour = new GuidedTour();
+        scene = new Scene(new StackPane(parent, tour.getOverlay()));
+        tour.install(scene);
+        rootLayoutController.setTourCallback(tour::start);
         scene.getStylesheets().add(getClass().getResource("/org/framedinterface/main.css").toString());
         stage.setScene(scene);
         stage.setTitle("FrAIm - The Framed-Autonomy Planner");
