@@ -815,7 +815,7 @@ public class DataAwareController extends AbstractController {
 		waitingCostField.setPromptText(GENERATOR_DEFAULT_WAITING_COST + " (default)");
 		waitingCostField.setPrefColumnCount(6);
 		waitingCostField.setMaxWidth(Region.USE_PREF_SIZE);
-		Label waitingCostDescription = new Label("The cost of waiting one time unit: any positive number (e.g. 0.5). Leave it empty to use the generator's default ("
+		Label waitingCostDescription = new Label("The cost of waiting one time unit, used when optimizing for Execution Time: any positive number (e.g. 0.5). Leave it empty to use the generator's default ("
 				+ GENERATOR_DEFAULT_WAITING_COST + ").");
 		BooleanBinding waitingCostInvalid = Bindings.createBooleanBinding(() -> !isValidWaitingCost(waitingCostField.getText()), waitingCostField.textProperty());
 		waitingCostInvalid.addListener((observable, wasInvalid, isInvalid) -> waitingCostField.pseudoClassStateChanged(ERROR_PSEUDO_CLASS, isInvalid));

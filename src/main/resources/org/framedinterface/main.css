@@ -1005,6 +1005,259 @@
 
 
 /*------------------------------------*\
+  #HELP PAGE
+\*------------------------------------*/
+
+.help-page {
+	-fx-padding: 20;
+	-fx-spacing: 12;
+}
+
+.help-page__title {
+	-fx-font-weight: bold;
+	-fx-font-size: 24px;
+	-fx-text-fill: #393939;
+}
+
+.help-page__subtitle {
+	-fx-font-size: 14px;
+	-fx-text-fill: #6b6b6b;
+}
+
+
+/**
+ * Step selector (1 - 2 - 3)
+ */
+
+.help-step-button {
+	-fx-background-color: #ffffff;
+	-fx-background-radius: 16;
+	-fx-border-color: #393939;
+	-fx-border-radius: 16;
+	-fx-text-fill: #393939;
+	-fx-font-size: 13px;
+	-fx-font-weight: bold;
+	-fx-padding: 6 14 6 14;
+}
+
+.help-step-button:hover {
+	-fx-border-color: #00a6fb;
+	-fx-text-fill: #00a6fb;
+}
+
+.help-step-button:current {
+	-fx-background-color: #00a6fb;
+	-fx-border-color: #00a6fb;
+	-fx-text-fill: #ffffff;
+}
+
+.help-step-connector {
+	-fx-min-width: 30;
+	-fx-pref-width: 30;
+	-fx-min-height: 2;
+	-fx-max-height: 2;
+	-fx-background-color: #aaaaaa;
+}
+
+
+/**
+ * Sketch of the explained page; the areas that aren't part of the current step are covered by a scrim
+ */
+
+.help-sketch {
+	-fx-background-color: #ffffff;
+	-fx-border-color: #393939;
+}
+
+.help-area:spotlight {
+	-fx-background-color: #00a6fb, #ffffff;
+	-fx-background-insets: 0, 2;
+}
+
+.help-area__content {
+	-fx-padding: 8;
+	-fx-spacing: 8;
+}
+
+.help-scrim {
+	-fx-background-color: rgba(57, 57, 57, 0.6);
+	-fx-cursor: hand;
+}
+
+.help-area:spotlight > .help-scrim {
+	visibility: hidden;
+}
+
+
+/**
+ * Clickable parts of the sketch (only while their area is highlighted)
+ */
+
+.help-hotspot {
+	-fx-background-color: #ffffff;
+	-fx-background-radius: 4;
+	-fx-border-color: #cccccc;
+	-fx-border-radius: 4;
+	-fx-padding: 6 8 6 8;
+	-fx-spacing: 6;
+}
+
+.help-area:spotlight .help-hotspot {
+	-fx-border-color: #00a6fb;
+	-fx-border-style: dashed;
+	-fx-cursor: hand;
+}
+
+.help-area:spotlight .help-hotspot:hover {
+	-fx-background-color: #f2faff;
+	-fx-border-style: solid;
+}
+
+.help-area:spotlight .help-hotspot:selected {
+	-fx-background-color: #e0f3ff;
+	-fx-border-style: solid;
+}
+
+.help-hotspot__title {
+	-fx-font-weight: bold;
+	-fx-font-size: 13px;
+	-fx-text-fill: #393939;
+}
+
+
+/**
+ * Placeholder controls drawn inside the sketch
+ */
+
+.help-sketch__text {
+	-fx-font-size: 11px;
+	-fx-text-fill: #8a8a8a;
+}
+
+.help-sketch__line {
+	-fx-min-height: 8;
+	-fx-pref-height: 8;
+	-fx-max-height: 8;
+	-fx-background-color: #e6e6e6;
+	-fx-background-radius: 4;
+}
+
+.help-sketch__button {
+	-fx-background-color: #393939;
+	-fx-text-fill: #ffffff;
+	-fx-font-size: 10px;
+	-fx-padding: 2 6 2 6;
+	-fx-graphic-text-gap: 4;
+}
+
+.help-sketch__icon {
+	-fx-icon-color: #ffffff;
+	-fx-icon-size: 10;
+}
+
+.help-sketch__slider {
+	-fx-pref-width: 60;
+	-fx-min-height: 4;
+	-fx-max-height: 4;
+	-fx-background-color: #aaaaaa;
+	-fx-background-radius: 2;
+}
+
+.help-sketch__graph {
+	-fx-background-color: #f7f7f7;
+	-fx-background-radius: 4;
+}
+
+.help-sketch__graph-icon {
+	-fx-icon-color: #d0d0d0;
+	-fx-icon-size: 64;
+}
+
+.help-sketch__event {
+	-fx-max-width: infinity;
+	-fx-alignment: center;
+	-fx-padding: 4;
+	-fx-border-color: #cccccc;
+	-fx-border-radius: 4;
+	-fx-font-size: 11px;
+	-fx-text-fill: #393939;
+}
+
+
+/**
+ * Callout explaining the current step
+ */
+
+.help-callout__card {
+	-fx-background-color: #ffffff;
+	-fx-background-radius: 6;
+	-fx-border-color: #00a6fb;
+	-fx-border-width: 2;
+	-fx-border-radius: 6;
+	-fx-padding: 16;
+	-fx-spacing: 10;
+	-fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 16, 0, 0, 4);
+}
+
+.help-callout__pointer--left,
+.help-callout__pointer--right {
+	-fx-min-width: 10;
+	-fx-pref-width: 10;
+	-fx-max-width: 10;
+	-fx-min-height: 20;
+	-fx-pref-height: 20;
+	-fx-max-height: 20;
+	-fx-background-color: #00a6fb;
+}
+
+.help-callout__pointer--left {
+	-fx-shape: "M 10 0 L 10 20 L 0 10 Z";
+}
+
+.help-callout__pointer--right {
+	-fx-shape: "M 0 0 L 10 10 L 0 20 Z";
+}
+
+.help-callout__counter {
+	-fx-font-weight: bold;
+	-fx-font-size: 11px;
+	-fx-text-fill: #00a6fb;
+}
+
+.help-callout__title {
+	-fx-font-weight: bold;
+	-fx-font-size: 18px;
+	-fx-text-fill: #393939;
+}
+
+.help-callout__text {
+	-fx-font-size: 13px;
+	-fx-text-fill: #393939;
+}
+
+.help-callout__text:hint {
+	-fx-font-style: italic;
+	-fx-text-fill: #6b6b6b;
+}
+
+.help-callout__topic {
+	-fx-background-color: #eef8ff;
+	-fx-background-radius: 4;
+	-fx-padding: 10;
+	-fx-spacing: 4;
+}
+
+.help-callout__topic-title {
+	-fx-font-weight: bold;
+	-fx-font-size: 14px;
+	-fx-text-fill: #393939;
+}
+
+
+
+
+
+/*------------------------------------*\
   #ACTION CELL (For TableView mainly)
 \*------------------------------------*/
 

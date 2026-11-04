@@ -25,6 +25,8 @@ public class NavigationSidebarController extends AbstractController {
 	@FXML
 	private Button processFrameOverviewButton;
 	@FXML
+	private Button helpButton;
+	@FXML
 	private FontIcon minimizeIcon;
 
 	private boolean isMinimized;
@@ -53,6 +55,11 @@ public class NavigationSidebarController extends AbstractController {
 		handleNavigation(PageType.PROCESS_FRAME_OVERVIEW);
 	}
 
+	@FXML
+	private void openHelp() {
+		handleNavigation(PageType.HELP);
+	}
+
 	private void handleNavigation(PageType pageType) {
 		if (navigationCallback != null) {
 			navigationCallback.accept(pageType);
@@ -79,6 +86,10 @@ public class NavigationSidebarController extends AbstractController {
 		case PROCESS_FRAME_OVERVIEW:
 			processFrameOverviewButton.pseudoClassStateChanged(highlightedClass, true);
 			currentlyHighlighted = processFrameOverviewButton;
+			break;
+		case HELP:
+			helpButton.pseudoClassStateChanged(highlightedClass, true);
+			currentlyHighlighted = helpButton;
 			break;
 		default:
 			break;

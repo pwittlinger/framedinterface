@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<StackPane fx:id="rootRegion" styleClass="standard-bg-color" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.framedinterface.controller.help.HelpController">
+   <fx:define>
+      <!-- Explains the current step; the controller moves it into the covered area next to the highlighted one(s) -->
+      <HBox fx:id="callout" alignment="CENTER" maxHeight="-Infinity" maxWidth="440.0">
+         <children>
+            <Region fx:id="calloutPointerLeft" styleClass="help-callout__pointer--left" />
+            <VBox styleClass="help-callout__card" HBox.hgrow="ALWAYS">
+               <children>
+                  <Label fx:id="stepCounterLabel" styleClass="help-callout__counter" />
+                  <Label fx:id="stepTitleLabel" minHeight="-Infinity" styleClass="help-callout__title" wrapText="true" />
+                  <Label fx:id="stepIntroLabel" minHeight="-Infinity" styleClass="help-callout__text" wrapText="true" />
+                  <VBox styleClass="help-callout__topic">
+                     <children>
+                        <Label fx:id="topicTitleLabel" minHeight="-Infinity" styleClass="help-callout__topic-title" wrapText="true" />
+                        <Label fx:id="topicTextLabel" minHeight="-Infinity" styleClass="help-callout__text" wrapText="true" />
+                     </children>
+                  </VBox>
+                  <HBox alignment="CENTER_RIGHT" spacing="4.0">
+                     <children>
+                        <Button fx:id="backButton" mnemonicParsing="false" onAction="#showPreviousStep" styleClass="standard-button" text="Back" />
+                        <Button fx:id="nextButton" mnemonicParsing="false" onAction="#showNextStep" styleClass="standard-button" text="Next" />
+                     </children>
+                  </HBox>
+               </children>
+            </VBox>
+            <Region fx:id="calloutPointerRight" styleClass="help-callout__pointer--right" />
+         </children>
+      </HBox>
+   </fx:define>
+   <children>
+      <VBox styleClass="help-page">
+         <children>
+            <Label styleClass="help-page__title" text="Help: Data-Aware Page" />
+            <Label minHeight="-Infinity" styleClass="help-page__subtitle" text="A quick tour of the Data-Aware page in three steps. Use Next and Back, or click any part of the sketch below." wrapText="true" />
+            <HBox alignment="CENTER_LEFT">
+               <children>
+                  <Button fx:id="step1Button" mnemonicParsing="false" onAction="#onClickStepButton" styleClass="help-step-button" />
+                  <Region styleClass="help-step-connector" />
+                  <Button fx:id="step2Button" mnemonicParsing="false" onAction="#onClickStepButton" styleClass="help-step-button" />
+                  <Region styleClass="help-step-connector" />
+                  <Button fx:id="step3Button" mnemonicParsing="false" onAction="#onClickStepButton" styleClass="help-step-button" />
+               </children>
+            </HBox>
+            <!-- Sketch of the Data-Aware page: only its major parts, so that it does not need to follow every change of the page -->
+            <VBox styleClass="help-sketch" VBox.vgrow="ALWAYS">
+               <children>
+                  <HBox VBox.vgrow="ALWAYS">
+                     <children>
+                        <StackPane fx:id="specificationsArea" minWidth="240.0" prefWidth="300.0" styleClass="help-area">
+                           <children>
+                              <VBox styleClass="help-area__content">
+                                 <children>
+                                    <VBox fx:id="specificationsHotspot" onMouseClicked="#onClickHotspot" styleClass="help-hotspot" VBox.vgrow="ALWAYS">
+                                       <children>
+                                          <Label styleClass="help-hotspot__title" text="Process Specifications" />
+                                          <Label styleClass="help-sketch__text" text="Model Name · Type" />
+                                          <Region styleClass="help-sketch__line" />
+                                          <Region styleClass="help-sketch__line" />
+                                       </children>
+                                    </VBox>
+                                    <VBox fx:id="constraintsHotspot" onMouseClicked="#onClickHotspot" styleClass="help-hotspot" VBox.vgrow="ALWAYS">
+                                       <children>
+                                          <Label styleClass="help-hotspot__title" text="Constraints" />
+                                          <Label styleClass="help-sketch__text" text="Constraint · Hard · Cost" />
+                                          <Region styleClass="help-sketch__line" />
+                                          <Region styleClass="help-sketch__line" />
+                                          <HBox alignment="CENTER_RIGHT">
+                                             <children>
+                                                <Label styleClass="help-sketch__button" text="Set Cost..." />
+                                             </children>
+                                          </HBox>
+                                       </children>
+                                    </VBox>
+                                    <VBox fx:id="activitiesHotspot" onMouseClicked="#onClickHotspot" styleClass="help-hotspot" VBox.vgrow="ALWAYS">
+                                       <children>
+                                          <Label styleClass="help-hotspot__title" text="Activities" />
+                                          <Label styleClass="help-sketch__text" text="Activity · Cost" />
+                                          <Region styleClass="help-sketch__line" />
+                                          <Region styleClass="help-sketch__line" />
+                                          <HBox alignment="CENTER_RIGHT">
+                                             <children>
+                                                <Label styleClass="help-sketch__button" text="Set Cost..." />
+                                             </children>
+                                          </HBox>
+                                       </children>
+                                    </VBox>
+                                    <VBox fx:id="attributesHotspot" onMouseClicked="#onClickHotspot" styleClass="help-hotspot" VBox.vgrow="ALWAYS">
+                                       <children>
+                                          <Label styleClass="help-hotspot__title" text="Attributes" />
+                                          <Region styleClass="help-sketch__line" />
+                                          <Region styleClass="help-sketch__line" />
+                                       </children>
+                                    </VBox>
+                                 </children>
+                              </VBox>
+                              <Region onMouseClicked="#onClickScrim" styleClass="help-scrim" />
+                           </children>
+                        </StackPane>
+                        <StackPane fx:id="viewersArea" styleClass="help-area" HBox.hgrow="ALWAYS">
+                           <children>
+                              <VBox styleClass="help-area__content">
+                                 <children>
+                                    <VBox fx:id="declareHotspot" onMouseClicked="#onClickHotspot" styleClass="help-hotspot" VBox.vgrow="ALWAYS">
+                                       <children>
+                                          <HBox alignment="CENTER_LEFT" spacing="6.0">
+                                             <children>
+                                                <Label styleClass="help-hotspot__title" text="Declare Model" />
+                                                <Label contentDisplay="RIGHT" styleClass="help-sketch__button" text="model">
+                                                   <graphic>
+                                                      <FontIcon iconLiteral="fa-caret-down" styleClass="help-sketch__icon" />
+                                                   </graphic>
+                                                </Label>
+                                                <Label styleClass="help-sketch__text" text="Zoom" />
+                                                <Region styleClass="help-sketch__slider" />
+                                                <Label styleClass="help-sketch__button" text="Help" />
+                                                <Label styleClass="help-sketch__text" text="Data conditions" />
+                                             </children>
+                                          </HBox>
+                                          <StackPane styleClass="help-sketch__graph" VBox.vgrow="ALWAYS">
+                                             <children>
+                                                <FontIcon iconLiteral="fa-share-alt" styleClass="help-sketch__graph-icon" />
+                                             </children>
+                                          </StackPane>
+                                       </children>
+                                    </VBox>
+                                    <VBox fx:id="petriNetHotspot" onMouseClicked="#onClickHotspot" styleClass="help-hotspot" VBox.vgrow="ALWAYS">
+                                       <children>
+                                          <HBox alignment="CENTER_LEFT" spacing="6.0">
+                                             <children>
+                                                <Label styleClass="help-hotspot__title" text="PN Model" />
+                                                <Label contentDisplay="RIGHT" styleClass="help-sketch__button" text="model">
+                                                   <graphic>
+                                                      <FontIcon iconLiteral="fa-caret-down" styleClass="help-sketch__icon" />
+                                                   </graphic>
+                                                </Label>
+                                                <Label styleClass="help-sketch__text" text="Zoom" />
+                                                <Region styleClass="help-sketch__slider" />
+                                                <Label styleClass="help-sketch__text" text="Show Past Violations" />
+                                                <Label styleClass="help-sketch__button" text="Help" />
+                                             </children>
+                                          </HBox>
+                                          <StackPane styleClass="help-sketch__graph" VBox.vgrow="ALWAYS">
+                                             <children>
+                                                <FontIcon iconLiteral="fa-sitemap" styleClass="help-sketch__graph-icon" />
+                                             </children>
+                                          </StackPane>
+                                       </children>
+                                    </VBox>
+                                 </children>
+                              </VBox>
+                              <Region onMouseClicked="#onClickScrim" styleClass="help-scrim" />
+                           </children>
+                        </StackPane>
+                        <StackPane fx:id="prefixArea" minWidth="240.0" prefWidth="300.0" styleClass="help-area">
+                           <children>
+                              <VBox styleClass="help-area__content">
+                                 <children>
+                                    <VBox fx:id="prefixHeaderHotspot" onMouseClicked="#onClickHotspot" styleClass="help-hotspot">
+                                       <children>
+                                          <Label styleClass="help-hotspot__title" text="Prefix+Continuation" />
+                                          <HBox alignment="CENTER_LEFT" spacing="4.0">
+                                             <children>
+                                                <Label styleClass="help-sketch__text" text="Models:" />
+                                                <Region HBox.hgrow="ALWAYS" />
+                                                <Label styleClass="help-sketch__button" text="Import" />
+                                                <Label styleClass="help-sketch__button" text="Export" />
+                                                <Label styleClass="help-sketch__button" text="Help" />
+                                             </children>
+                                          </HBox>
+                                       </children>
+                                    </VBox>
+                                    <VBox fx:id="prefixHotspot" onMouseClicked="#onClickHotspot" styleClass="help-hotspot" VBox.vgrow="ALWAYS">
+                                       <children>
+                                          <Label styleClass="help-hotspot__title" text="Prefix" />
+                                          <HBox alignment="CENTER_LEFT" spacing="4.0">
+                                             <children>
+                                                <Label contentDisplay="RIGHT" styleClass="help-sketch__button" text="Prefix 1">
+                                                   <graphic>
+                                                      <FontIcon iconLiteral="fa-caret-down" styleClass="help-sketch__icon" />
+                                                   </graphic>
+                                                </Label>
+                                                <Label styleClass="help-sketch__button" text="+" />
+                                                <Label styleClass="help-sketch__button" text="-" />
+                                             </children>
+                                          </HBox>
+                                          <Label styleClass="help-sketch__event" text="Activity A" />
+                                          <Label styleClass="help-sketch__event" text="Activity B" />
+                                       </children>
+                                    </VBox>
+                                    <VBox fx:id="continuationHotspot" onMouseClicked="#onClickHotspot" styleClass="help-hotspot" VBox.vgrow="ALWAYS">
+                                       <children>
+                                          <Label styleClass="help-hotspot__title" text="Continuation" />
+                                          <Label styleClass="help-sketch__event" text="Activity A · sync" />
+                                          <Label styleClass="help-sketch__event" text="Activity C · add" />
+                                       </children>
+                                    </VBox>
+                                    <HBox fx:id="plannerHotspot" alignment="CENTER_LEFT" onMouseClicked="#onClickHotspot" spacing="4.0" styleClass="help-hotspot">
+                                       <children>
+                                          <Label styleClass="help-hotspot__title" text="Plan Cost:" />
+                                          <Region HBox.hgrow="ALWAYS" />
+                                          <Label styleClass="help-sketch__button">
+                                             <graphic>
+                                                <FontIcon iconLiteral="fa-cog" styleClass="help-sketch__icon" />
+                                             </graphic>
+                                          </Label>
+                                          <Label styleClass="help-sketch__button" text="Run Planner" />
+                                          <Label styleClass="help-sketch__button" text="Reset" />
+                                       </children>
+                                    </HBox>
+                                 </children>
+                              </VBox>
+                              <Region onMouseClicked="#onClickScrim" styleClass="help-scrim" />
+                           </children>
+                        </StackPane>
+                     </children>
+                  </HBox>
+                  <StackPane fx:id="timelineArea" styleClass="help-area">
+                     <children>
+                        <HBox styleClass="help-area__content">
+                           <children>
+                              <HBox fx:id="timelineHotspot" alignment="CENTER_LEFT" onMouseClicked="#onClickHotspot" spacing="6.0" styleClass="help-hotspot" HBox.hgrow="ALWAYS">
+                                 <children>
+                                    <Label styleClass="help-hotspot__title" text="Timeline" />
+                                    <Label styleClass="help-sketch__button">
+                                       <graphic>
+                                          <FontIcon iconLiteral="fa-step-backward" styleClass="help-sketch__icon" />
+                                       </graphic>
+                                    </Label>
+                                    <Label styleClass="help-sketch__button">
+                                       <graphic>
+                                          <FontIcon iconLiteral="fa-play" styleClass="help-sketch__icon" />
+                                       </graphic>
+                                    </Label>
+                                    <Label styleClass="help-sketch__button">
+                                       <graphic>
+                                          <FontIcon iconLiteral="fa-step-forward" styleClass="help-sketch__icon" />
+                                       </graphic>
+                                    </Label>
+                                    <Label styleClass="help-sketch__text" text="2/10" />
+                                    <Region styleClass="help-sketch__slider" HBox.hgrow="ALWAYS" />
+                                 </children>
+                              </HBox>
+                           </children>
+                        </HBox>
+                        <Region onMouseClicked="#onClickScrim" styleClass="help-scrim" />
+                     </children>
+                  </StackPane>
+               </children>
+            </VBox>
+         </children>
+      </VBox>
+   </children>
+</StackPane>

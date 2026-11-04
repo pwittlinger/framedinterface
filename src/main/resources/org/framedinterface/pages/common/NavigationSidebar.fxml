@@ -44,7 +44,7 @@
          </styleClass>
       </Button>
       ?>
-      <Button fx:id="dataAwareButton" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#openDataAware" text="Data-Aware">
+      <Button fx:id="dataAwareButton" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#openDataAware" text="Optimization">
          <graphic>
             <FontIcon iconLiteral="fa-database" styleClass="primary-nav__icon" wrappingWidth="35.0" />
          </graphic>
@@ -54,6 +54,15 @@
          </styleClass>
       </Button>
       <Region VBox.vgrow="ALWAYS" />
+      <Button fx:id="helpButton" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#openHelp" text="Help">
+         <graphic>
+            <FontIcon iconLiteral="fa-question-circle" styleClass="primary-nav__icon" wrappingWidth="35.0" />
+         </graphic>
+         <styleClass>
+            <String fx:value="primary-nav__button" />
+            <String fx:value="primary-nav__button--menu" />
+         </styleClass>
+      </Button>
       <Button maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#toggleMinimize" text="Minimize">
          <graphic>
             <FontIcon fx:id="minimizeIcon" iconLiteral="fa-angle-double-left" styleClass="primary-nav__icon" textAlignment="CENTER" wrappingWidth="30.0" />
