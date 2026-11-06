@@ -239,6 +239,11 @@ public class DataAwareController extends AbstractController {
 	//Cost per activity, keyed by its lowercased name (activities are merged case-insensitively across models), kept across refreshes of the Activities pane
 	private Map<String, DoubleProperty> activityCosts = new HashMap<String, DoubleProperty>();
 
+	//Of the loaded plans (see loadPlans): the recovery strategy they were planned with, and the violation cost the planner was given for each soft
+	//Declare constraint / Petri net, keyed by the DeclareConstraint / PnModel itself (identity, see getPlannerConstraintNames)
+	private RecoveryStrategy planRecoveryStrategy;
+	private Map<Object, BigDecimal> planViolationCosts = new IdentityHashMap<Object, BigDecimal>();
+
 	//Rows of the Activities pane the user collapsed ("<activity>" or "<activity>/<group>", lowercased), so the pane keeps them collapsed when it is rebuilt
 	private Set<String> collapsedActivityRows = new HashSet<String>();
 
@@ -447,6 +452,7 @@ public class DataAwareController extends AbstractController {
 		private List<Map<String, String>> planAttributeValues; //Parallel to plan
 		private List<Integer> planPrefixSteps; //Prefix event (0-based) -> the (1-based) plan step that replayed it, or -1
 		private String planCost = "";
+		private EnhspPlanParser.ParsedPlan parsedPlan; //For the plan cost's violation/activity/waiting parts (see describePlanCost); null for none
 		private ZonedDateTime exportStartTime; //The time the plan's time offsets are relative to (the first event's timestamp as last exported for the planner)
 	}
 
@@ -1022,7 +1028,7 @@ public class DataAwareController extends AbstractController {
 				setUiBusy(false, null);
 				String planLoadError = null;
 				try {
-					loadPlans(plannedModels, planCostFactor);
+					loadPlans(plannedModels, planCostFactor, recoveryStrategy);
 				} catch (Exception e) {
 					e.printStackTrace();
 					planLoadError = e.getMessage();
@@ -1062,11 +1068,15 @@ public class DataAwareController extends AbstractController {
 	}
 
 	//Replaces every prefix's continuation with its plan from output/plans/plan<i>.txt (prefix i), decoded with the generator's encodings,
-	//and replays the selected prefix's plan. Prefixes without a (solved) plan are left without a continuation. Plan costs are the planner's metric times planCostFactor.
-	private void loadPlans(List<AbstractModel> plannedModels, BigDecimal planCostFactor) throws IOException {
+	//and replays the selected prefix's plan. Prefixes without a (solved) plan are left without a continuation. Plan costs are the planner's metric times planCostFactor,
+	//split into their violation/activity/waiting parts with the cost files handed to the generator.
+	private void loadPlans(List<AbstractModel> plannedModels, BigDecimal planCostFactor, RecoveryStrategy plannedRecoveryStrategy) throws IOException {
 		Map<String, String> resetTargets = assignPlannerConstraintNames(plannedModels);
+		planRecoveryStrategy = plannedRecoveryStrategy;
+		planViolationCosts = getSoftViolationCosts(plannedModels); //The UI was locked while planning, so these are still the costs the planner was given
 		EnhspPlanParser planParser = new EnhspPlanParser(new File(currentPath, GenerateDataAwarePDDLTask.OUTPUT_FOLDER), new File(currentPath, GenerateDataAwarePDDLTask.VARIABLE_VALUES_FILE),
-				GenerateDataAwarePDDLTask.ACTIVITY_MAPPING_FILE_PATTERN, getCategoricalAttributes(plannedModels), resetTargets, planCostFactor);
+				GenerateDataAwarePDDLTask.ACTIVITY_MAPPING_FILE_PATTERN, new File(currentPath, GenerateDataAwarePDDLTask.COST_MODEL_FILE),
+				new File(currentPath, GenerateDataAwarePDDLTask.VIOLATION_COST_FILE), getCategoricalAttributes(plannedModels), resetTargets, planCostFactor, plannedRecoveryStrategy);
 
 		for (int i = 0; i < prefixes.size(); i++) {
 			PrefixEntry entry = prefixes.get(i);
@@ -1079,6 +1089,7 @@ public class DataAwareController extends AbstractController {
 				entry.planAttributeValues = parsedPlan.getAttributeValues();
 				entry.planPrefixSteps = parsedPlan.getPrefixEventSteps();
 				entry.planCost = parsedPlan.getCost();
+				entry.parsedPlan = parsedPlan;
 				entry.planPresent = true;
 			} else {
 				clearPlan(entry);
@@ -1112,6 +1123,7 @@ public class DataAwareController extends AbstractController {
 		entry.planAttributeValues = null;
 		entry.planPrefixSteps = null;
 		entry.planCost = "";
+		entry.parsedPlan = null;
 		entry.planPresent = false;
 	}
 
@@ -1871,6 +1883,65 @@ public class DataAwareController extends AbstractController {
 		return lines;
 	}
 
+	//The violation cost of each soft Declare constraint and Petri net of the given models (as buildViolationCostLines hands them to the planner),
+	//keyed by the DeclareConstraint / PnModel itself; hard ones are left out, as they have no cost
+	private Map<Object, BigDecimal> getSoftViolationCosts(List<AbstractModel> models) {
+		List<Object> constraintsAndPetriNets = new ArrayList<Object>();
+		for (AbstractModel model : models) {
+			if (model instanceof DeclareModel) {
+				constraintsAndPetriNets.addAll(((DeclareModel) model).getDeclareConstraints());
+			} else if (model instanceof PnModel) {
+				constraintsAndPetriNets.add(model);
+			}
+		}
+		Map<Object, BigDecimal> costs = new IdentityHashMap<Object, BigDecimal>();
+		for (Object constraintOrPetriNet : constraintsAndPetriNets) {
+			if (!getHardProperty(constraintOrPetriNet).get()) {
+				costs.put(constraintOrPetriNet, BigDecimal.valueOf(getViolationCost(constraintOrPetriNet).get()));
+			}
+		}
+		return costs;
+	}
+
+	//The given prefix's plan cost split into its violation, activity and waiting cost (shown as the plan cost's tooltip); null for a plan that
+	//wasn't loaded from the data-aware planner. Must be called right after the models were replayed against the plan (see updateTrace), as the
+	//violation cost of a Discard plan is taken from that replay
+	private String describePlanCost(PrefixEntry entry) {
+		EnhspPlanParser.ParsedPlan plan = entry.parsedPlan;
+		if (plan == null) {
+			return null;
+		}
+		BigDecimal violationCost = plan.getViolationCost();
+		if (violationCost == null && planRecoveryStrategy == RecoveryStrategy.DISCARD) {
+			violationCost = getReplayedViolationCost();
+		}
+		if (violationCost != null && !plan.costPartsAddUp(violationCost)) {
+			System.out.println("DataAwareController: the cost parts of prefix " + (prefixes.indexOf(entry) + 1) + "'s plan (violation " + EnhspPlanParser.formatCost(violationCost)
+					+ ", activity " + EnhspPlanParser.formatCost(plan.getActivityCost()) + ", waiting " + EnhspPlanParser.formatCost(plan.getWaitingCost())
+					+ ") don't add up to its plan cost " + entry.planCost);
+		}
+		return "Violation cost: " + (violationCost == null ? "not available for " + planRecoveryStrategy : EnhspPlanParser.formatCost(violationCost))
+				+ System.lineSeparator() + "Activity cost: " + EnhspPlanParser.formatCost(plan.getActivityCost())
+				+ System.lineSeparator() + "Waiting cost: " + EnhspPlanParser.formatCost(plan.getWaitingCost());
+	}
+
+	//Sum of the planner-given violation costs (planViolationCosts) of what the last replay of the models left violated at the end of the trace:
+	//Declare constraints whose final monitoring state is VIOL, and Petri nets in which some activity occurred while its transition wasn't enabled.
+	//Under Discard each constraint / net is charged once, however often it is violated
+	private BigDecimal getReplayedViolationCost() {
+		BigDecimal violationCost = BigDecimal.ZERO;
+		for (AbstractModel model : ModelRegistry.getInstance().getModels()) {
+			if (model instanceof DeclareModel) {
+				for (DeclareConstraint constraint : ((DeclareModel) model).getViolatedConstraintsAtTraceEnd()) {
+					violationCost = violationCost.add(planViolationCosts.getOrDefault(constraint, BigDecimal.ZERO)); //0 if not planned with (or hard)
+				}
+			} else if (model instanceof PnModel && ((PnModel) model).isViolated()) {
+				violationCost = violationCost.add(planViolationCosts.getOrDefault(model, BigDecimal.ZERO));
+			}
+		}
+		return violationCost;
+	}
+
 	private String getViolationCostString(Object constraintOrPetriNet) {
 		return getHardProperty(constraintOrPetriNet).get() ? HARD_CONSTRAINT_COST : COST_CONVERTER.toString(getViolationCost(constraintOrPetriNet).get());
 	}
@@ -2060,6 +2131,8 @@ public class DataAwareController extends AbstractController {
 		refreshListStatistics();
 		selectTimelineIndex(0);
 		labelCost.setText(PlannerSession.getInstance().isPlanPresent() && selectedEntry != null ? selectedEntry.planCost : "");
+		String planCostBreakdown = PlannerSession.getInstance().isPlanPresent() && selectedEntry != null ? describePlanCost(selectedEntry) : null; //After the replay above
+		labelCost.setTooltip(planCostBreakdown == null ? null : new Tooltip(planCostBreakdown));
 		updateExportButton();
 		updateTimelineControls(activeTrace);
 

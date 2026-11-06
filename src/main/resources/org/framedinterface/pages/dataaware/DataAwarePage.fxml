@@ -7,7 +7,6 @@
 <?import javafx.scene.control.ChoiceBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
-<?import javafx.scene.control.Separator?>
 <?import javafx.scene.control.Slider?>
 <?import javafx.scene.control.SplitPane?>
 <?import javafx.scene.control.TableColumn?>
@@ -31,9 +30,10 @@
    <children>
       <VBox fx:id="mainContents" styleClass="ui-root">
         <children>
-            <HBox VBox.vgrow="ALWAYS">
-               <children>
-                  <VBox styleClass="section-box section-box--main-parameters">
+            <!-- The process specifications box starts at its min width (divider at 0.0 is clamped to it) and keeps its width when the window is resized -->
+            <SplitPane dividerPositions="0.0" VBox.vgrow="ALWAYS">
+               <items>
+                  <VBox SplitPane.resizableWithParent="false" styleClass="section-box section-box--main-parameters-resizable">
                      <children>
                         <HBox alignment="CENTER_RIGHT" spacing="4.0">
                            <children>
@@ -130,8 +130,7 @@
                         <Insets left="5.0" />
                      </padding>
                   </VBox>
-                  <Separator orientation="VERTICAL" prefHeight="200.0" styleClass="separator--primary" />
-                  <SplitPane fx:id="resultsSplitPane" dividerPositions="0.78" HBox.hgrow="ALWAYS">
+                  <SplitPane fx:id="resultsSplitPane" dividerPositions="0.78">
                      <items>
                         <SplitPane dividerPositions="0.5" orientation="VERTICAL">
                            <items>
@@ -306,8 +305,8 @@
                         </VBox>
                      </items>
                   </SplitPane>
-               </children>
-            </HBox>
+               </items>
+            </SplitPane>
             <HBox fx:id="timelineControls" alignment="CENTER_LEFT" spacing="5.0" styleClass="parameters-pane">
                <children>
                   <Button fx:id="stepBackwardButton" maxHeight="25.0" minHeight="25.0" mnemonicParsing="false" onAction="#stepBackward" styleClass="small-button">

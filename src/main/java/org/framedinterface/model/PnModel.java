@@ -57,6 +57,11 @@ public class PnModel extends AbstractModel  {
 		return RESET_PETRINET_ACTIVITY + "#" + getModelId();
 	}
 
+	//Whether, in the traces replayed since the last resetModel, some activity of the net occurred while its transition wasn't enabled (resets of the net included)
+	public boolean isViolated() {
+		return !violatedFiringsKeep.isEmpty();
+	}
+
 	@Override
 	public void updateMonitoringStates(List<String> activities, boolean displayViolations) {
 		// TODO Auto-generated method stub
@@ -104,6 +109,8 @@ public class PnModel extends AbstractModel  {
 			Collection<Transition> currentlyEnabledTransitions = this.petrinetSemantics.getExecutableTransitions();
 			
 			if (!currentlyEnabledTransitions.toString().toLowerCase().contains(act)){
+				/* TODO: Check that the transitions name have to match exactly, so that "ActivityA" will not be considered enabled if "ActivityAB" is enabled.
+				*/
 				// Transition is not enabled, set the Marking
 				// Update the colour of the previously enabled transition
 				// Note the colour of the new transition + place

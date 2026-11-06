@@ -845,6 +845,12 @@
 	-fx-max-width: 325px;
 }
 
+/* Variant for a main parameters section placed in a horizontal SplitPane: no max width, so it can be widened via the divider */
+.section-box--main-parameters-resizable {
+	-fx-min-width: 325px;
+	-fx-pref-width: 325px;
+}
+
 
 /**
  * A single non-grouped parameter

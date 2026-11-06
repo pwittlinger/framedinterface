@@ -67,6 +67,20 @@ public class DeclareModel extends AbstractModel  {
 		return false;
 	}
 
+	//The constraints that end the last replayed trace violated (its final monitoring states, in which possibly violated already counts as violated);
+	//none if no trace was replayed
+	public List<DeclareConstraint> getViolatedConstraintsAtTraceEnd() {
+		List<DeclareConstraint> violatedConstraints = new ArrayList<DeclareConstraint>();
+		if (monitoringStates != null && !monitoringStates.isEmpty()) {
+			monitoringStates.get(monitoringStates.size() - 1).forEach((constraint, monitoringState) -> {
+				if (monitoringState == MonitoringState.VIOL) {
+					violatedConstraints.add(constraint);
+				}
+			});
+		}
+		return violatedConstraints;
+	}
+
 	public Map<MonitoringState, Integer> getMonitoringStateCounts(int activityIndex) {
 		Map<MonitoringState, Integer> monitoringStateCounts = new HashMap<MonitoringState, Integer>();
 		monitoringStateCounts.put(MonitoringState.SAT, 0);
