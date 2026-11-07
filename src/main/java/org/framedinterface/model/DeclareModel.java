@@ -13,6 +13,15 @@ import org.framedinterface.utils.GraphGenerator;
 import org.framedinterface.utils.enums.MonitoringState;
 
 
+/**
+ * A Declare model loaded from a {@code .decl} file: its activities, its constraints, the attributes bound to its activities and their
+ * declared domains. Replaying a trace on the model (see {@link #updateMonitoringStates(List, boolean)} and
+ * {@link #updateMonitoringStatesWithData(List, List, boolean)}) records each constraint's monitoring state at each position of the trace,
+ * which the visualization and the event lists then show.
+ * <p>
+ * Activity and attribute names are lowercased; {@link #getActivityNameAsDefined(String)} gives an activity's spelling in the model file.
+ * Models are created by {@link org.framedinterface.utils.ModelUtils#loadDeclareModel(java.nio.file.Path, String, String)}.
+ */
 public class DeclareModel extends AbstractModel  {
 	
 	private LinkedHashSet<DeclareConstraint> declareConstraints;
@@ -22,9 +31,25 @@ public class DeclareModel extends AbstractModel  {
 	private List<Map<DeclareConstraint, MonitoringState>> monitoringStates; //First index is the initial state and last index is the final state
 	private Map<String, DeclareConstraint> plannerConstraintNames = new HashMap<String, DeclareConstraint>(); //Lowercased PDDL constraint object name (Data-Aware planner) -> constraint; see setPlannerConstraintNames
 
-	//Plan step action (Data-Aware plans, "reset constraint;<PDDL constraint name>") that resets a violated constraint instead of executing an activity
+	/**
+	 * The action of a Data-Aware plan step that resets a violated constraint instead of executing an activity. Such a step is
+	 * {@code reset constraint;<PDDL constraint name>}.
+	 */
 	public static final String RESET_CONSTRAINT_ACTION = "reset constraint";
 
+	/**
+	 * Creates a Declare model; normally done by
+	 * {@link org.framedinterface.utils.ModelUtils#loadDeclareModel(java.nio.file.Path, String, String)}.
+	 *
+	 * @param modelId the model's id, unique among the loaded models
+	 * @param modelName the model's name (its file name)
+	 * @param activities the model's activities, lowercased
+	 * @param activityToEncodingMap each activity's encoding in the visualization, e.g. {@code n0}
+	 * @param declareConstraints the model's constraints, in file order
+	 * @param activityToUnaryMap for each activity, its unary constraints (e.g. Existence or Init), which are shown on the activity's node
+	 * @param activityToAttributesMap for each activity, the names of the attributes bound to it, lowercased
+	 * @param attributeDomains for each attribute (lowercased), its declared value range or set
+	 */
 	public DeclareModel(String modelId, String modelName, LinkedHashSet<String> activities, BidiMap<String, String> activityToEncodingMap, LinkedHashSet<DeclareConstraint> declareConstraints, Map<String, List<DeclareConstraint>> activityToUnaryMap, Map<String, LinkedHashSet<String>> activityToAttributesMap, Map<String, AttributeDomain> attributeDomains) {
 		super(modelId, modelName, activities, activityToEncodingMap, ModelType.DECLARE);
 		this.declareConstraints = declareConstraints;
@@ -33,30 +58,61 @@ public class DeclareModel extends AbstractModel  {
 		this.attributeDomains = attributeDomains;
 	}
 
-	//Attribute names (lowercased) bound to the given activity (lowercased), or an empty set if none are bound
+	/**
+	 * Returns the attributes bound to the given activity, by the model's "bind" lines or by its constraints' data conditions.
+	 *
+	 * @param activity the activity, lowercased
+	 * @return the attribute names, lowercased; empty if none are bound
+	 */
 	public LinkedHashSet<String> getAttributesForActivity(String activity) {
 		return activityToAttributesMap.getOrDefault(activity, new LinkedHashSet<String>());
 	}
 
+	/**
+	 * Returns the declared value range or set of each attribute.
+	 *
+	 * @return attribute name (lowercased) to its domain
+	 */
 	public Map<String, AttributeDomain> getAttributeDomains() {
 		return attributeDomains;
 	}
 
+	/**
+	 * Returns the model's constraints.
+	 *
+	 * @return the constraints, in file order
+	 */
 	public LinkedHashSet<DeclareConstraint> getDeclareConstraints() {
 		return declareConstraints;
 	}
 
-	//The names are assigned by the caller, since the PDDL generator numbers duplicate names across all Declare models it is given together
+	/**
+	 * Sets the names the Data-Aware page's PDDL generator gives this model's constraints, so that a plan's reset steps can be matched to
+	 * them. The names are assigned by the caller, since the PDDL generator numbers duplicate names across all Declare models it is given
+	 * together.
+	 *
+	 * @param plannerConstraintNames lowercased PDDL constraint name to constraint
+	 */
 	public void setPlannerConstraintNames(Map<String, DeclareConstraint> plannerConstraintNames) {
 		this.plannerConstraintNames = plannerConstraintNames;
 	}
 
+	/**
+	 * Finds the constraint the PDDL generator gave the given name (see {@link #setPlannerConstraintNames(Map)}).
+	 *
+	 * @param plannerConstraintName the name, in any casing; may be {@code null}
+	 * @return the constraint, or {@code null} if none of this model's constraints has that name
+	 */
 	public DeclareConstraint getConstraintByPlannerName(String plannerConstraintName) {
 		return plannerConstraintName == null ? null : plannerConstraintNames.get(plannerConstraintName.toLowerCase());
 	}
 
-	//Whether any constraint in this model declares a time condition (e.g. "ActivityP,0,100,h/ActivityG,2,5,h") -
-	//used by the Data-Aware page to decide whether prefix events need a "timestamp" attribute
+	/**
+	 * Tells whether any constraint of this model declares a time condition, e.g. {@code ActivityP,0,100,h/ActivityG,2,5,h}. The Data-Aware
+	 * page uses it to decide whether prefix events need a "timestamp" attribute.
+	 *
+	 * @return {@code true} if some constraint has a time condition
+	 */
 	public boolean hasTimeConditions() {
 		for (DeclareConstraint declareConstraint : declareConstraints) {
 			String timeCondition = declareConstraint.getTimeCondition();
@@ -67,8 +123,12 @@ public class DeclareModel extends AbstractModel  {
 		return false;
 	}
 
-	//The constraints that end the last replayed trace violated (its final monitoring states, in which possibly violated already counts as violated);
-	//none if no trace was replayed
+	/**
+	 * Returns the constraints that the last replayed trace ends violated: those in {@link MonitoringState#VIOL} in its final monitoring
+	 * states, in which possibly violated already counts as violated.
+	 *
+	 * @return the violated constraints; none if no trace was replayed
+	 */
 	public List<DeclareConstraint> getViolatedConstraintsAtTraceEnd() {
 		List<DeclareConstraint> violatedConstraints = new ArrayList<DeclareConstraint>();
 		if (monitoringStates != null && !monitoringStates.isEmpty()) {
@@ -81,6 +141,14 @@ public class DeclareModel extends AbstractModel  {
 		return violatedConstraints;
 	}
 
+	/**
+	 * Counts how many constraints are in each monitoring state at the given position of the last replayed trace.
+	 *
+	 * @param activityIndex the position: 0 for the initial states, then one per trace entry, and the last one for the final states
+	 * @return the number of constraints in {@link MonitoringState#SAT}, {@link MonitoringState#POSS_SAT},
+	 *         {@link MonitoringState#POSS_VIOL} and {@link MonitoringState#VIOL}; all 0 if no trace was replayed or the position is out
+	 *         of range
+	 */
 	public Map<MonitoringState, Integer> getMonitoringStateCounts(int activityIndex) {
 		Map<MonitoringState, Integer> monitoringStateCounts = new HashMap<MonitoringState, Integer>();
 		monitoringStateCounts.put(MonitoringState.SAT, 0);
@@ -98,6 +166,18 @@ public class DeclareModel extends AbstractModel  {
 		return monitoringStateCounts;
 	}
 
+	/**
+	 * Replays the given trace on the model, ignoring data conditions (as on the Data-Agnostic page), and records each constraint's
+	 * monitoring state before the first entry, after each entry and at the trace's end. At the end, possibly satisfied counts as satisfied
+	 * and possibly violated as violated.
+	 * <p>
+	 * An activity that starts with "reset" (except {@link PnModel#RESET_PETRINET_ACTIVITY}) is taken as a reset step of the Data-Agnostic
+	 * planner: the constraints whose template name and activities its name contains are reset to their initial state, and the step is then
+	 * executed like any other activity. An activity named exactly "reset" makes this throw a {@link StringIndexOutOfBoundsException}.
+	 *
+	 * @param activities the trace: activities, or plan steps {@code action;activity}
+	 * @param displayViolations unused by Declare models
+	 */
 	@Override
 	public void updateMonitoringStates(List<String> activities, boolean displayViolations) {
 		//Resetting the automata and adding initial monitoring states (constraint states before any events occur)
@@ -181,10 +261,21 @@ public class DeclareModel extends AbstractModel  {
 		monitoringStates.add(finalStates);
 	}
 
-	//Data-Aware page only: like updateMonitoringStates, but each constraint's activation/target data condition is checked against the
-	//attribute values attached to the occurring event before counting it as an activation/target occurrence. The Data-Agnostic page
-	//intentionally ignores data conditions and keeps using updateMonitoringStates.
-	//attributeValuesPerEvent is parallel to activities (attributeValuesPerEvent.get(i) holds the attribute values for activities.get(i)).
+	/**
+	 * Data-Aware page only: replays the given trace like {@link #updateMonitoringStates(List, boolean)}, but each constraint's activation
+	 * and target data conditions are checked against the attribute values attached to the occurring event before it counts as an
+	 * activation or target occurrence. The Data-Agnostic page intentionally ignores data conditions and keeps using
+	 * {@link #updateMonitoringStates(List, boolean)}.
+	 * <p>
+	 * A Data-Aware plan's reset step ({@code reset constraint;<PDDL constraint name>}, see {@link #RESET_CONSTRAINT_ACTION}) only returns
+	 * the named constraint to its initial state, and executes no activity, which would otherwise advance e.g. chain constraints; it still
+	 * gets a position of its own. Activities that start with "reset" are otherwise handled as in {@link #updateMonitoringStates(List, boolean)}.
+	 *
+	 * @param activities the trace: activities, or plan steps {@code action;activity}
+	 * @param attributeValuesPerEvent the attribute values of each entry, parallel to {@code activities}
+	 *        ({@code attributeValuesPerEvent.get(i)} holds those of {@code activities.get(i)}); missing entries count as no values
+	 * @param displayViolations unused by Declare models
+	 */
 	public void updateMonitoringStatesWithData(List<String> activities, List<Map<String, String>> attributeValuesPerEvent, boolean displayViolations) {
 		Map<DeclareConstraint, MonitoringState> initialStates = new HashMap<DeclareConstraint, MonitoringState>();
 		declareConstraints.forEach(declareConstraint -> initialStates.put(declareConstraint, declareConstraint.resetAutomaton()));
@@ -257,12 +348,30 @@ public class DeclareModel extends AbstractModel  {
 		monitoringStates.add(finalStates);
 	}
 
+	/**
+	 * Returns the model's visualization at the given position of the last replayed trace, without data conditions (see
+	 * {@link #getVisualisationString(int, boolean, boolean)}).
+	 *
+	 * @param activityIndex the position, see {@link #getMonitoringStateCounts(int)}
+	 * @param displayViolations unused by Declare models
+	 * @return the visualization, in Graphviz DOT
+	 */
 	@Override
 	public String getVisualisationString(int activityIndex, boolean displayViolations) {
 		return getVisualisationString(activityIndex, displayViolations, false);
 	}
 
-	//Data conditions (e.g. "[A.grade > 4]") are only meaningful for Declare models, so this overload lives here rather than on AbstractModel
+	/**
+	 * Returns the model's visualization at the given position of the last replayed trace: a node per activity (showing its unary
+	 * constraints) and an edge per binary constraint, each showing the constraints' monitoring states at that position. Data conditions
+	 * (e.g. {@code [A.grade > 4]}) are only meaningful for Declare models, so this overload lives here rather than on
+	 * {@link AbstractModel}.
+	 *
+	 * @param activityIndex the position, see {@link #getMonitoringStateCounts(int)}; a trace must have been replayed
+	 * @param displayViolations unused by Declare models
+	 * @param showDataConditions whether to show the constraints' data conditions
+	 * @return the visualization, in Graphviz DOT, with {@code '} escaped for the visualization page's JavaScript
+	 */
 	public String getVisualisationString(int activityIndex, boolean displayViolations, boolean showDataConditions) {
 		StringBuilder sb = new StringBuilder("digraph \"\" {");
 		sb.append("id = \"graphRoot_" + getModelId() + "\"");
@@ -287,6 +396,10 @@ public class DeclareModel extends AbstractModel  {
 		return sb.toString().replace("'", "\\'"); //A crude fix to allow ' characters in activity names
 	}
 
+	/**
+	 * Returns the automata of all constraints to their initial state. The monitoring states recorded by the last replay are kept until the
+	 * next one.
+	 */
 	@Override
 	public void resetModel(){
 

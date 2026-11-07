@@ -1,0 +1,1050 @@
+FrAIm - Known Bugs
+==================
+
+Bugs found while working on the code, kept here so they can be fixed later.
+
+How to use this file
+- Add new bugs at the end, with the next free number (one more than the last entry's). Never reuse a number.
+- When a bug is fixed, set its Status to "Fixed (<date>, <commit>)" and leave the entry in place.
+- Locations name the class and method. Line numbers are only a hint, as they change when the code is edited.
+
+Entry fields
+- Status:   Open / Fixed / Won't fix
+- Severity: High (wrong results, crash, data loss) / Medium (feature doesn't work as intended) /
+            Low (usability or cosmetic issue, with a workaround)
+- Found:    date, and what was being worked on at the time
+
+
+---------------------------------------------------------------------------------------------------
+BUG-001  Help buttons do nothing on the first click
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (usability: clicking a second time works)
+Found:    2026-11-07, while adding Javadoc to DataAwareController
+
+Where (all 9 "Help" buttons have the same bug):
+- DataAwareController:            onClickToolTip(), onClickToolTipPN(), onClickToolTipPlan()
+- DataAgnosticController:         onClickToolTip(), onClickToolTipPN(), onClickToolTipRunPlan(), onClickToolTipPlan()
+                                  (the Data-Agnostic page is currently disabled, see the note on BUG-009)
+- ProcessFrameOverviewController: onClickToolTip(), onClickToolTipPN()
+
+Steps to reproduce:
+1. Start FrAIm and open the Data-Aware page (or Data-Agnostic, or Process Frame Overview).
+2. Click any "Help" button once.
+
+Expected: The help popup opens below the button.
+Actual:   Nothing happens. The popup only opens on the second click.
+
+Cause:
+The FXML wires each button to its onClickToolTip...() method (onAction="#onClickToolTip..."). That
+method only builds the popup and then replaces the button's action with button.setOnAction(...),
+which toggles the popup. It never shows the popup itself, so the first click is spent setting the
+button up. Each later click works, but the first click on every page does nothing.
+
+Suggested fix:
+Build each popup once, either in initialize() or the first time it's needed, and show/hide it
+directly in the FXML handler instead of calling setOnAction(). The nine methods are near-identical,
+so a shared helper (e.g. in AbstractController) taking the button and the popup content would remove
+the duplication.
+
+To check while fixing (not verified):
+The popups use setAutoHide(true). Clicking the Help button while its popup is open may hide the popup
+on mouse press and immediately reopen it on the button's action. If so, a second click doesn't close
+the popup. The attribute popup of the Prefix list's events works the same way (EventCell.onClickExtend(),
+noted 2026-11-07), so check it as well.
+I checked whether the popup closes on the second mouse press, and the behaviour is as expected, i.e. the popup closes and stays close.
+Therefore, this is not a bug, and there is no need to change it.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-002  "mvn javadoc:javadoc" fails because of malformed Javadoc comments
+---------------------------------------------------------------------------------------------------
+Status:   Fixed (2026-11-07, not committed yet) - "mvn javadoc:javadoc" now ends in BUILD SUCCESS
+Severity: Low (build/documentation: the HTML docs are still written to target/reports/apidocs)
+Found:    2026-11-07, after adding the maven-javadoc-plugin to pom.xml
+
+Where (lines as of 2026-11-07):
+- EnhspPlanParser.java:           class comment (lines 29-33), constructor @param tags (lines 114-116),
+                                  parse() @param prefixEvents (line 182) - 17 errors
+- RunEnhspTask.java:              class comment (line 24) - 3 errors
+- GenerateDataAwarePDDLTask.java: class comment (line 15) - 1 error
+
+Steps to reproduce:
+1. Run "mvn javadoc:javadoc" in the project root.
+
+Expected: BUILD SUCCESS.
+Actual:   BUILD FAILURE with 21 errors, e.g. "element not closed: i" and "unknown tag: cost".
+
+Cause:
+The comments use placeholders such as problem<i>.pddl, <cost> and "<model file>|<constraint name>".
+Javadoc reads them as HTML tags (<i> is italics), and the plugin's doclint setting
+(<doclint>all,-missing</doclint>) treats malformed HTML as an error.
+
+Fix:
+The placeholders are wrapped in {@code ...}, e.g. {@code problem<i>.pddl}. The two tables in the class comment of
+EnhspPlanParser are in <pre> blocks, so they keep their layout in the HTML docs. Only comments were changed.
+For new Javadoc: write placeholders in {@code ...} or as &lt;i&gt;. A bare "->" is fine (JDK 21 doesn't flag it).
+
+
+---------------------------------------------------------------------------------------------------
+BUG-003  Data-Aware: failing to import prefixes gives no feedback
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (usability)
+Found:    2026-11-07, while adding Javadoc to DataAwareController
+
+Where: DataAwareController.onClickImportPrefix() (around line 802)
+
+Steps to reproduce:
+1. On the Data-Aware page, click "Import" in the Prefix pane.
+2. Pick a file that isn't a valid XES log, or an XES log without any traces.
+
+Expected: A message explaining why nothing was imported.
+Actual:   Nothing happens on screen. A parse error is only printed to the console
+          ("Could not parse XES log: ..."). A log without traces is ignored without any message.
+
+Suggested fix:
+Show the error with AlertUtils.showError(...), as the other failure paths of this controller do
+(e.g. exporting prefixes or continuations), and a warning when the log contains no traces.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-004  Data-Aware: model labels after "Run Planner" have a trailing "+" and are never cleared
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (cosmetic)
+Found:    2026-11-07, while adding Javadoc to DataAwareController
+
+Where: DataAwareController.onClickPlanner(), the end of the method (selectedDecl / selectedPN labels,
+       around lines 1104-1213)
+
+Steps to reproduce:
+1. On the Data-Aware page, select one Declare model (e.g. "declA") and no Petri net.
+2. Click "Run Planner".
+
+Expected: The label names the planned model(s), e.g. "declA", or "declA + declB" for two models.
+Actual:
+- The label reads "declA+": every model name is followed by a "+", including the last one.
+- The Petri net label is made visible even when no Petri net is selected (its text is empty).
+- The labels are set as soon as Run Planner is clicked, even if planning then fails or is cancelled.
+- The labels stay as they are after Reset, after switching prefixes, and after changing which models
+  are selected. They're only hidden when the page is first opened (initialize()).
+
+Cause:
+The names are built with name + "+" in a loop. The labels are made visible unconditionally, inside
+try/catch blocks that ignore exceptions ("// TODO: handle exception").
+
+Suggested fix:
+Build the text with String.join(" + ", names), only show a label when it has models to name, and
+update or hide the labels together with the plan (e.g. in loadPlans() and in onClickPrefix()). The
+empty try/catch blocks can be removed.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-005  Data-Aware: when the PDDL generator fails, the user isn't told why
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (usability)
+Found:    2026-11-07, while adding Javadoc to GenerateDataAwarePDDLTask
+
+Where:
+- GenerateDataAwarePDDLTask.call() (around line 173)
+- DataAwareController.onClickPlanner() (around line 1161), which shows the message
+
+Steps to reproduce:
+1. On the Data-Aware page, run the planner with input the generator rejects, e.g. a model it can't
+   parse.
+
+Expected: The error message says what went wrong, e.g. the generator's own error output.
+Actual:   The message only says "Generating PDDL failed: Command line exit code: 1". The generator's
+          output only goes to FrAIm's console (RunnerUtils.runProcess(..., null) inherits it). If
+          FrAIm was started without a console (e.g. by double-clicking the jar), it's lost entirely.
+
+Suggested fix:
+Write the generator's output to a log file (e.g. output/pddl_gen.log, by passing it as runProcess's
+outputFile), and include its last lines, or at least the log's path, in the exception message.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-006  The generator and ENHSP are run with the "java" on the PATH, not the Java FrAIm runs on
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Medium (the planner can't run on affected machines; workaround: put Java 17+ first on PATH)
+Found:    2026-11-07, while adding Javadoc to GenerateDataAwarePDDLTask
+
+Where:
+- GenerateDataAwarePDDLTask.call() (around line 140)
+- RunEnhspTask.call() (around line 115)
+
+Steps to reproduce:
+1. Start FrAIm with a Java that isn't on the PATH (e.g. from an IDE, or with the full path to a JDK),
+   on a machine where the PATH has no Java, or only an old one (e.g. Java 8).
+2. Run the planner on the Data-Aware page.
+
+Expected: The generator and ENHSP run with the same Java as FrAIm.
+Actual:   With no Java on the PATH: "Generating PDDL failed: Cannot run program "java" ...".
+          With an old Java on the PATH, the generator or ENHSP may fail to start (not verified: it
+          depends on the Java version their jars need), which only shows up as an exit code (BUG-005).
+
+Cause:
+Both commands start with the plain name "java", which the operating system looks up on the PATH.
+
+Suggested fix:
+Use the running Java: Path.of(System.getProperty("java.home"), "bin", "java").toString().
+
+
+---------------------------------------------------------------------------------------------------
+BUG-007  Data-Aware: the planner fails for model files whose path contains a comma
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (rare; workaround: move or rename the model files)
+Found:    2026-11-07, while adding Javadoc to GenerateDataAwarePDDLTask
+
+Where: GenerateDataAwarePDDLTask.call() (around lines 144 and 147)
+
+Steps to reproduce:
+1. Load a Declare model from a folder whose name contains a comma, e.g. "C:\Models\v1, v2\model.decl".
+2. Select it on the Data-Aware page and run the planner.
+
+Expected: The planner runs with that model.
+Actual:   The generator gets the paths as one comma-separated list (-d / -p), so it splits this path
+          into "C:\Models\v1" and " v2\model.decl" and fails to find the model (not verified by
+          running it).
+
+Suggested fix:
+Reject (or warn about) model paths that contain a comma before running the generator, or copy such
+models to a comma-free location (e.g. under output/) and pass that path instead.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-008  Data-Aware: files from a previous run that can't be deleted are silently reused
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Medium (wrong results without notice), but unlikely
+Found:    2026-11-07, while adding Javadoc to GenerateDataAwarePDDLTask
+
+Where:
+- GenerateDataAwarePDDLTask.call() (around lines 128-133) and deleteFiles() (around line 187)
+- EnhspPlanParser constructor (around line 169), which reads every activity mapping file it finds
+- RunEnhspTask.call() (around line 138), which deletes the old plans the same way (added 2026-11-07,
+  while adding Javadoc to RunEnhspTask)
+
+Steps to reproduce:
+1. Run the planner on the Data-Aware page once.
+2. Make output/variable_values.txt (or an output/activityMapping_*.txt file) impossible to delete,
+   e.g. set it to read-only, or open it in a program that locks it.
+3. Change the selected models or the prefixes, and run the planner again.
+
+Expected: The run fails with a message that a file from the previous run couldn't be deleted.
+Actual:   The failed deletion is ignored (the result of File.delete() isn't checked). The generator
+          only creates the variable files if they don't exist yet, so it keeps the old encodings,
+          and the plans' attribute values are decoded with those. A leftover activity mapping file of
+          a model that's no longer selected is still read by EnhspPlanParser, and may map an
+          encoding to the wrong activity. Likewise, if output/plans/plan<i>.txt can't be deleted and
+          problem i isn't generated this time, DataAwareController.loadPlans() loads that old plan for
+          prefix i, while the message says that no plan was found for it. (Not verified by running it.)
+
+Suggested fix:
+Delete with Files.deleteIfExists(...), which throws if the file can't be deleted, and let the task
+fail with that message.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-009  Data-Agnostic: Cancel doesn't stop PDDL generation, and later reports it as failed
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Medium (Cancel doesn't work as intended)
+Note:     The Data-Agnostic page is currently disabled: PageType.DATA_AGNOSTIC is commented out
+          (util/PageType.java), so the page can't be opened. This only matters if it is enabled again.
+          (Noticed 2026-11-07, while adding Javadoc to ProcessFrameOverviewController.)
+Found:    2026-11-07, while adding Javadoc to GeneratePDDLTask
+
+Where:
+- GeneratePDDLTask.call() (around lines 81 and 109)
+- DataAgnosticController.onClickPlanner(), the progress layer's cancel handler (around line 396), and
+  the task's onFailed handler (around line 477)
+
+Steps to reproduce:
+1. On the Data-Agnostic page, click "Run Planner".
+2. Click "Cancel" on the progress layer while the PDDL problem is still being generated.
+
+Expected: The Framed Autonomy Tool is stopped, and nothing more happens.
+Actual (from reading the code, not verified by running it):
+- The tool keeps running until it's done.
+- Once it's done, the error "Generating PDDL failed" appears, although the user cancelled.
+- That task's failure handler then also resets the plan state (setPlanPresent(false),
+  updatePrefix(null)). If the user has already started another planner run, it runs in the middle of it.
+
+Cause:
+Cancel only calls executorService.shutdownNow(), which interrupts the task's thread; the task itself
+isn't cancelled (see the TODO there). GeneratePDDLTask is then blocked in reader.read() on the tool's
+output, which an interrupt doesn't wake up, and it never checks isCancelled(). When it gets to
+process.waitFor(), the thread is still marked as interrupted, so waitFor() throws
+InterruptedException and the task fails instead of being cancelled. The tool's process is never
+destroyed, unlike in RunnerUtils.runProcess(), which destroys it when interrupted.
+
+Suggested fix:
+In the cancel handler, call cancel(true) on the running task, as the Data-Aware page does, instead of
+shutting down the executor. In GeneratePDDLTask.call(), destroy the process if the task ends while
+it's still running (e.g. in a finally block: if (process.isAlive()) process.destroyForcibly()).
+Destroying the process also makes the blocked read() return.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-010  Data-Aware: the planner refuses to run unless the PDDL domains were copied into dependencies/
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Medium (on a fresh setup the planner can't run; workaround: copy the domains by hand)
+Found:    2026-11-07, while adding Javadoc to RunEnhspTask
+
+Where:
+- DataAwareController.onClickPlanner() (around lines 1122-1126), the check before planning
+- RunEnhspTask.findDomain() (around line 200), which has a fallback the check never lets it reach
+
+Steps to reproduce:
+1. Set up FrAIm as described under "Building with Maven" in README.md (which says "nothing has to be
+   installed by hand"), so dependencies/ only holds enhsp.jar and the generator's jar.
+2. On the Data-Aware page, select a Declare model and click "Run Planner".
+
+Expected: The planner runs with the domain that comes with the generator.
+Actual:   "The PDDL domain for the recovery strategy "Reset" was not found: ...\dependencies\
+          domain_framed_autonomy_process_reset_time_costs.pddl", and nothing is planned. (Not verified
+          by running it: the machine this was found on has the domains in dependencies/, copied by hand.)
+
+Cause:
+dependencies/ isn't in git, and "mvn package" only copies enhsp.jar and the generator's jar into it.
+RunEnhspTask.findDomain() would extract the strategy's domain from the pddl_gen jar FrAIm depends on;
+the jar does contain all of them (domains/*.pddl). But onClickPlanner() checks for the domain in
+dependencies/ first and stops if it isn't there.
+
+Suggested fix:
+Let the check accept the domain from the jar as well, e.g. a RunEnhspTask method that tells whether
+findDomain() would find one, or drop the check and let RunEnhspTask report a missing domain. Also
+README.md: the list of domain files under "Multi-Perspective" is empty.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-011  Data-Aware: the Discard and Skip domains in dependencies/ differ from the generator's
+---------------------------------------------------------------------------------------------------
+Status:   Open - needs a decision on which version is correct
+Severity: Medium (plans and plan costs may differ between machines for Discard and Skip)
+Found:    2026-11-07, while adding Javadoc to RunEnhspTask
+
+Where:
+- dependencies/domain_framed_autonomy_process_discard_time_costs.pddl (line 685) and
+  dependencies/domain_framed_autonomy_process_skip_time_costs.pddl (line 654), copied there by hand
+- domains/ inside the pddl_gen jar (data-framed-autonomy), the same two files
+- RunEnhspTask.findDomain(), which prefers the copy in dependencies/
+
+What differs (the other three domains are identical):
+  dependencies/:  (increase (total_cost) (/(violation_cost ?c) (waiting_cost)))
+  pddl_gen jar:   (increase (total_cost) (violation_cost ?c))
+
+So with the dependencies/ copies, a violation costs violation_cost / waiting_cost; with the jar's,
+it costs violation_cost. Which one is used depends on whether a machine has the copies in
+dependencies/. If BUG-010 is fixed, machines without them get the jar's version.
+
+Steps to reproduce:
+1. Compare the two files in dependencies/ with domains/ in
+   ~/.m2/repository/org/example/pddl_gen/1.0-SNAPSHOT/pddl_gen-1.0-SNAPSHOT.jar.
+
+Expected: One version of each domain.
+Actual:   Two versions, so the plans found may differ for the same input. The plan cost's breakdown
+          (DataAwareController.describePlanCost(), EnhspPlanParser) may only add up with one of them;
+          not checked which.
+
+Suggested fix:
+Decide which version is correct, put it into data-framed-autonomy (so the jar and the generator
+agree), and remove the hand-copied domains from dependencies/, or have "mvn package" copy them there
+from the jar so they can't drift apart.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-012  Process Frame Overview: models that can't be loaded are skipped without a message
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (usability)
+Found:    2026-11-07, while adding Javadoc to ProcessFrameOverviewController
+
+Where: ProcessFrameOverviewController.onButtonClickedUploadModel() (around lines 243-262)
+
+Steps to reproduce:
+1. On the Process Frame Overview page, click "Select...".
+2. Pick a .decl or .pnml file that isn't a valid model (e.g. a broken PNML file), together with a valid
+   one.
+
+Expected: The valid model is added, and a message says which file couldn't be loaded and why.
+Actual:   The broken file is skipped without any message; "Unable to load model: ..." only goes to the
+          console, the same as BUG-003.
+          Only DPNIOException, IOException and IndexOutOfBoundsException are caught. If parsing fails
+          with another exception, it isn't caught, and the whole upload stops: none of the picked files
+          are added, not even the valid ones, since they're only added after the loop. A concrete case
+          (found 2026-11-07, while adding Javadoc to AttributeDomain): a Declare model with an attribute
+          range that isn't a number, e.g. "x: integer between 0 and abc", makes Double.parseDouble() in
+          ModelUtils.readAttributeDomains() (around line 174) throw a NumberFormatException. (Not
+          verified by running it.)
+          Another one (found 2026-11-07, while adding Javadoc to DeclareConstraint, and checked by
+          loading such a model with ModelUtils.loadDeclareModel()): a misspelled template name, e.g.
+          "Respons[ActivityA, ActivityB]", throws a NullPointerException in
+          ModelUtils.readConstraintString() (around line 237), since DeclareTemplate.getByTemplateName()
+          returns null for it.
+
+Suggested fix:
+Catch any exception per file, collect the files that failed, add the others, and then list the
+failed ones with AlertUtils.showWarning(...).
+
+
+---------------------------------------------------------------------------------------------------
+BUG-013  "Final Marking:" keeps showing the marking of a Petri net that was removed
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (cosmetic)
+Found:    2026-11-07, while adding Javadoc to ProcessFrameOverviewController
+
+Where:
+- ProcessFrameOverviewController.initialize(), the pnModelChoice listener (around line 220)
+- DataAwareController.initialize(), the pnModelChoice listener (around line 664)
+
+Steps to reproduce:
+1. Load a single Petri net that has a final marking, so "Final Marking:" shows it.
+2. Remove it with its trash button in the Process Specifications table.
+
+Expected: The final marking is cleared, together with the Petri net viewer.
+Actual:   The viewer is cleared, but "Final Marking:" still shows the removed net's marking. The same
+          happens on the Data-Aware page, if it has been opened before. (Not verified by running it.)
+
+Cause:
+The listeners only set the label when a Petri net is selected (newValue != null). When the last one is
+removed, the selection becomes null and the label is left as it was.
+
+Suggested fix:
+Clear the label when the selection becomes null: else { labelFinalMarking.setText(""); }.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-014  Data-Agnostic: removing the last Declare model or Petri net throws a NullPointerException
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (the Data-Agnostic page is currently disabled, see the note on BUG-009)
+Found:    2026-11-07, while adding Javadoc to ProcessFrameOverviewController
+
+Where: DataAgnosticController.initialize(), the declModelChoice and pnModelChoice listeners (around
+       lines 304-319)
+
+Steps to reproduce (only possible once the Data-Agnostic page is enabled again):
+1. Open the Data-Agnostic page once, with one Declare model (or Petri net) loaded.
+2. On the Process Frame Overview page, remove that model with its trash button.
+
+Expected: The Data-Agnostic page's viewer is cleared.
+Actual:   The selection becomes null, and the listener's first line (declPath = newValue.getFilePath(),
+          or petrinetPath = ...) throws a NullPointerException, printed to the console. The rest of the
+          listener doesn't run, so the viewer keeps showing the removed model. (Not verified by running
+          it.)
+
+Suggested fix:
+Handle a null selection as the Data-Aware page does (if (newValue != null) { ... }), and otherwise
+clear the viewer, declPath / petrinetPath, finMarking and the Final Marking label.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-015  ScopeSelection: the overlaps property's method is misspelled (and the class is unused)
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (no effect today, as nothing uses the class)
+Found:    2026-11-07, while adding Javadoc to ScopeSelection
+
+Where: ScopeSelection.verlapsCountProperty() (around line 45)
+
+Steps to reproduce:
+1. Bind a table column to it with new PropertyValueFactory<ScopeSelection, Integer>("overlapsCount").
+2. Change the count with setOverlapsCount(...).
+
+Expected: The column shows the new count.
+Actual:   The column keeps the old count. JavaFX looks for overlapsCountProperty(); without it, it falls
+          back to getOverlapsCount() and wraps the value once, so later changes aren't shown. (Not
+          verified by running it.)
+
+Suggested fix:
+The class has been unused since the first commit (nothing in src/ refers to it), so it can probably be
+deleted. If it's kept, rename the method to overlapsCountProperty().
+
+
+---------------------------------------------------------------------------------------------------
+BUG-016  TraceVisualisationController is unused and wouldn't work as is
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (no effect today, as nothing uses the class)
+Found:    2026-11-07, while adding Javadoc to TraceVisualisationController
+
+Where: controller/TraceVisualisationController.java (the whole class)
+
+What's wrong:
+- Nothing uses it: no Java code refers to it, and no FXML file names it as fx:controller. It has been
+  unchanged since the first commit.
+- It couldn't be loaded as is: no FXML file defines the elements it expects (costCurrHbox,
+  costBestHbox, globalStateHbox, modelsMonitoringVbox, eventLabelHbox, debugVbox).
+- None of the 10 CSS classes it styles its entries with exist in src/main/resources (monitor-tile,
+  monitor-tile__poss-sat / __poss-viol / __perm-sat / __perm-viol, monitor-cost, monitor-label,
+  monitor-event-vbox, monitor-event-name, monitor-event-attribute), so the state tiles wouldn't be
+  colored.
+- addModelState() throws a NullPointerException for a model that wasn't passed to setModels() first.
+
+Suggested fix:
+Delete the class (like ScopeSelection, BUG-015), unless a monitoring view like this is planned. In
+that case it needs an FXML file and the CSS classes.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-017  Data-Aware: the timestamp field accepts impossible dates and silently changes them
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Medium (the planner gets a different time than the one shown), but only for impossible dates
+Found:    2026-11-07, while adding Javadoc to EventCell
+
+Where:
+- EventCell.parseTimestamp() and TIMESTAMP_FORMATTER (around lines 61 and 355)
+- DataAwareController.parseTimestamp() and XES_TIMESTAMP_FORMATTER (around lines 368 and 1691),
+  which read the stored timestamp the same way when exporting the prefixes
+
+Steps to reproduce:
+1. On the Data-Aware page, select a Declare model with a time condition, so prefix events get a
+   timestamp field.
+2. Open a prefix event's attribute popup and confirm the timestamp 2023-02-30T10:00:00.
+
+Expected: Rejected, like other invalid timestamps ("Not a valid timestamp"), as the comment on
+          parseTimestamp() said it would be.
+Actual:   Accepted. The field keeps showing 2023-02-30T10:00:00, since the text is stored as typed, but
+          it's read, checked against the neighbouring events and exported to the planner as
+          2023-02-28T10:00. Checked with the same formatter: 2023-02-30 and 2023-02-31 become
+          2023-02-28, 2023-04-31 becomes 2023-04-30, and 24:00:00 becomes 00:00 of the next day.
+          2023-02-32 and month 13 are rejected.
+
+Cause:
+DateTimeFormatter.ofPattern(...) resolves in SMART mode, which moves a day-of-month that's too large
+for its month to the month's last day instead of failing.
+
+Suggested fix:
+Validate with DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss").withResolverStyle(ResolverStyle.STRICT)
+(STRICT needs "uuuu" instead of "yyyy").
+
+
+---------------------------------------------------------------------------------------------------
+BUG-018  Prefix/Continuation lists: a normal event may be shown in italics like the trace start/end
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (cosmetic)
+Found:    2026-11-07, while adding Javadoc to EventCell
+
+Where: EventCell.updateItem() (around lines 148-158)
+
+Steps to reproduce (not verified by running it):
+1. On the Data-Aware page, build a prefix (or get a plan) long enough that the list needs scrolling.
+2. Jump between the trace start and the trace end (e.g. with the timeline slider), so the same list
+   cell shows the start, then the end, then a normal event.
+
+Expected: Only "-trace start-" and "-trace end-" are in italics.
+Actual:   That normal event is in italics as well.
+
+Cause:
+Each time a cell shows the start or end, it adds the style class "event-title__artificial" (italic, see
+main.css) again, without checking whether the cell already has it. For a normal event, remove() only
+takes out one copy, so a cell that has shown the start or end twice since it was created keeps one.
+(ListView.refresh() creates new cells, which hides this most of the time.)
+
+Suggested fix:
+Only add the class if it isn't there yet, or use a PseudoClass (pseudoClassStateChanged(...)), which
+can't be added twice.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-019  Data-Aware: attribute values aren't checked against the attribute's declared domain
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (usability; what the planner does with such values isn't verified)
+Found:    2026-11-07, while adding Javadoc to EventCell
+
+Where: EventCell.showAttributesPopup(), where a value is confirmed (around line 240)
+
+Steps to reproduce:
+1. On the Data-Aware page, select a Declare model that declares e.g. "integer: integer between 0 and
+   100" (shown in the Attributes pane) and binds the attribute to an activity.
+2. Add that activity to the prefix, open its attribute popup, and confirm "150", or "abc".
+
+Expected: The value is rejected with a message, as an invalid timestamp is.
+Actual:   It's accepted, replayed and exported to the planner as is. The same goes for a value that
+          isn't in a categorical attribute's value set.
+
+Suggested fix:
+Check the value against the attribute's AttributeDomain (DeclareModel.getAttributeDomains(), merged
+across the selected models as in the Attributes pane) and show an error the way buildTimestampRow()
+does.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-020  Data-Aware: attribute names are lowercased, unlike activity names (to check)
+---------------------------------------------------------------------------------------------------
+Status:   Open - needs checking how the generator matches attribute names
+Severity: Medium if the generator matches attribute names case-sensitively, otherwise Low
+Found:    2026-11-07, while adding Javadoc to EventCell
+
+Where:
+- ModelUtils (readActivityAttributeBindings, addAttributesFromConditions, readAttributeDomains), which
+  lowercase all attribute names when a model is loaded
+- EventCell.showAttributesPopup(), which stores the values under those lowercased names
+- DataAwareController.writePrefixesAsXes(), which exports them under those names
+- DataAwareController.parseXesTracesAsPrefixes() (around line 855), which keeps an imported log's
+  attribute keys as they are
+
+What happens:
+1. A model that spells an attribute with capitals, e.g. "bind ActivityA: Grade" and the condition
+   "A.Grade > 4": the prefix's values are exported as "grade". Activity names are exported as spelled
+   in the model, because the generator matches them case-sensitively (see getActivityNameAsDefined).
+   If it matches attribute names case-sensitively too, these values don't count. (Not verified.)
+2. An imported XES log with the key "Grade": the attribute popup looks the value up as "grade", so the
+   field shows up empty. Confirming a value adds a second key "grade", and both are exported. (From the
+   code, not verified by running it.)
+
+None of the example models in the repo spell attribute names with capitals, which is probably why
+this hasn't come up.
+
+Suggested fix:
+Keep each attribute's spelling as defined in the model (as for activities: lowercase only for lookups),
+export that spelling, and map imported keys to it case-insensitively.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-021  EventCell: if loading its layout fails, the cell later throws a NullPointerException
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (EventCell.fxml is bundled with FrAIm, so only a broken FXML file triggers it)
+Found:    2026-11-07, while adding Javadoc to EventCell
+
+Where: EventCell.loadFxml() (around lines 388-396)
+
+What happens:
+loadFxml() assigns the loader before calling load(). If load() fails, the first call returns false
+(and the cell stays empty), but every later call sees the loader and returns true. updateItem() then
+uses the labels the FXML should have provided, which are null, so it throws a NullPointerException.
+The failure itself isn't logged anywhere (the exception is swallowed).
+
+Suggested fix:
+Only keep the loader once load() succeeded, and print the exception (or show an error) when it fails.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-022  Data-Aware: an attribute that's categorical in one model and numeric in another breaks the
+         Attributes pane
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (only with models that contradict each other)
+Found:    2026-11-07, while adding Javadoc to AttributeDomain
+
+Where:
+- AttributeDomain.merge() (around line 106)
+- DataAwareController.updateAttributesTreeView() (around line 2481), which merges the domains of the
+  selected models
+
+Steps to reproduce (not verified by running it):
+1. Load two Declare models that declare the same attribute differently, e.g. "x: c1, c2" in one and
+   "x: integer between 0 and 10" in the other.
+2. On the Data-Aware page, select both under Process Specifications.
+
+Expected: The Attributes pane shows both declarations, or warns that they contradict each other.
+Actual:
+- If the categorical one is selected first (in model order): merge() calls addAll() with the numeric
+  domain's values, which are null, so it throws a NullPointerException. The Attributes pane isn't
+  refreshed and keeps showing the previous selection.
+- The other way round: the categorical values are dropped, and the range becomes "between 0 and 10"
+  widened to include 0 (a categorical domain's bounds are 0).
+- Merging an integer and a float range keeps the first one's type.
+
+Suggested fix:
+Handle domains of different kinds in merge(): e.g. keep both and show them, or show a warning that
+the models contradict each other.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-023  The package model.constraint is unused (a second DeclareConstraint, and LtlConstraint)
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (no effect today, as nothing uses the package)
+Found:    2026-11-07, while adding Javadoc to model/constraint/DeclareConstraint
+
+Where: src/main/java/org/framedinterface/model/constraint/ (DeclareConstraint.java, LtlConstraint.java)
+
+What's wrong:
+- Nothing outside the package refers to either class. Both have been unchanged since the first commit.
+- model.constraint.DeclareConstraint has the same name and fields as the class FrAIm actually uses,
+  org.framedinterface.model.DeclareConstraint. Its constructor has the same parameter types, but in a
+  different order: (..., activationActivity, activationCondition, targetActivity, targetCondition, ...)
+  instead of (..., activationActivity, targetActivity, activationCondition, targetCondition, ...).
+  Code that imports the wrong one by mistake (e.g. through an IDE's auto-import) can compile with the
+  activities and conditions mixed up.
+
+Suggested fix:
+Delete the package, like ScopeSelection (BUG-015) and TraceVisualisationController (BUG-016).
+
+
+---------------------------------------------------------------------------------------------------
+BUG-024  Declare replay: an activity named "reset" throws, and other "reset..." activities are taken
+         as reset steps
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (only for activities whose name starts with a lowercase "reset"), but it breaks the replay
+Found:    2026-11-07, while adding Javadoc to DeclareModel
+
+Where:
+- DeclareModel.updateMonitoringStates() (around lines 202-206)
+- DeclareModel.updateMonitoringStatesWithData() (around lines 309-310)
+
+Steps to reproduce (not verified by running it):
+1. Load a Declare model with an activity written as "reset", e.g. the line "activity reset".
+2. On the Data-Aware page, click on that activity in the Declare viewer to add it to the prefix.
+
+Expected: The event is added and replayed like any other.
+Actual:   Every activity that starts with "reset" (other than "reset-petrinet") is taken as a reset step
+          of the old Data-Agnostic planner, and the code does activity.substring(6) to drop "reset-".
+          For "reset" itself, which is only 5 characters long, that throws a
+          StringIndexOutOfBoundsException (checked: "reset".substring(6) throws). The replay stops, so
+          the lists and the viewer aren't updated. For a longer name such as "resetpassword", the
+          constraints whose template name and activities appear in the rest of the name are reset,
+          which is unlikely but wrong.
+          The check is case-sensitive, so "Reset" isn't affected on the Data-Aware page (prefix events
+          keep the model file's spelling). The Data-Agnostic page lowercases all activities, so there
+          "Reset" would be affected too.
+
+Suggested fix:
+Only treat an entry as a Data-Agnostic reset step when it really is one (e.g. by checking the plan
+step's action, as is done for RESET_CONSTRAINT_ACTION), and never cut the name shorter than its
+length.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-025  Declare models: constraints that only differ in their conditions are dropped when loading
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Medium (constraints silently missing from the replay, the Constraints pane and the costs)
+Found:    2026-11-07, while adding Javadoc to DeclareConstraint
+
+Where:
+- DeclareConstraint.equals() and hashCode() (around lines 211-229), which only compare the template and
+  the activation and target activities
+- ModelUtils.readConstraints() (around line 194), which puts the constraints into a LinkedHashSet "to
+  remove duplicates"
+
+Steps to reproduce (checked by loading such a model with ModelUtils.loadDeclareModel()):
+1. Write a Declare model with two constraints that only differ in their data conditions, e.g.
+     Response[ActivityA, ActivityB] |A.integer > 50 | |
+     Response[ActivityA, ActivityB] |A.integer < 10 | |
+2. Load it on the Process Frame Overview page and select it on the Data-Aware page.
+
+Expected: Both constraints are in the Constraints pane, have their own violation cost, and are replayed.
+Actual:   Only the first one is loaded (1 of 2 constraints). The second one isn't shown, not replayed
+          and gets no violation cost. The same happens to constraints that only differ in their time
+          condition.
+
+Possible knock-on effect (not verified against the generator): the PDDL generator reads the model file
+itself, so it does see both. getPlannerConstraintNames() mirrors the generator's numbering of repeated
+names ("_2", "_3", ...), but FrAIm only counts one. The second constraint's name, and the names of
+the same constraint in later models, would then be off by one, so violation costs and reset steps
+could end up matched to the wrong constraint.
+
+Suggested fix:
+Include the conditions in equals() and hashCode(), so that only exact duplicates are dropped. Check
+afterwards how the generator numbers exact duplicates, so that getPlannerConstraintNames() still
+matches it. (DataAwareController keys its per-constraint costs by identity, so that isn't affected.)
+
+
+---------------------------------------------------------------------------------------------------
+BUG-026  Declare replay: constraints whose activation and target are the same activity are evaluated
+         wrongly
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (such constraints are unusual)
+Found:    2026-11-07, while adding Javadoc to DeclareConstraint
+
+Where: DeclareConstraint.getAutomataLabel(...) (around lines 178 and 195)
+
+Steps to reproduce (checked by replaying with DeclareModel.updateMonitoringStates()):
+1. Load a Declare model with "Co-Existence[ActivityA, ActivityA]" and "Not Response[ActivityA, ActivityA]".
+2. Replay the trace <ActivityA, ActivityA>.
+
+Expected: Co-Existence[A, A] is satisfied (it always is), and Not Response[A, A] is violated (the second
+          A follows the first).
+Actual:   Co-Existence[A, A] ends violated, and Not Response[A, A] ends satisfied.
+
+Cause:
+Each event is fed to the constraint's automaton as one letter: "A" for the activation, "B" for the
+target, "Z" for anything else. When both are the same activity, every occurrence is checked against
+the activation first and becomes "A" only, so the automaton never sees a "B".
+
+Suggested fix:
+For such constraints, build the automaton from the template's formula with B replaced by A (so the one
+letter stands for both), or handle these templates separately.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-027  Petri net replay: an event isn't flagged as a violation if its name is part of an enabled
+         transition's name
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Medium (violations go unnoticed, in the viewer and in the plan cost)
+Found:    2026-11-07, while adding Javadoc to PnModel
+
+Where: PnModel.updateMonitoringStates() (around lines 162-179). The code has a TODO about it.
+
+Steps to reproduce (checked by replaying with PnModel.updateMonitoringStates() on the example net
+bpm-demo-tool/examples/a29g9AND.pnml):
+1. Replay the trace <ActivityA, ActivityZ, n64, ActivityA> on that net. After the third event, only
+   ActivityAC and ActivityAB are enabled.
+
+Expected: The second ActivityA is a violation: the Petri net viewer shows it in red, and isViolated()
+          is true.
+Actual:   It isn't recorded as a violation (isViolated() is false), and it isn't fired either. The
+          console shows "IllegalTransitionException: Cannot execute transition activitya in state ...".
+
+Cause:
+Whether a transition is enabled is checked with
+currentlyEnabledTransitions.toString().toLowerCase().contains(act), a text search in the list of enabled
+transitions. "activitya" is found inside "activityab", so the transition counts as enabled. Firing it
+then fails, and the exception is only printed. This affects any net with a transition name that's part
+of another one's, e.g. ActivityA next to ActivityAB.
+
+Knock-on effect: for Discard plans, DataAwareController.getReplayedViolationCost() takes a net's
+violation cost from isViolated(), so such a violation also goes missing from the plan cost breakdown.
+
+Suggested fix:
+Check whether the transition itself is among the enabled ones, e.g.
+currentlyEnabledTransitions.contains(getTransitionViaLabel(..., act)).
+
+
+---------------------------------------------------------------------------------------------------
+BUG-028  Petri net replay: silent transitions are never fired, so fitting traces can show violations
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Medium for nets with silent (invisible) transitions, none otherwise
+Found:    2026-11-07, while adding Javadoc to PnModel
+
+Where: PnModel.updateMonitoringStates() (around lines 145-179)
+
+What happens (from reading the code; the example nets in bpm-demo-tool have no silent transitions, so
+it wasn't checked by running it):
+The replay only ever fires the transition named by the current event. A silent transition (a "tau",
+e.g. for an XOR split, a loop or a skip, as process discovery tools often create) is never fired,
+because no event names it. In a net where a visible transition only becomes enabled after a silent one,
+an event of that transition is recorded as a violation, even though the trace fits the net. The viewer
+shows it in red, and the net counts as violated (see BUG-027's knock-on effect).
+
+Suggested fix:
+Before giving up on an event whose transition isn't enabled, look for a sequence of silent
+transitions that enables it (e.g. a short breadth-first search over silent transitions only) and fire
+those first.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-029  CmdArgsUtil is unused, and describes another tool's command line
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (no effect today, as nothing uses the class)
+Found:    2026-11-07, while adding Javadoc to CmdArgsUtil
+
+Where: utils/CmdArgsUtil.java (the whole class)
+
+What's wrong:
+- Nothing calls handleArgs(), and none of FrAIm's main classes (App, AppLauncher, Main, MainGui) parse
+  command-line arguments with it. It has been unchanged since the first commit.
+- Its usage text says "java -jar .\InterplayMonitor.jar", another tool's jar, and its options
+  (-c costsFile, -l eventLog, -statsFile) and the ".ltl" model type don't exist in FrAIm.
+- If it were used, invalid arguments would end the whole application with System.exit(1).
+
+Suggested fix:
+Delete the class, like ScopeSelection (BUG-015), TraceVisualisationController (BUG-016) and the
+model.constraint package (BUG-023).
+
+
+---------------------------------------------------------------------------------------------------
+BUG-030  Data-Agnostic: reading Fast Downward's output throws if it doesn't have the expected format
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (the Data-Agnostic page is currently disabled, see the note on BUG-009)
+Found:    2026-11-07, while adding Javadoc to FileUtils
+
+Where: FileUtils.parsePlan() and FileUtils.parsePlanCost(), called from
+       DataAgnosticController.onClickPlanner() once the planner has finished without an error
+
+What happens (from reading the code, not verified by running it):
+- parsePlan() always removes the first two lines it collected. If it found no plan (the file is
+  missing, or Fast Downward's lines don't match its regular expressions, e.g. a time printed without
+  decimals like "[t=0s, ...]"), it throws an IndexOutOfBoundsException.
+- parsePlanCost() starts with an empty cost and calls Integer.parseInt() on it. If the file has no
+  "Plan cost: <n>" line in the expected format, it throws a NumberFormatException.
+- parsePlanCost() turns the cost into a number of violations by dividing it by 3, which assumes each
+  violation step costs 3 and all other steps 0, as in the current Data-Agnostic domains. A domain with
+  other costs gives a wrong count, without notice.
+The output in results.txt from an earlier run does match the expected format.
+
+Suggested fix:
+Return an empty plan / no cost (and show a message) when the expected lines aren't found, and count
+the violation steps in the plan instead of dividing the cost by 3.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-031  Declare viewer: activity names with " (or & < > on activities with unary constraints) break
+         the graph
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Medium for models with such names (the Declare viewer can't show the model at all), none
+          otherwise
+Found:    2026-11-07, while adding Javadoc to GraphGenerator
+
+Where: GraphGenerator.buildDeclNodeString() (around lines 48-78), which puts activity names into the
+       DOT text as they are
+
+Steps to reproduce (checked by building the visualization with DeclareModel.getVisualisationString()
+and rendering it with the viz.js bundled in src/main/resources, under Node.js):
+1. Load a Declare model with
+     activity Check & Approve
+     activity Ship
+     Existence[Check & Approve] | |
+     Response[Check & Approve, Ship] | | |
+   or one with an activity like  Approve "Big" Order.
+2. Look at it in the Declare viewer (Process Frame Overview or Data-Aware page).
+
+Expected: The model is shown.
+Actual:   viz.js can't render it ("in label of node n0" for the "&" model, "syntax error in line 1
+          near '"'" for the quote), so the viewer shows the error instead of the model. On the
+          Data-Aware page, the prefix can't be built by clicking on the model either. The same model
+          without "&" renders fine.
+
+Cause:
+An activity with unary constraints gets an HTML-like label, which Graphviz parses as XML, so "&", "<"
+and ">" have to be escaped; only the conditions are (escapeHtml()), not the activity name. In all
+other labels and tooltips, a '"' ends the quoted DOT string early.
+
+Suggested fix:
+Escape the activity name: escapeHtml() for the HTML-like labels, and '"' as '\"' in the quoted
+labels and tooltips. PnModel builds its transition labels the same way, so check it as well (not
+checked).
+
+
+---------------------------------------------------------------------------------------------------
+BUG-032  Declare models: a trailing space after an activity, or no space after a constraint's comma,
+         silently breaks the model
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Medium for files written by hand (constraints wrongly evaluated or not drawn), none for the
+          example models (none of them has either)
+Found:    2026-11-07, while adding Javadoc to ModelUtils
+
+Where:
+- ModelUtils.createActivityNamesSet(Path) (around line 102), which doesn't trim activity names
+- ModelUtils.readConstraintString() (around lines 335-336), whose binary pattern needs ", " between the
+  two activities
+
+Steps to reproduce (checked by loading such models with ModelUtils.loadDeclareModel(), replaying them
+and building their visualization):
+1. A model with "activity ActivityA " (trailing space) and "Response[ActivityA, ActivityB] | | |":
+   the activity becomes "activitya " while the constraint refers to "activitya". The constraint's edge
+   in the Declare viewer starts from an extra node named "null" instead of from ActivityA.
+2. A model with "Response[ActivityA,ActivityB] | | |" (no space after the comma): the line doesn't
+   match the binary pattern and is read with the unary one, so the constraint's activation is
+   "activitya,activityb" and it has no target. It's never activated (<ActivityA> doesn't violate it),
+   and its edge runs between "null" nodes.
+
+Expected: Both models are read like "activity ActivityA" / "Response[ActivityA, ActivityB]".
+Actual:   As above, without any warning.
+
+Suggested fix:
+Trim activity names (createActivityNamesSet and readActivityNamesAsDefined), and split a constraint's
+activities on "," with surrounding whitespace (e.g. "\\s*,\\s*"). It would also help to warn when a
+constraint refers to an activity that isn't declared.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-033  A loaded Petri net's file stays open (and on Windows can't be deleted or replaced)
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low
+Found:    2026-11-07, while adding Javadoc to ModelUtils
+
+Where: ModelUtils.loadDpnModel() (around line 390), which never closes the FileInputStream it reads
+       the PNML from
+
+Steps to reproduce (checked by loading a copy of an example net with ModelUtils.loadDpnModel() and
+deleting the file right after, in the same program):
+1. Load a .pnml on the Process Frame Overview page.
+2. Try to delete, rename or overwrite it (e.g. an editor that saves by replacing the file) while FrAIm
+   is running.
+
+Expected: It works, as FrAIm doesn't need the file open after loading it.
+Actual:   Deleting it fails (File.delete() returned false) until the stream is garbage-collected.
+
+Suggested fix:
+Read the file in a try-with-resources block. The Scanners in ModelUtils' Declare readers are closed by
+hand, so they also stay open if parsing throws (e.g. BUG-012's NumberFormatException); try-with-
+resources fixes those too.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-034  RunnerUtils: three unused methods duplicate the Data-Agnostic tasks
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (no effect today, as nothing calls them)
+Found:    2026-11-07, while adding Javadoc to RunnerUtils
+
+Where: RunnerUtils.generatePDDL(), runPlanner() and runPlanner2()
+
+What's wrong:
+- Nothing calls them; only runProcess() is used (by GenerateDataAwarePDDLTask and RunEnhspTask).
+- generatePDDL() is a copy of GeneratePDDLTask.call(), including its problems (BUG-009: a blocking read
+  that an interrupt doesn't stop, and a process that's never destroyed). runPlanner() and runPlanner2()
+  are copies of what RunPlannerTask does to run Fast Downward (locally with python.exe, or through
+  Apptainer/WSL).
+- Two copies of the same code can drift apart: a fix to one (e.g. for BUG-009) doesn't reach the other.
+
+Suggested fix:
+Delete the three methods, like the other dead code (BUG-015, BUG-016, BUG-023, BUG-029). If the
+Data-Agnostic page is enabled again, its tasks already cover them.
+
+
+---------------------------------------------------------------------------------------------------
+BUG-035  On a system with a comma decimal separator, the first page's zoom field starts as "100,0"
+         and jumps to 400% when left
+---------------------------------------------------------------------------------------------------
+Status:   Open - already fixed when FrAIm is started through AppLauncher, but not through the usual
+          entry points (see the note below)
+Severity: Low (one field, and only on systems whose locale writes decimals with a comma)
+Found:    2026-11-07, while adding Javadoc to ValidationUtils
+
+Note (2026-11-07): AppLauncher.main() sets Locale.setDefault(Locale.UK) before starting App, which is
+exactly the fix below. But nothing starts FrAIm through AppLauncher: the jar's Main-Class (pom.xml
+<main.class>, used by "java -jar target/framedinterface-1.0-launcher.jar" as in the README) is
+org.framedinterface.Main, and "mvn javafx:run" starts org.framedinterface.App. Neither sets the locale
+before the first page is loaded. AppLauncher is only used when it's run directly, e.g. from an IDE.
+
+Where:
+- App.start() (around lines 32-33), which sets Locale.setDefault(Locale.UK) only after
+  showDefaultPage() has already loaded the Process Frame Overview page
+- Main.main(), the jar's entry point, which (unlike AppLauncher.main()) doesn't set the locale first
+- ProcessFrameOverviewController.setupWebView() for the Declare viewer, run while that page loads,
+  which formats the zoom with String.format("%.1f", ...)
+- ValidationUtils.addMandatoryPrecentageBehavior(), whose filter only accepts "." as decimal separator
+
+Steps to reproduce (not verified by running FrAIm; this machine's Java locale is en_US, which isn't
+affected):
+1. Start FrAIm on a system with e.g. an Italian or German locale.
+2. On the Process Frame Overview page, look at the Declare viewer's zoom field, then click into it and
+   out again.
+
+Expected: The field shows "100.0", and leaving it keeps the zoom at 100%.
+Actual (expected from the code): The field shows "100,0", since the default locale is still the
+          system's when it's formatted (checked: String.format with Locale.ITALY or Locale.GERMANY
+          gives "100,0", which the field's filter doesn't accept). Leaving the field parses "100,0",
+          which fails, so the zoom is set to the maximum, 400%. The Petri net viewer and the other
+          pages are set up after the locale has been set, so they aren't affected.
+
+Suggested fix:
+Any one of: point <main.class> in pom.xml (and the javafx-maven-plugin's <mainClass>) to
+org.framedinterface.AppLauncher; add the same Locale.setDefault(Locale.UK) line to Main.main(); or move
+the line in App.start() above showDefaultPage(), which covers every entry point. Alternatively, format
+the zoom with an explicit locale (String.format(Locale.UK, ...)).

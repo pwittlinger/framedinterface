@@ -31,13 +31,43 @@ import org.framedinterface.model.PnModel;
 import org.framedinterface.utils.enums.DeclareTemplate;
 import org.framedinterface.model.DeclareConstraint;
 
+/**
+ * Loads process specifications from their files: Declare models ({@code .decl}) and Petri nets ({@code .pnml}).
+ * <p>
+ * A Declare model file has one statement per line, e.g.:
+ * <pre>{@code
+ * activity ActivityA
+ * bind ActivityA: integer, categorical
+ * integer: integer between 0 and 100
+ * categorical: c1, c2, c3
+ * Response[ActivityA, ActivityB] |A.integer > 10 |T.integer < 10 | ActivityA,0,100,h/ActivityB,2,5,h
+ * }</pre>
+ * A constraint's trailing section ({@code |activation condition |target condition |time condition}) is optional. Activity and attribute
+ * names are lowercased; the spelling of the activities in the file is kept separately (see
+ * {@link org.framedinterface.model.AbstractModel#getActivityNameAsDefined(String)}). The parsing is strict about whitespace: activity
+ * names aren't trimmed, and a binary constraint's activities must be separated by a comma and a space.
+ */
 public class ModelUtils {
 
+	/**
+	 * Not meant to be instantiated: all methods are static.
+	 */
 	private ModelUtils() {
 		//Private constructor to avoid unnecessary instantiation of the class
 	}
 
-	//Handles loading of a Declare model
+	/**
+	 * Loads a Declare model from its file: its activities, constraints, attribute bindings and attribute domains. Duplicate constraints
+	 * are dropped (see {@link DeclareConstraint#equals(Object)}).
+	 *
+	 * @param modelPath the model file
+	 * @param modelId the model's id, unique among the loaded models
+	 * @param modelName the model's name, e.g. its file name
+	 * @return the model
+	 * @throws IOException if the file can't be read
+	 * @throws NullPointerException if a constraint's template isn't known, e.g. a misspelled template name
+	 * @throws NumberFormatException if a bound of a numeric attribute domain isn't a number
+	 */
 	public static DeclareModel loadDeclareModel(Path modelPath, String modelId, String modelName) throws IOException {
 		LinkedHashSet<String> activities = createActivityNamesSet(modelPath);
 		BidiMap<String, String> activityToEncodingMap = createActivityToEncodingMap(activities);
@@ -53,7 +83,14 @@ public class ModelUtils {
 		return declareModel;
 	}
 
-	//Creates activity names set based on Declare or LTL model
+	/**
+	 * Reads the activities declared by the {@code activity <name>} lines, lowercased. The names aren't trimmed, so trailing whitespace
+	 * stays part of the name.
+	 *
+	 * @param modelPath the model file
+	 * @return the activities, in file order
+	 * @throws IOException if the file can't be read
+	 */
 	private static LinkedHashSet<String> createActivityNamesSet(Path modelPath) throws IOException {
 		LinkedHashSet<String> activityNames = new LinkedHashSet<String>();
 
@@ -70,7 +107,14 @@ public class ModelUtils {
 		return activityNames;
 	}
 
-	//Maps each (lowercased, as in createActivityNamesSet) activity name of a Declare model to its original spelling in the model file
+	/**
+	 * Maps each activity name of a Declare model, lowercased as in {@link #createActivityNamesSet(Path)}, to its original spelling in the
+	 * model file (trimmed).
+	 *
+	 * @param modelPath the model file
+	 * @return lowercased activity name to its spelling in the file
+	 * @throws IOException if the file can't be read
+	 */
 	private static Map<String, String> readActivityNamesAsDefined(Path modelPath) throws IOException {
 		Map<String, String> activityNamesAsDefined = new HashMap<String, String>();
 
@@ -87,6 +131,12 @@ public class ModelUtils {
 	}
 	
 	
+	/**
+	 * Gives each activity an encoding, its node's id in the visualization: {@code n0}, {@code n1}, ... in the given order.
+	 *
+	 * @param activities the activities, lowercased
+	 * @return activity to encoding; also looks up activities by encoding
+	 */
 	private static BidiMap<String, String> createActivityToEncodingMap(LinkedHashSet<String> activities) {
 		BidiMap<String, String> activityToEncodingMap =  new DualHashBidiMap<String, String>(); //I am not sure if this provides predictable iteration order; if yes, then activities set could be removed
 		for (String activity : activities) {
@@ -96,6 +146,13 @@ public class ModelUtils {
 		return activityToEncodingMap;
 	}
 	
+	/**
+	 * Groups the unary constraints (e.g. Existence or Init) by their activity, so they can be shown on the activity's node.
+	 *
+	 * @param activities not used
+	 * @param declareConstrains the model's constraints
+	 * @return activity (lowercased) to its unary constraints, in file order; activities without any aren't in the map
+	 */
 	private static Map<String, List<DeclareConstraint>> createActivityToUnaryMap(LinkedHashSet<String> activities, LinkedHashSet<DeclareConstraint> declareConstrains) {
 		Map<String, List<DeclareConstraint>> activityToUnaryMap = new HashMap<String, List<DeclareConstraint>>();
 		for (DeclareConstraint declareConstraint : declareConstrains) {
@@ -107,7 +164,13 @@ public class ModelUtils {
 		return activityToUnaryMap;
 	}
 	
-	//Finds "bind ActivityName: attr1, attr2" lines and creates a map of activity name to its bound attribute names
+	/**
+	 * Reads the {@code bind ActivityName: attr1, attr2} lines, which bind attributes to an activity.
+	 *
+	 * @param modelPath the model file
+	 * @return activity (lowercased) to its bound attributes (lowercased), in file order
+	 * @throws IOException if the file can't be read
+	 */
 	private static Map<String, LinkedHashSet<String>> readActivityAttributeBindings(Path modelPath) throws IOException {
 		Map<String, LinkedHashSet<String>> activityToAttributesMap = new HashMap<String, LinkedHashSet<String>>();
 
@@ -132,6 +195,13 @@ public class ModelUtils {
 	//Data conditions (e.g. "A.categorical is c2") also reveal attribute-activity associations, which "bind" lines don't always fully capture
 	private static final Pattern CONDITION_ATTRIBUTE_PATTERN = Pattern.compile("\\b([AT])\\.(\\w+)");
 
+	/**
+	 * Adds the attributes the constraints' data conditions refer to (e.g. {@code A.categorical is c2}) to their activities, as the "bind"
+	 * lines don't always fully capture them.
+	 *
+	 * @param activityToAttributesMap activity (lowercased) to its attributes, which is added to
+	 * @param declareConstraints the model's constraints
+	 */
 	private static void addAttributesFromConditions(Map<String, LinkedHashSet<String>> activityToAttributesMap, LinkedHashSet<DeclareConstraint> declareConstraints) {
 		for (DeclareConstraint declareConstraint : declareConstraints) {
 			addAttributesFromCondition(activityToAttributesMap, declareConstraint, declareConstraint.getActivationCondition());
@@ -139,7 +209,14 @@ public class ModelUtils {
 		}
 	}
 
-	//"A." refers to the constraint's activation activity and "T." to its target activity, regardless of which condition string the token appears in
+	/**
+	 * Adds the attributes one data condition refers to. "A." refers to the constraint's activation activity and "T." to its target
+	 * activity, regardless of which condition string the token appears in.
+	 *
+	 * @param activityToAttributesMap activity (lowercased) to its attributes, which is added to
+	 * @param declareConstraint the constraint the condition belongs to
+	 * @param condition the condition; may be {@code null} or empty
+	 */
 	private static void addAttributesFromCondition(Map<String, LinkedHashSet<String>> activityToAttributesMap, DeclareConstraint declareConstraint, String condition) {
 		if (condition == null || condition.isEmpty()) {
 			return;
@@ -158,7 +235,16 @@ public class ModelUtils {
 	private static final Pattern DOMAIN_LINE_PATTERN = Pattern.compile("^(\\w+):\\s*(.*)$");
 	private static final Pattern NUMERIC_DOMAIN_PATTERN = Pattern.compile("(?i)(integer|float)\\s+between\\s+(\\S+)\\s+and\\s+(\\S+)");
 
-	//Finds attribute domain declarations and creates a map of attribute name to its declared value range/set
+	/**
+	 * Reads the attribute domain declarations: the {@code <word>: ...} lines, e.g. {@code integer: integer between 0 and 100} or
+	 * {@code categorical: c1, c2, c3}. A description containing {@code integer} or {@code float between <lo> and <hi>} declares a numeric
+	 * range; any other non-empty one, a set of comma-separated categorical values.
+	 *
+	 * @param modelPath the model file
+	 * @return attribute name (lowercased) to its declared value range or set
+	 * @throws IOException if the file can't be read
+	 * @throws NumberFormatException if a range's bound isn't a number
+	 */
 	private static Map<String, AttributeDomain> readAttributeDomains(Path modelPath) throws IOException {
 		Map<String, AttributeDomain> attributeDomains = new HashMap<String, AttributeDomain>();
 
@@ -190,7 +276,15 @@ public class ModelUtils {
 		return attributeDomains;
 	}
 
-	//Finds constraint strings in the Declare model and creates a list of Declare constraint objects
+	/**
+	 * Reads the constraints: every line, other than the {@code activity} and {@code bind} lines, that contains something like
+	 * {@code Template[...]}. Duplicate constraints are dropped, keeping the first (see {@link DeclareConstraint#equals(Object)}).
+	 *
+	 * @param declareModelPath the model file
+	 * @return the constraints, in file order
+	 * @throws IOException if the file can't be read
+	 * @throws NullPointerException if a constraint's template isn't known
+	 */
 	private static LinkedHashSet<DeclareConstraint> readConstraints(Path declareModelPath) throws IOException {
 		LinkedHashSet<DeclareConstraint> declareConstraints = new LinkedHashSet<DeclareConstraint>(); //To remove duplicates, while retaining predictable iteration order
 
@@ -218,7 +312,16 @@ public class ModelUtils {
 		return declareConstraints;
 	}
 
-	//Creates a Declare constraint object from a single Declare constraint string
+	/**
+	 * Creates a Declare constraint from its line, e.g.
+	 * {@code Response[ActivityG, ActivityP] |A.integer > 10 |T.integer < 10 | ActivityP,0,100,h/ActivityG,2,5,h}. A binary constraint's
+	 * activities must be separated by a comma and a space; otherwise the line is read as a unary constraint whose activity is both of
+	 * them. For the templates that reverse activation and target, the activation is the second activity.
+	 *
+	 * @param constraintString the constraint's line
+	 * @return the constraint, with lowercased activities and trimmed conditions
+	 * @throws NullPointerException if the template isn't known
+	 */
 	private static DeclareConstraint readConstraintString(String constraintString) {
 		DeclareTemplate template = null;
 		String activationActivity = "";
@@ -257,14 +360,31 @@ public class ModelUtils {
 				activationCondition, targetCondition, timeCondition);
 	}
 
-	//Regex groups for the optional trailing condition section are null when that section is absent entirely
+	/**
+	 * Trims a regex group of the optional trailing condition section; the groups are {@code null} when that section is absent entirely.
+	 *
+	 * @param s the group, may be {@code null}
+	 * @return the trimmed group, or an empty text for {@code null}
+	 */
 	private static String trimOrEmpty(String s) {
 		return s == null ? "" : s.trim();
 	}
 
 
 
-	//Handles loading of a PN model
+	/**
+	 * Loads a Petri net from its PNML file, as a data Petri net. All transition labels are lowercased in the net itself; the original
+	 * spelling of the visible transitions' labels is kept separately (see
+	 * {@link org.framedinterface.model.AbstractModel#getActivityNameAsDefined(String)}). The file's input stream isn't closed, so the
+	 * file stays open (and on Windows can't be deleted) until the stream is garbage-collected.
+	 *
+	 * @param modelPath the model file
+	 * @param modelId the model's id, unique among the loaded models
+	 * @param modelName the model's name, e.g. its file name
+	 * @return the model
+	 * @throws FileNotFoundException if the file doesn't exist
+	 * @throws DPNIOException if the file can't be read as a data Petri net
+	 */
 	public static PnModel loadDpnModel(Path modelPath, String modelId, String modelName) throws FileNotFoundException, DPNIOException {
 		DataPetriNetImporter dataPetriNetImporter = new DataPetriNetImporter(); //There should be a version for regular Petri nets somewhere, but reusing the data Petri nets one will hopefully be fine
 		InputStream inputStream = new BufferedInputStream(new FileInputStream(modelPath.toString()));
@@ -289,7 +409,12 @@ public class ModelUtils {
 		return dpnModel;
 	}
 
-	//Creates activity names set based on DPN model
+	/**
+	 * Collects the labels of the net's visible transitions, lowercased.
+	 *
+	 * @param dataPetriNet the net
+	 * @return the activities, in the net's transition order
+	 */
 	private static LinkedHashSet<String> createActivityNamesSet(DataPetriNetsWithMarkings dataPetriNet) {
 		LinkedHashSet<String> activityNames = new LinkedHashSet<String>();
 		for (Transition transition : dataPetriNet.getTransitions()) {

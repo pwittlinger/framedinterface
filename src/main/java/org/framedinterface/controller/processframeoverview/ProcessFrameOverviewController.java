@@ -47,6 +47,14 @@ import javafx.scene.web.WebView;
 import javafx.stage.Popup;
 import javafx.util.StringConverter;
 
+/**
+ * Controller of the Process Frame Overview page, on which the process specifications (Declare models and Petri nets) are loaded and viewed.
+ * <p>
+ * Models are loaded with the "Select..." button and listed in the Process Specifications table. The table shows the
+ * {@link ModelRegistry} that all pages share, so a model removed there is removed from all pages. Selecting a model shows it in the
+ * Declare or Petri net viewer. The viewers always show a model's structure only, with no timeline and no violations: this page is for
+ * viewing and selecting models, not for monitoring.
+ */
 public class ProcessFrameOverviewController extends AbstractController {
 
 	@FXML
@@ -97,6 +105,12 @@ public class ProcessFrameOverviewController extends AbstractController {
 
 	private boolean showDataConditions = false;
 
+	/**
+	 * Initializes the page once its FXML has been loaded. Sets up the Process Specifications table (with a remove button per model), the
+	 * Declare and Petri net viewers with their model choice boxes and zoom controls, and the Data conditions switch. The Petri net viewer
+	 * is only loaded once the Declare viewer has loaded, since loading both at once leaves the Petri net viewer empty when this is the first
+	 * page opened.
+	 */
 	@FXML
 	private void initialize() {
 
@@ -217,6 +231,14 @@ public class ProcessFrameOverviewController extends AbstractController {
 		});
 	}
 
+	/**
+	 * Handles the "Select..." button: loads the Declare models ({@code .decl}) and Petri nets ({@code .pnml}) the user picks, and adds them
+	 * to the {@link ModelRegistry}. Before that, the new models are replayed against the trace currently active in {@link PlannerSession}
+	 * (the prefix, or its plan). Files that can't be loaded, or have another extension, are skipped; the reason is only printed to the
+	 * console.
+	 *
+	 * @param event the button's action event (unused)
+	 */
 	@FXML
 	void onButtonClickedUploadModel(ActionEvent event) {
 		List<File> modelFiles = FileUtils.showModelOpenDialog(getStage());
@@ -247,6 +269,19 @@ public class ProcessFrameOverviewController extends AbstractController {
 		}
 	}
 
+	/**
+	 * Loads the visualization page into the given view and sets up its zoom controls: Ctrl + mouse wheel, the zoom slider and the
+	 * percentage field are kept in sync with the view's zoom. A visualization requested before the page has loaded is shown once it has
+	 * (see {@link #updateVisualization(WebView, AbstractModel, ModelType)}). Unlike on the Data-Aware page, clicking on the graph does
+	 * nothing here, as this controller isn't made available to the page's JavaScript.
+	 *
+	 * @param visualizationWebView the view
+	 * @param modelType the type of models the view shows
+	 * @param zoomSlider the view's zoom slider
+	 * @param zoomSliderValueObject the zoom slider's value, bound to the view's zoom
+	 * @param zoomValueField the field showing (and editing) the zoom as a percentage
+	 * @param webViewZoomObject the view's zoom
+	 */
 	private void setupWebView(WebView visualizationWebView, ModelType modelType, Slider zoomSlider, ObjectProperty<Double> zoomSliderValueObject, TextField zoomValueField, ObjectProperty<Double> webViewZoomObject) {
 		visualizationWebView.getEngine().load((getClass().getClassLoader().getResource("visPage.html")).toString());
 		visualizationWebView.setContextMenuEnabled(false);
@@ -305,7 +340,15 @@ public class ProcessFrameOverviewController extends AbstractController {
 		ValidationUtils.addMandatoryPrecentageBehavior(precentageFormat, zoomSlider.getMax() * 100, zoomValueField);
 	}
 
-	//Always renders the model's static structure (no timeline, no violations) - this page is for viewing/selecting, not monitoring
+	/**
+	 * Shows the given model in the given view, or clears the view if there is no model or nothing to show. It's always the model's static
+	 * structure (no timeline, no violations): this page is for viewing and selecting models, not for monitoring. Declare models show their
+	 * data conditions while the Data conditions switch is on. If the view's page is still loading, the model is shown once it has loaded.
+	 *
+	 * @param visualizationWebView the view
+	 * @param abstractModel the model, or {@code null} for none
+	 * @param modelType the type of models the view shows
+	 */
 	private void updateVisualization(WebView visualizationWebView, AbstractModel abstractModel, ModelType modelType) {
 		String visualizationString;
 		String script;
@@ -336,6 +379,10 @@ public class ProcessFrameOverviewController extends AbstractController {
 		}
 	}
 
+	/**
+	 * Handles the Help button of the Declare viewer: creates its popup (what the viewer shows, and how to pick the model to show) and makes
+	 * the button toggle that popup from then on. The popup isn't shown on this first click.
+	 */
 	@FXML
 	private void onClickToolTip() {
 		Popup legendPopup = new Popup();
@@ -361,6 +408,10 @@ public class ProcessFrameOverviewController extends AbstractController {
 		});
 	}
 
+	/**
+	 * Handles the Help button of the Petri net viewer: creates its popup (what the viewer shows, and how to pick the model to show) and
+	 * makes the button toggle that popup from then on. The popup isn't shown on this first click.
+	 */
 	@FXML
 	private void onClickToolTipPN() {
 		Popup legendPopup = new Popup();

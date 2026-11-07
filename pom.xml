@@ -281,7 +281,19 @@
                   <target>17</target>
                 </configuration>
             </plugin>
-        
+            <!-- Generates the code documentation from the Javadoc comments: "mvn javadoc:javadoc". Not bound to a phase, so
+                 "mvn package" isn't slowed down by it. Private members are documented as well, since most of the code (e.g. the
+                 controllers) is private. Undocumented members aren't reported, malformed Javadoc comments are. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.11.2</version>
+                <configuration>
+                    <show>private</show>
+                    <doclint>all,-missing</doclint>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.openjfx</groupId>
                 <artifactId>javafx-maven-plugin</artifactId>

@@ -26,6 +26,17 @@ import javafx.stage.Popup;
 import org.framedinterface.utils.enums.MonitoringState;
 import org.kordamp.ikonli.javafx.FontIcon;
 
+/**
+ * A row of the Prefix and Continuation lists: one event of the trace, or the trace's start or end. It shows the event's activity, the plan
+ * action that replayed it, and how many constraints of the visualized Declare model are satisfied and violated at that point, as
+ * {@code SAT (POSS_SAT)} and {@code VIOL (POSS_VIOL)}. Its layout comes from {@code EventCell.fxml}.
+ * <p>
+ * For the events of an editable prefix (no plan present), the cell can also offer a button that opens a popup to edit the event's
+ * attribute values and timestamp, and a button that deletes the event. Each is only offered if the list supports it, i.e. if the
+ * corresponding callbacks were given to the constructor.
+ *
+ * @see EventData
+ */
 public class EventCell extends ListCell<EventData> {
 
 	@FXML
@@ -60,10 +71,30 @@ public class EventCell extends ListCell<EventData> {
 	private Popup attributesPopup;
 
 
+	/**
+	 * Creates a cell that only shows its event, without attribute editing or deletion (e.g. for the Continuation list).
+	 *
+	 * @param selectionCallback called with the event number when the row is clicked, or with 0 when the click deselects it; may be
+	 *        {@code null}
+	 */
 	public EventCell(Consumer<Integer> selectionCallback) {
 		this(selectionCallback, null, null, null, null);
 	}
 
+	/**
+	 * Creates a cell that can also let the user edit the attribute values of prefix events, and delete them (e.g. for the Prefix list).
+	 *
+	 * @param selectionCallback called with the event number when the row is clicked, or with 0 when the click deselects it; may be
+	 *        {@code null}
+	 * @param activityAttributesLookup the names of the attributes bound to an activity, or {@code null} if the list doesn't support
+	 *        attribute editing
+	 * @param deleteCallback removes the event with the given number from the prefix, or {@code null} if the list doesn't support deleting
+	 *        events
+	 * @param attributeChangeCallback called with the event number once an attribute value is confirmed, e.g. to replay the trace again; may
+	 *        be {@code null}
+	 * @param timestampFieldVisible whether the attribute popup offers a timestamp field (when any selected Declare model has a time
+	 *        condition), or {@code null} if the list doesn't support attribute editing
+	 */
 	public EventCell(Consumer<Integer> selectionCallback, Function<String, Set<String>> activityAttributesLookup, Consumer<Integer> deleteCallback, Consumer<Integer> attributeChangeCallback, BooleanSupplier timestampFieldVisible) {
 		this.selectionCallback = selectionCallback;
 		this.activityAttributesLookup = activityAttributesLookup;
@@ -72,6 +103,10 @@ public class EventCell extends ListCell<EventData> {
 		this.timestampFieldVisible = timestampFieldVisible;
 	}
 
+	/**
+	 * Called once the cell's FXML has been loaded: makes clicking on the row report its event number to the selection callback, or 0 if
+	 * the click deselected the row.
+	 */
 	@FXML
 	private void initialize() {
 		if (selectionCallback != null) {
@@ -85,6 +120,15 @@ public class EventCell extends ListCell<EventData> {
 		}
 	}
 
+	/**
+	 * Shows the given event, or nothing for an empty row. Any open attribute popup is closed, as the cell may now show a different event.
+	 * The start and end of the trace are shown as "-trace start-" and "-trace end-", in italics. The attribute and delete buttons are only
+	 * shown for the events of an editable prefix, and only if the list supports them; the attribute button only if the event's activity
+	 * has bound attributes or a timestamp field is offered.
+	 *
+	 * @param item the event, or {@code null} for an empty row
+	 * @param empty whether the row is empty
+	 */
 	@Override
 	protected void updateItem(EventData item, boolean empty) {
 		//https://openjfx.io/javadoc/11/javafx.controls/javafx/scene/control/Cell.html#updateItem(T,boolean)
@@ -136,6 +180,9 @@ public class EventCell extends ListCell<EventData> {
 		}
 	}
 
+	/**
+	 * Handles the delete button: closes the attribute popup and removes the event from the prefix, through the delete callback.
+	 */
 	@FXML
 	private void onClickDelete() {
 		EventData item = getItem();
@@ -147,6 +194,9 @@ public class EventCell extends ListCell<EventData> {
 		}
 	}
 
+	/**
+	 * Handles the attribute button: opens the attribute popup (see {@link #showAttributesPopup(EventData)}), or closes it if it's open.
+	 */
 	@FXML
 	private void onClickExtend() {
 		EventData item = getItem();
@@ -160,8 +210,14 @@ public class EventCell extends ListCell<EventData> {
 		showAttributesPopup(item);
 	}
 
-	//Shows a small popup, to the side of the row, with one editable field per attribute bound to the event's activity
-	//(plus a "timestamp" field when any selected Declare model has a time condition)
+	/**
+	 * Shows a small popup to the left of the attribute button, with one editable field per attribute bound to the event's activity, plus a
+	 * timestamp field when any selected Declare model has a time condition. A value is confirmed with its check button or Enter: it's then
+	 * stored in the event's attribute values, and the attribute change callback is called. The values aren't checked against the
+	 * attributes' declared domains; only the timestamp is checked (see {@link #validateTimestamp(String)}).
+	 *
+	 * @param item the event
+	 */
 	private void showAttributesPopup(EventData item) {
 		Set<String> attributes = activityAttributesLookup == null ? Set.of() : activityAttributesLookup.apply(item.getActivityName());
 		Map<String, String> values = item.getAttributeValues();
@@ -205,8 +261,16 @@ public class EventCell extends ListCell<EventData> {
 		attributesPopup.setX(screenBounds.getMinX() - attributesPopup.getWidth() - 10); //Reposition to the left now that the popup's actual width is known
 	}
 
-	//The "timestamp" field is not bound to the event's activity (unlike the other attributes above) - it is offered on every prefix event
-	//whenever any selected Declare model has a time condition, since any event may need to participate in a time condition's evaluation
+	/**
+	 * Builds the popup's timestamp field. Unlike the other attributes, the timestamp isn't bound to the event's activity: it's offered on
+	 * every prefix event whenever any selected Declare model has a time condition, since any event may need to take part in a time
+	 * condition's evaluation. The field is pre-filled with the event's timestamp, or a suggested one (see {@link #suggestTimestamp()}). A
+	 * timestamp that can't be used is rejected, with a message below the field saying why (see {@link #validateTimestamp(String)}).
+	 *
+	 * @param item the event
+	 * @param values the event's attribute values, which a confirmed timestamp is stored in, exactly as entered
+	 * @return the field, with its label, confirm button and error message
+	 */
 	private VBox buildTimestampRow(EventData item, Map<String, String> values) {
 		HBox row = new HBox(6);
 		row.setAlignment(Pos.CENTER_LEFT);
@@ -245,16 +309,25 @@ public class EventCell extends ListCell<EventData> {
 		return new VBox(4, row, errorLabel);
 	}
 
-	//Only used if the event has no timestamp yet (the Data-Aware page gives every prefix event one as it is added): now, or the preceding
-	//event's timestamp if that is later, since an event can't happen before the one preceding it
+	/**
+	 * Suggests a timestamp for an event that has none yet; the Data-Aware page gives every prefix event one as it's added, so this is
+	 * rarely needed. It's now, or the preceding event's timestamp if that's later, since an event can't happen before the one preceding it.
+	 *
+	 * @return the suggested timestamp, in {@link #TIMESTAMP_PATTERN}
+	 */
 	private String suggestTimestamp() {
 		LocalDateTime now = LocalDateTime.now();
 		LocalDateTime previous = getNeighborTimestamp(-1);
 		return (previous != null && previous.isAfter(now) ? previous : now).format(TIMESTAMP_FORMATTER);
 	}
 
-	//Returns why the given timestamp can't be used for this event, or null if it can: it must be a real date/time in TIMESTAMP_PATTERN,
-	//and not before the event directly preceding this one, nor after the one directly following it
+	/**
+	 * Checks whether the given timestamp can be used for this event: it must be a date and time in {@link #TIMESTAMP_PATTERN} (see
+	 * {@link #parseTimestamp(String)}), and not before the event directly preceding this one, nor after the one directly following it.
+	 *
+	 * @param text the timestamp as entered
+	 * @return why the timestamp can't be used, or {@code null} if it can
+	 */
 	private String validateTimestamp(String text) {
 		LocalDateTime timestamp = parseTimestamp(text);
 		if (timestamp == null) {
@@ -271,7 +344,14 @@ public class EventCell extends ListCell<EventData> {
 		return null;
 	}
 
-	//Rudimentary format check followed by an actual parse, so e.g. "2023-02-30T10:00:00" (not a real date) is also rejected; null if invalid
+	/**
+	 * Parses a timestamp in {@link #TIMESTAMP_PATTERN}: a rudimentary format check followed by an actual parse. The parse uses the
+	 * formatter's default (smart) resolving, so a day that doesn't exist in its month isn't rejected but moved to the month's last day
+	 * (e.g. {@code 2023-02-30T10:00:00} is read as February 28), and {@code 24:00:00} is read as midnight of the next day.
+	 *
+	 * @param text the timestamp, may be {@code null}
+	 * @return the timestamp, or {@code null} if it doesn't have the right format
+	 */
 	private static LocalDateTime parseTimestamp(String text) {
 		if (text == null || !TIMESTAMP_SHAPE_PATTERN.matcher(text).matches()) {
 			return null;
@@ -283,7 +363,12 @@ public class EventCell extends ListCell<EventData> {
 		}
 	}
 
-	//The timestamp of the event the given number of rows away from this one, or null if that row is not a prefix event (e.g. the trace start/end) or has no valid timestamp
+	/**
+	 * Returns the timestamp of the event the given number of rows away from this one.
+	 *
+	 * @param offset the number of rows, e.g. -1 for the preceding event
+	 * @return the timestamp, or {@code null} if that row isn't a prefix event (e.g. the trace start or end) or has no valid timestamp
+	 */
 	private LocalDateTime getNeighborTimestamp(int offset) {
 		int index = getIndex() + offset;
 		if (getListView() == null || index < 0 || index >= getListView().getItems().size()) {
@@ -294,6 +379,12 @@ public class EventCell extends ListCell<EventData> {
 	}
 
 
+	/**
+	 * Loads the cell's layout from {@code EventCell.fxml}, with this cell as its controller, the first time it's needed.
+	 *
+	 * @return {@code true} if the layout is loaded, {@code false} if loading it failed. Only the first call tries to load it: if that
+	 *         failed, later calls return {@code true} anyway
+	 */
 	private boolean loadFxml() {
 		if (loader == null) {
 			//Load EventCell contents if not already loaded

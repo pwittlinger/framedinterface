@@ -157,6 +157,22 @@ import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 
+/**
+ * Controller of the Data-Aware page, on which continuations of trace prefixes are planned with the data-aware planner.
+ * <p>
+ * On this page, the user can
+ * <ul>
+ *   <li>select, among the loaded process specifications (Declare models and Petri nets), the ones the planner works with,</li>
+ *   <li>set the violation cost of each constraint (or mark it as hard, i.e. not to be violated) and the cost of each activity,</li>
+ *   <li>build one or more trace prefixes, by clicking on the activities of the visualized models or by importing an XES log, and attach
+ *       attribute values to their events,</li>
+ *   <li>run the planner on all prefixes at once: the prefixes are exported as XES, one PDDL problem is generated per prefix
+ *       ({@link GenerateDataAwarePDDLTask}) and solved with ENHSP ({@link RunEnhspTask}),</li>
+ *   <li>replay the plans found (the prefixes' continuations) on the visualized models with the timeline controls, and export them as XES.</li>
+ * </ul>
+ * Only the selected prefix's events, attribute values and plan are live in {@link PlannerSession} at any time. The other prefixes are kept
+ * in {@link PrefixEntry} objects (see {@link #syncOutToEntry(PrefixEntry)} and {@link #syncInFromEntry(PrefixEntry)}).
+ */
 public class DataAwareController extends AbstractController {
 
 	//Entries for the "Process Specifications" Table
@@ -377,14 +393,25 @@ public class DataAwareController extends AbstractController {
 	private ObservableList<PrefixEntry> prefixes = FXCollections.observableArrayList();
 	private PrefixEntry selectedEntry; //prefixChoice's current selection, whose prefix/continuation is the one live in PlannerSession
 
-	//One row of the Constraints pane: a model (grouping its constraints), or one of its constraints - a Declare constraint, or a whole Petri net
-	//(which the planner treats as a single constraint). Only constraint rows carry a violation cost.
+	/**
+	 * One row of the Constraints pane: a model (grouping its constraints), or one of its constraints, i.e. a Declare constraint or a whole
+	 * Petri net (which the planner treats as a single constraint). Only constraint rows carry a violation cost and a hard flag.
+	 */
 	private static class ConstraintEntry {
 		private final AbstractModel model;
 		private final DeclareConstraint constraint; //null for a model row and for a Petri net
 		private final DoubleProperty violationCost; //null for a model row; shared with violationCosts, so edits outlive this entry
 		private final BooleanProperty hard; //null for a model row; shared with hardConstraints, so edits outlive this entry
 
+		/**
+		 * Creates a row of the Constraints pane.
+		 *
+		 * @param model the model the row belongs to
+		 * @param constraint the row's Declare constraint, or {@code null} for a model row and for a Petri net
+		 * @param violationCost the constraint's violation cost (shared with {@link DataAwareController#violationCosts}, so edits outlive
+		 *        this row), or {@code null} for a model row
+		 * @param hard whether the constraint is hard (shared with {@link DataAwareController#hardConstraints}), or {@code null} for a model row
+		 */
 		private ConstraintEntry(AbstractModel model, DeclareConstraint constraint, DoubleProperty violationCost, BooleanProperty hard) {
 			this.model = model;
 			this.constraint = constraint;
@@ -392,24 +419,49 @@ public class DataAwareController extends AbstractController {
 			this.hard = hard;
 		}
 
+		/**
+		 * Creates the row that groups the constraints of the given model.
+		 *
+		 * @param model the model
+		 * @return a model row, without violation cost or hard flag
+		 */
 		private static ConstraintEntry modelRow(AbstractModel model) {
 			return new ConstraintEntry(model, null, null, null);
 		}
 
+		/**
+		 * Tells whether this row stands for a model rather than for one of its constraints.
+		 *
+		 * @return {@code true} for a model row
+		 */
 		private boolean isModelRow() {
 			return violationCost == null;
 		}
 
+		/**
+		 * Tells whether this row is a hard constraint, i.e. one that may not be violated.
+		 *
+		 * @return {@code true} for a hard constraint, {@code false} for a soft constraint and for a model row
+		 */
 		private boolean isHard() {
 			return hard != null && hard.get();
 		}
 
-		//The violation cost, unless the constraint is hard (its cost doesn't apply, so it can't be edited); null for a model row
+		/**
+		 * Returns this row's violation cost, unless it is a hard constraint: a hard constraint's cost doesn't apply, so it can't be edited.
+		 *
+		 * @return the violation cost, or {@code null} for a hard constraint and for a model row
+		 */
 		private DoubleProperty getEditableViolationCost() {
 			return isHard() ? null : violationCost;
 		}
 
-		//The model's name, "Petri net" for a net, or e.g. "Response[ActivityG, ActivityP]" (as written in the model file, without its conditions)
+		/**
+		 * Returns the text shown in the Constraint column.
+		 *
+		 * @return the model's name for a model row, "Petri net" for a Petri net, or else the constraint as written in the model file but
+		 *         without its conditions, e.g. {@code Response[ActivityG, ActivityP]}
+		 */
 		private String getName() {
 			if (isModelRow()) {
 				return model.getModelName();
@@ -420,7 +472,12 @@ public class DataAwareController extends AbstractController {
 			return constraintString.contains(" |") ? constraintString.substring(0, constraintString.indexOf(" |")).trim() : constraintString;
 		}
 
-		//The full constraint line including its data/time conditions, e.g. "Response[ActivityG, ActivityP] |A.integer > 10 |T.integer < 10 |"
+		/**
+		 * Returns the text shown as the row's tooltip, which includes what the Constraint column leaves out.
+		 *
+		 * @return the model's file path for a model row, "Petri net" followed by the model's name for a Petri net, or else the full
+		 *         constraint line including its data/time conditions, e.g. {@code Response[ActivityG, ActivityP] |A.integer > 10 |T.integer < 10 |}
+		 */
 		private String getDetails() {
 			if (isModelRow()) {
 				return model.getFilePath();
@@ -429,12 +486,23 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//One row of the Activities pane: an activity (with its cost), one of its "Attributes"/"Models" groups, or an attribute / model within such a group
+	/**
+	 * One row of the Activities pane: an activity (with its cost), one of its "Attributes"/"Models" groups, or an attribute or model within
+	 * such a group.
+	 */
 	private static class ActivityEntry {
 		private final String label;
 		private final String tooltip; //null for none
 		private final DoubleProperty cost; //Only set for activity rows; shared with activityCosts, so edits outlive this entry
 
+		/**
+		 * Creates a row of the Activities pane.
+		 *
+		 * @param label the text shown in the Activity column
+		 * @param tooltip the row's tooltip, or {@code null} for none
+		 * @param cost the activity's cost for an activity row (shared with {@link DataAwareController#activityCosts}, so edits outlive this
+		 *        row), or {@code null} for any other row
+		 */
 		private ActivityEntry(String label, String tooltip, DoubleProperty cost) {
 			this.label = label;
 			this.tooltip = tooltip;
@@ -442,7 +510,10 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//One prefix's worth of PlannerSession state: its manually-built events, their attribute values, and whatever planner continuation was generated from it
+	/**
+	 * One prefix's worth of {@link PlannerSession} state: its manually-built events, their attribute values, and the planner continuation
+	 * (plan) generated from it, if any.
+	 */
 	private static class PrefixEntry {
 		private List<String> prefixEvents = new ArrayList<String>();
 		private Map<Integer, Map<String, String>> attributeValues = new HashMap<Integer, Map<String, String>>();
@@ -456,6 +527,11 @@ public class DataAwareController extends AbstractController {
 		private ZonedDateTime exportStartTime; //The time the plan's time offsets are relative to (the first event's timestamp as last exported for the planner)
 	}
 
+	/**
+	 * Initializes the page once its FXML has been loaded. Sets up the Process Specifications, Constraints, Activities and Attributes panes,
+	 * the Declare and Petri net visualizations with their zoom controls, the Prefix and Continuation lists, the timeline controls and the
+	 * prefix selector.
+	 */
 	@FXML
 	private void initialize() {
 
@@ -624,7 +700,11 @@ public class DataAwareController extends AbstractController {
 		setupPrefixSelector();
 	}
 
-	//Wires up prefixChoice to switch which prefix's data (events, attribute values, planner continuation) is live in PlannerSession
+	/**
+	 * Wires up {@link #prefixChoice} to switch which prefix's data (events, attribute values, planner continuation) is live in
+	 * {@link PlannerSession}. Starts with a single prefix, which takes over whatever {@link PlannerSession} already holds, so that a trace or
+	 * plan carried over from the Data-Agnostic page still shows up.
+	 */
 	private void setupPrefixSelector() {
 		prefixChoice.setItems(prefixes);
 		prefixChoice.setConverter(new StringConverter<PrefixEntry>() {
@@ -661,7 +741,12 @@ public class DataAwareController extends AbstractController {
 		prefixChoice.getSelectionModel().select(initialEntry);
 	}
 
-	//Captures whatever prefix/continuation is currently live in PlannerSession into the given (about to be deselected) entry
+	/**
+	 * Copies the prefix and continuation currently live in {@link PlannerSession} into the given entry, e.g. right before it is deselected.
+	 *
+	 * @param entry the entry to update
+	 * @see #syncInFromEntry(PrefixEntry)
+	 */
 	private void syncOutToEntry(PrefixEntry entry) {
 		entry.prefixEvents = PlannerSession.getInstance().getCurrentPrefix();
 		entry.attributeValues = PlannerSession.getInstance().getPrefixAttributeValuesMap();
@@ -669,7 +754,12 @@ public class DataAwareController extends AbstractController {
 		entry.planPresent = PlannerSession.getInstance().isPlanPresent();
 	}
 
-	//Makes the given (newly selected) entry's prefix/continuation the one live in PlannerSession
+	/**
+	 * Makes the given entry's prefix and continuation the ones live in {@link PlannerSession}, e.g. once it is selected.
+	 *
+	 * @param entry the entry to load
+	 * @see #syncOutToEntry(PrefixEntry)
+	 */
 	private void syncInFromEntry(PrefixEntry entry) {
 		PlannerSession.getInstance().setCurrentPrefix(entry.prefixEvents);
 		PlannerSession.getInstance().setPrefixAttributeValuesMap(entry.attributeValues);
@@ -677,7 +767,10 @@ public class DataAwareController extends AbstractController {
 		PlannerSession.getInstance().setPlanPresent(entry.planPresent);
 	}
 
-	//Adds a new, empty prefix and selects it, always leaving the previously selected prefix untouched in the list
+	/**
+	 * Handles the "+" button of the Prefix pane: adds a new, empty prefix and selects it. The previously selected prefix is kept in the list
+	 * unchanged.
+	 */
 	@FXML
 	private void onClickAddPrefix() {
 		PrefixEntry newEntry = new PrefixEntry();
@@ -685,7 +778,10 @@ public class DataAwareController extends AbstractController {
 		prefixChoice.getSelectionModel().select(newEntry);
 	}
 
-	//Removes the currently selected prefix (at least one must always remain) and selects a neighboring one
+	/**
+	 * Handles the "-" button of the Prefix pane: removes the selected prefix and selects the one before it (or, if it was the first, the new
+	 * first one). Does nothing if it is the only prefix, as at least one must always remain.
+	 */
 	@FXML
 	private void onClickRemovePrefix() {
 		PrefixEntry current = prefixChoice.getSelectionModel().getSelectedItem();
@@ -697,7 +793,11 @@ public class DataAwareController extends AbstractController {
 		prefixChoice.getSelectionModel().select(prefixes.get(Math.max(0, index - 1)));
 	}
 
-	//Replaces the current set of prefixes with one manually-built prefix per trace of an imported XES log, each carrying the trace's event attribute values
+	/**
+	 * Handles the Import button: replaces all prefixes with the traces of an XES log the user picks, one prefix per trace, each carrying the
+	 * attribute values of the trace's events (see {@link #parseXesTracesAsPrefixes(File)}). The prefixes are left unchanged if the log can't
+	 * be parsed or has no traces.
+	 */
 	@FXML
 	private void onClickImportPrefix() {
 		File file = FileUtils.showXesOpenDialog(getStage());
@@ -721,7 +821,15 @@ public class DataAwareController extends AbstractController {
 		prefixChoice.getSelectionModel().select(0);
 	}
 
-	//One PrefixEntry per trace of the log's first process (each event's activity as a prefix step, its non-concept/lifecycle attributes as that step's attribute values)
+	/**
+	 * Reads one prefix per trace of the first log in the given XES file. Each event becomes a prefix event (its {@code concept:name}), and its
+	 * attributes other than {@code concept:name} and {@code lifecycle:transition} become that event's attribute values. Its
+	 * {@code time:timestamp} is stored as the {@code timestamp} attribute, in local time.
+	 *
+	 * @param file the XES file
+	 * @return the prefixes, in trace order; empty if the file contains no log
+	 * @throws Exception if the file can't be parsed
+	 */
 	private List<PrefixEntry> parseXesTracesAsPrefixes(File file) throws Exception {
 		List<XLog> logs = new XesXmlParser().parse(file);
 		List<PrefixEntry> entries = new ArrayList<PrefixEntry>();
@@ -756,7 +864,14 @@ public class DataAwareController extends AbstractController {
 		return entries;
 	}
 
-	//Renders a XES attribute's value the same way it would be typed into the attribute editor popup (e.g. "6" rather than "6.0" for a whole-numbered float)
+	/**
+	 * Renders an XES attribute's value the way it would be typed into the attribute editor popup, e.g. "6" rather than "6.0" for a
+	 * whole-numbered float.
+	 *
+	 * @param attribute the attribute
+	 * @return the attribute's value as text
+	 * @see #getXesAttributeType(String)
+	 */
 	private static String extractAttributeValueString(XAttribute attribute) {
 		if (attribute instanceof XAttributeLiteral) {
 			return ((XAttributeLiteral) attribute).getValue();
@@ -771,8 +886,14 @@ public class DataAwareController extends AbstractController {
 		return attribute.toString();
 	}
 
-	//Lets the user change the settings the planner runs with. General tab: the optimization targets, the recovery strategy and the waiting cost (left
-	//empty to use the generator's default). ENHSP tab: the planner's search strategy, heuristic and memory
+	/**
+	 * Handles the gear button next to Run Planner: shows the planner settings dialog and applies the settings once it is confirmed with OK.
+	 * <ul>
+	 *   <li>General tab: the optimization targets (Constraint Violation is mandatory), the recovery strategy and the waiting cost (left empty
+	 *       to use the generator's default).</li>
+	 *   <li>ENHSP tab: the planner's search strategy, heuristic and memory.</li>
+	 * </ul>
+	 */
 	@FXML
 	private void onClickPlannerSettings() {
 		Dialog<ButtonType> dialog = new Dialog<ButtonType>();
@@ -908,7 +1029,11 @@ public class DataAwareController extends AbstractController {
 		updatePlannerSettingsTooltip();
 	}
 
-	//A label column and a column of controls with their descriptions below them, as on the planner settings' tabs
+	/**
+	 * Creates the layout of a planner settings tab: a column of labels and a column of controls, with their descriptions below them.
+	 *
+	 * @return an empty grid with the spacing and padding of the planner settings' tabs
+	 */
 	private static GridPane createSettingsGrid() {
 		GridPane grid = new GridPane();
 		grid.setHgap(10);
@@ -917,8 +1042,11 @@ public class DataAwareController extends AbstractController {
 		return grid;
 	}
 
-	//Without Activity Cost as an optimization target the activity costs are ignored (see buildCostModelLines), so the Activities pane's costs are greyed
-	//out and a warning explains why: in the pane, and as an icon in its title (which stays visible when the pane is collapsed)
+	/**
+	 * Greys out the Activities pane's costs while Activity Cost isn't an optimization target, since they are then ignored (see
+	 * {@link #buildCostModelLines()}). A warning explains why: in the pane, and as an icon in its title, which stays visible while the pane is
+	 * collapsed.
+	 */
 	private void updateActivitiesPaneState() {
 		boolean activityCostIgnored = !optimizationTargets.contains(OptimizationTarget.ACTIVITY_COST);
 		activitiesTreeTableView.setDisable(activityCostIgnored);
@@ -931,7 +1059,12 @@ public class DataAwareController extends AbstractController {
 		activitiesAttributesPane.setGraphic(activityCostIgnored ? warningIcon : null);
 	}
 
-	//Empty (the generator's default is used) or a positive number
+	/**
+	 * Tells whether the given text is a valid waiting cost.
+	 *
+	 * @param text the text typed into the waiting cost field
+	 * @return {@code true} if the text is a positive number, or empty (the generator's default is used)
+	 */
 	private static boolean isValidWaitingCost(String text) {
 		if (text.isBlank()) {
 			return true;
@@ -940,7 +1073,10 @@ public class DataAwareController extends AbstractController {
 		return cost != null && cost > 0;
 	}
 
-	//The planner settings are only visible in their dialog, so the gear button's tooltip summarizes them
+	/**
+	 * Updates the tooltip of the planner settings button to summarize the current settings, since they are otherwise only visible in their
+	 * dialog.
+	 */
 	private void updatePlannerSettingsTooltip() {
 		plannerSettingsButton.getTooltip().setText("Planner settings" + System.lineSeparator()
 				+ "Optimize: " + optimizationTargets.stream().map(OptimizationTarget::toString).collect(Collectors.joining(", ")) + System.lineSeparator()
@@ -951,8 +1087,18 @@ public class DataAwareController extends AbstractController {
 				+ "Memory: " + plannerMemoryGb + " GB");
 	}
 
-	//Exports all prefixes to an XES log (output/prefixes/prefixes_<timestamp>.xes), generates one PDDL problem per prefix (output/pddl/problem<i>.pddl) with the
-	//data-aware PDDL generator, then runs ENHSP on each of them (output/plans/plan<i>.txt)
+	/**
+	 * Handles the Run Planner button: plans a continuation for every prefix with the selected process specifications, in the background.
+	 * <ol>
+	 *   <li>Exports all prefixes to an XES log ({@code output/prefixes/prefixes_<timestamp>.xes}), which can be re-imported later.</li>
+	 *   <li>Generates one PDDL problem per prefix ({@code output/pddl/problem<i>.pddl}) with the data-aware PDDL generator
+	 *       ({@link GenerateDataAwarePDDLTask}).</li>
+	 *   <li>Runs ENHSP on each of them ({@link RunEnhspTask}), which writes {@code output/plans/plan<i>.txt}.</li>
+	 *   <li>Loads the plans found as the prefixes' continuations (see {@link #loadPlans(List, BigDecimal, RecoveryStrategy)}).</li>
+	 * </ol>
+	 * At least one Declare model must be selected, and the PDDL domain of the chosen recovery strategy must exist. The page is locked while
+	 * planning, and the planner can be cancelled from the progress layer.
+	 */
 	@FXML
 	private void onClickPlanner() {
 		String selectedDeclModels = "";
@@ -1067,9 +1213,17 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Replaces every prefix's continuation with its plan from output/plans/plan<i>.txt (prefix i), decoded with the generator's encodings,
-	//and replays the selected prefix's plan. Prefixes without a (solved) plan are left without a continuation. Plan costs are the planner's metric times planCostFactor,
-	//split into their violation/activity/waiting parts with the cost files handed to the generator.
+	/**
+	 * Replaces every prefix's continuation with its plan from {@code output/plans/plan<i>.txt} (for prefix {@code i}), decoded with the
+	 * generator's encodings, then replays the selected prefix's plan. Prefixes without a (solved) plan are left without a continuation. Plan
+	 * costs are the planner's metric times {@code planCostFactor}, split into their violation, activity and waiting parts using the cost files
+	 * handed to the generator.
+	 *
+	 * @param plannedModels the process specifications the planner was run with, in the order they were passed to the generator
+	 * @param planCostFactor the factor that turns the planner's metric into the plan cost (the waiting cost relative to the generator's default)
+	 * @param plannedRecoveryStrategy the recovery strategy the planner was run with
+	 * @throws IOException if a plan or one of the generator's output files can't be read
+	 */
 	private void loadPlans(List<AbstractModel> plannedModels, BigDecimal planCostFactor, RecoveryStrategy plannedRecoveryStrategy) throws IOException {
 		Map<String, String> resetTargets = assignPlannerConstraintNames(plannedModels);
 		planRecoveryStrategy = plannedRecoveryStrategy;
@@ -1103,7 +1257,12 @@ public class DataAwareController extends AbstractController {
 		updateSelectedModelVisualizations();
 	}
 
-	//Lowercased names of the attributes declared categorical (e.g. "categorical: c1, c2, c3") by any of the given Declare models
+	/**
+	 * Collects the attributes declared categorical (e.g. {@code categorical: c1, c2, c3}) by any of the given Declare models.
+	 *
+	 * @param models the models; those that aren't Declare models are ignored
+	 * @return the lowercased names of the categorical attributes
+	 */
 	private static Set<String> getCategoricalAttributes(List<AbstractModel> models) {
 		Set<String> categoricalAttributes = new TreeSet<String>();
 		for (AbstractModel model : models) {
@@ -1118,6 +1277,11 @@ public class DataAwareController extends AbstractController {
 		return categoricalAttributes;
 	}
 
+	/**
+	 * Removes the given prefix's continuation, along with everything loaded with it (its attribute values, cost, ...).
+	 *
+	 * @param entry the prefix
+	 */
 	private static void clearPlan(PrefixEntry entry) {
 		entry.plan = new ArrayList<String>();
 		entry.planAttributeValues = null;
@@ -1127,10 +1291,16 @@ public class DataAwareController extends AbstractController {
 		entry.planPresent = false;
 	}
 
-	//The name the PDDL generator gives each Declare constraint of the given models: "<template>_<activation>[_<target>]" (spaces as "_", activities
-	//spelled as in the model file), with repeated names numbered "_2", "_3", ... across all Declare models passed to it, in order.
-	//Activation and target are as in DeclareConstraint, i.e. already swapped for the Precedence templates ("Precedence[D, F]" -> "Precedence_F_D").
-	//Identity-keyed, since DeclareConstraint.equals only compares template and activities, and two models may contain the same constraint.
+	/**
+	 * Computes the name the PDDL generator gives each Declare constraint of the given models: {@code <template>_<activation>[_<target>]},
+	 * with spaces as "_" and the activities spelled as in the model file. Repeated names are numbered {@code _2}, {@code _3}, ... across all
+	 * Declare models, in the given order. Activation and target are as in {@link DeclareConstraint}, i.e. already swapped for the Precedence
+	 * templates: {@code Precedence[D, F]} is named {@code Precedence_F_D}.
+	 *
+	 * @param plannedModels the models handed to the generator, in the order they were passed to it
+	 * @return the planner name of each Declare constraint. Identity-keyed, since {@link DeclareConstraint#equals(Object)} only compares
+	 *         template and activities, and two models may contain the same constraint
+	 */
 	private static Map<DeclareConstraint, String> getPlannerConstraintNames(List<AbstractModel> plannedModels) {
 		Map<DeclareConstraint, String> plannerNames = new IdentityHashMap<DeclareConstraint, String>();
 		Map<String, Integer> nameCounts = new HashMap<String, Integer>(); //By lowercased name, as DeclareConstraint lowercases its activities
@@ -1161,9 +1331,14 @@ public class DataAwareController extends AbstractController {
 		return plannerNames;
 	}
 
-	//Gives every Declare constraint the name the PDDL generator uses for it (see getPlannerConstraintNames), so plan resets can be matched to it.
-	//Petri nets are named "pn" (single net) or "pn1", "pn2", ... (in the order passed). Returns, for the Petri nets, the reset activity their plan
-	//resets should replay (the Declare names are replayed as is).
+	/**
+	 * Gives every Declare constraint of the planned models the name the PDDL generator uses for it (see
+	 * {@link #getPlannerConstraintNames(List)}), so that the plan's reset steps can be matched to it. The constraints of Declare models that
+	 * weren't planned with lose their names. Petri nets are named {@code pn} (single net) or {@code pn1}, {@code pn2}, ... (in the given order).
+	 *
+	 * @param plannedModels the models handed to the generator, in the order they were passed to it
+	 * @return for each Petri net's planner name, the reset activity its plan resets should replay (Declare constraint names are replayed as is)
+	 */
 	private Map<String, String> assignPlannerConstraintNames(List<AbstractModel> plannedModels) {
 		Map<DeclareConstraint, String> constraintNames = getPlannerConstraintNames(plannedModels);
 		List<PnModel> petriNets = new ArrayList<PnModel>();
@@ -1191,6 +1366,12 @@ public class DataAwareController extends AbstractController {
 		return resetTargets;
 	}
 
+	/**
+	 * Runs the given planner step (PDDL generation or ENHSP) on a daemon thread, and remembers it as the task the progress layer's cancel
+	 * button stops.
+	 *
+	 * @param task the task to run
+	 */
 	private void startPlannerTask(Task<?> task) {
 		runningPlannerTask = task;
 		Thread thread = new Thread(task);
@@ -1198,6 +1379,10 @@ public class DataAwareController extends AbstractController {
 		thread.start();
 	}
 
+	/**
+	 * Loads the progress layer shown while the planner runs, and wires its cancel button to cancel the running planner task. It is only
+	 * loaded once; if loading fails, the planner runs without a progress layer.
+	 */
 	private void loadProgressLayer() {
 		if (progressLayer != null) {
 			return;
@@ -1217,6 +1402,12 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	/**
+	 * Locks or unlocks the page while the planner runs, showing or hiding the progress layer on top of it.
+	 *
+	 * @param busy {@code true} to lock the page and show the progress layer, {@code false} to unlock it and hide the layer
+	 * @param progressText the text shown on the progress layer; ignored when {@code busy} is {@code false}
+	 */
 	private void setUiBusy(boolean busy, String progressText) {
 		Platform.runLater(() -> mainContents.setDisable(busy));
 
@@ -1235,9 +1426,16 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Writes every prefix as one trace (in prefixChoice order, so prefix <i> becomes problem<i>.pddl) of an XES log that the data-aware PDDL generator can read.
-	//The generator computes each event's time relative to the trace's first event and needs a timestamp on every event; events still without one (e.g. of an
-	//imported prefix that was never selected) get one here, the same way updateTrace() gives one to the selected prefix's events
+	/**
+	 * Writes every prefix as one trace of an XES log the data-aware PDDL generator can read, in {@link #prefixChoice} order, so that prefix
+	 * {@code i} becomes {@code problem<i>.pddl}. The generator computes each event's time relative to the trace's first event and needs a
+	 * timestamp on every event: events still without one (e.g. of an imported prefix that was never selected) get one here, the same way
+	 * {@link #updateTrace(Integer)} gives one to the selected prefix's events. Also records each prefix's
+	 * {@link PrefixEntry#exportStartTime}, which the times of its plan are relative to.
+	 *
+	 * @param file the XES file to write
+	 * @throws IOException if the file can't be written
+	 */
 	private void writePrefixesAsXes(File file) throws IOException {
 		ZonedDateTime exportTime = ZonedDateTime.now().truncatedTo(ChronoUnit.SECONDS);
 
@@ -1268,9 +1466,15 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//The activity's spelling in the first selected process model that contains it (case-insensitively), since the PDDL generator matches
-	//activities case-sensitively; prefixes may carry other casings (e.g. lowercase from Data-Agnostic, or an imported XES log)
 	//TODO: Warn the user when selected models spell the same activity with different casing
+	/**
+	 * Returns an activity's spelling in the first selected process specification that contains it (compared case-insensitively). The PDDL
+	 * generator matches activities case-sensitively, while prefixes may carry other casings (e.g. lowercase from the Data-Agnostic page, or
+	 * from an imported XES log).
+	 *
+	 * @param activityName the activity, in any casing
+	 * @return the activity as spelled in the model file, or {@code activityName} itself if no selected model contains it
+	 */
 	private String getActivityNameAsDefined(String activityName) {
 		for (AbstractModel model : getSelectedModels()) {
 			String nameAsDefined = model.getActivityNameAsDefined(activityName);
@@ -1281,8 +1485,13 @@ public class DataAwareController extends AbstractController {
 		return activityName;
 	}
 
-	//Writes an XES log laid out like the logs OpenXES produces (one element per line, tab-indented, same log header), using StAX rather than
-	//OpenXES' XesXmlSerializer, since the latter depends on the Spex library, which is not bundled with this application
+	/**
+	 * Writes an XES log laid out like the logs OpenXES produces (one element per line, tab-indented, same log header). Uses StAX rather than
+	 * OpenXES' {@code XesXmlSerializer}, since the latter depends on the Spex library, which isn't bundled with this application.
+	 * <p>
+	 * Traces and events are opened with {@link #startTrace(String)} and {@link #startEvent(String)}, followed by their attributes, and
+	 * closed with {@link #endElement()}. Closing the writer closes all elements still open, and the file.
+	 */
 	private static class XesWriter implements AutoCloseable {
 		private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"); //Local time, e.g. "2023-08-07T02:08:50"
 
@@ -1290,6 +1499,15 @@ public class DataAwareController extends AbstractController {
 		private final XMLStreamWriter xml;
 		private int depth = 0;
 
+		/**
+		 * Creates the file and writes the log's header: the Time, Lifecycle and Concept extensions, the global trace and event attributes,
+		 * the event name classifier, and the log's name.
+		 *
+		 * @param file the file to write; overwritten if it exists
+		 * @param logName the log's {@code concept:name}
+		 * @throws IOException if the file can't be created
+		 * @throws XMLStreamException if writing the header fails
+		 */
 		XesWriter(File file, String logName) throws IOException, XMLStreamException {
 			out = new FileOutputStream(file);
 			xml = XMLOutputFactory.newInstance().createXMLStreamWriter(out, "UTF-8");
@@ -1317,22 +1535,49 @@ public class DataAwareController extends AbstractController {
 			writeAttribute("string", "lifecycle:model", "standard");
 		}
 
+		/**
+		 * Opens a trace with the given name. The caller adds its events and closes it with {@link #endElement()}.
+		 *
+		 * @param name the trace's {@code concept:name}
+		 * @throws XMLStreamException if writing fails
+		 */
 		void startTrace(String name) throws XMLStreamException {
 			startElement("trace");
 			writeAttribute("string", XConceptExtension.KEY_NAME, name);
 		}
 
-		//concept:name and lifecycle:transition; the caller adds further attributes and calls endElement()
+		/**
+		 * Opens an event of the given activity, with its {@code concept:name} and its {@code lifecycle:transition} ("complete"). The caller
+		 * adds further attributes and closes it with {@link #endElement()}.
+		 *
+		 * @param activity the event's activity
+		 * @throws XMLStreamException if writing fails
+		 */
 		void startEvent(String activity) throws XMLStreamException {
 			startElement("event");
 			writeAttribute("string", XConceptExtension.KEY_NAME, activity);
 			writeAttribute("string", XLifecycleExtension.KEY_TRANSITION, "complete");
 		}
 
+		/**
+		 * Writes the {@code time:timestamp} attribute of the open event, in local time without time zone, e.g. {@code 2023-08-07T02:08:50}.
+		 *
+		 * @param timestamp the timestamp
+		 * @throws XMLStreamException if writing fails
+		 */
 		void writeTimestamp(ZonedDateTime timestamp) throws XMLStreamException {
 			writeAttribute("date", XTimeExtension.KEY_TIMESTAMP, timestamp.withZoneSameInstant(ZoneId.systemDefault()).format(TIMESTAMP_FORMATTER));
 		}
 
+		/**
+		 * Writes an attribute of the innermost open element.
+		 *
+		 * @param type the XES attribute type, i.e. the element name: {@code string}, {@code int}, {@code float}, {@code boolean},
+		 *        {@code date}, ...
+		 * @param key the attribute's key
+		 * @param value the attribute's value
+		 * @throws XMLStreamException if writing fails
+		 */
 		void writeAttribute(String type, String key, String value) throws XMLStreamException {
 			newLine();
 			xml.writeEmptyElement(type);
@@ -1340,12 +1585,25 @@ public class DataAwareController extends AbstractController {
 			xml.writeAttribute("value", value);
 		}
 
+		/**
+		 * Closes the innermost open element (trace, event, ...).
+		 *
+		 * @throws XMLStreamException if writing fails
+		 */
 		void endElement() throws XMLStreamException {
 			depth--;
 			newLine();
 			xml.writeEndElement();
 		}
 
+		/**
+		 * Writes the declaration of an XES extension.
+		 *
+		 * @param name the extension's name, e.g. "Time"
+		 * @param prefix the prefix of the extension's attribute keys, e.g. "time"
+		 * @param uri the location of the extension's definition
+		 * @throws XMLStreamException if writing fails
+		 */
 		private void writeExtension(String name, String prefix, String uri) throws XMLStreamException {
 			newLine();
 			xml.writeEmptyElement("extension");
@@ -1354,17 +1612,32 @@ public class DataAwareController extends AbstractController {
 			xml.writeAttribute("uri", uri);
 		}
 
+		/**
+		 * Opens an element on a new line, and indents the elements within it one tab further.
+		 *
+		 * @param name the element's name
+		 * @throws XMLStreamException if writing fails
+		 */
 		private void startElement(String name) throws XMLStreamException {
 			newLine();
 			xml.writeStartElement(name);
 			depth++;
 		}
 
+		/**
+		 * Starts a new line, indented by the current nesting depth.
+		 *
+		 * @throws XMLStreamException if writing fails
+		 */
 		private void newLine() throws XMLStreamException {
 			xml.writeCharacters("\n" + "\t".repeat(depth));
 		}
 
-		//Closes the log element and the file
+		/**
+		 * Closes all elements still open (including the log), ends the document and closes the file.
+		 *
+		 * @throws IOException if writing or closing the file fails
+		 */
 		@Override
 		public void close() throws IOException {
 			try {
@@ -1382,9 +1655,16 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Gives every prefix event without a (valid) "timestamp" attribute one: the given time, or the preceding event's timestamp if that is later, since an
-	//event can't happen before the one preceding it. It is stored rather than only exported, so the timestamp EventCell's editor shows for an event is
-	//the one exported to the planner, whether or not it was ever confirmed. Returns every event's timestamp, in prefix order.
+	/**
+	 * Gives every prefix event without a (valid) {@code timestamp} attribute one: the given time, or the preceding event's timestamp if that
+	 * is later, since an event can't happen before the one preceding it. The timestamp is stored rather than only exported, so the timestamp
+	 * {@link EventCell}'s editor shows for an event is the one exported to the planner, whether or not it was ever confirmed.
+	 *
+	 * @param prefixEvents the prefix's events
+	 * @param attributeValues the prefix's attribute values, by (1-based) event number; missing timestamps are added to it
+	 * @param time the timestamp given to events without one, truncated to seconds
+	 * @return every event's timestamp, in prefix order
+	 */
 	private static List<ZonedDateTime> fillMissingTimestamps(List<String> prefixEvents, Map<Integer, Map<String, String>> attributeValues, ZonedDateTime time) {
 		ZonedDateTime fallbackTime = time.truncatedTo(ChronoUnit.SECONDS); //The stored format has no fraction of a second
 		List<ZonedDateTime> timestamps = new ArrayList<ZonedDateTime>();
@@ -1401,7 +1681,13 @@ public class DataAwareController extends AbstractController {
 		return timestamps;
 	}
 
-	//Parses a value in the "timestamp" attribute format EventCell's editor expects, or returns null if it is missing/invalid
+	/**
+	 * Parses a value in the {@code timestamp} attribute format {@link EventCell}'s editor expects, e.g. {@code 2023-08-07T12:00:00}, as a
+	 * time in the system's time zone.
+	 *
+	 * @param value the attribute value, may be {@code null}
+	 * @return the timestamp, or {@code null} if the value is missing or invalid
+	 */
 	private static ZonedDateTime parseTimestamp(String value) {
 		if (value == null || value.isBlank()) {
 			return null;
@@ -1414,8 +1700,12 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Prefixes whose continuation can be exported: only plans from the data-aware planner carry the attribute values (and times) an exported event needs,
-	//unlike a plan carried over from Data-Agnostic
+	/**
+	 * Finds the prefixes whose continuation can be exported. Only plans from the data-aware planner carry the attribute values (and times) an
+	 * exported event needs, unlike a plan carried over from the Data-Agnostic page.
+	 *
+	 * @return the (0-based) indices of these prefixes, in prefix order
+	 */
 	private List<Integer> getExportableContinuationIndices() {
 		List<Integer> exportableIndices = new ArrayList<Integer>();
 		for (int i = 0; i < prefixes.size(); i++) {
@@ -1426,13 +1716,22 @@ public class DataAwareController extends AbstractController {
 		return exportableIndices;
 	}
 
-	//Export is only offered once the planner produced at least one continuation, and is withdrawn again when they are reset
+	/**
+	 * Enables the Export button once the planner has produced at least one exportable continuation, and disables it again once there are none.
+	 */
 	private void updateExportButton() {
 		exportContinuationButton.setDisable(getExportableContinuationIndices().isEmpty());
 	}
 
-	//Whether a plan step ("action;activity") becomes an event of an exported continuation: only events of the models' alphabet (the Activities
-	//pane, i.e. the selected process specifications) are exported, which excludes resets; prefix events only if includePrefixEvents
+	/**
+	 * Tells whether a plan step becomes an event of an exported continuation. Only events of the models' alphabet (the Activities pane, i.e.
+	 * the selected process specifications) are exported, which excludes resets: the steps the planner added and, if
+	 * {@code includePrefixEvents}, the replayed prefix events (sync and skip steps).
+	 *
+	 * @param step the plan step ({@code action;activity}), split into its action and activity
+	 * @param includePrefixEvents whether the prefix events are exported as well
+	 * @return {@code true} if the step is exported
+	 */
 	private boolean isExportedPlanStep(String[] step, boolean includePrefixEvents) {
 		if (step.length < 2 || !activityToAttributes.containsKey(step[1].toLowerCase())) {
 			return false;
@@ -1441,7 +1740,10 @@ public class DataAwareController extends AbstractController {
 				|| (includePrefixEvents && (step[0].equals(EnhspPlanParser.SYNC_ACTION) || step[0].equals(EnhspPlanParser.SKIP_ACTION)));
 	}
 
-	//Exports the continuations (plans) of the prefixes the user picks to an XES log, one trace per prefix
+	/**
+	 * Handles the Export button: lets the user pick the continuations to export, and whether to include the prefix events, then writes them
+	 * to an XES log the user chooses, one trace per prefix (see {@link #writeContinuationsAsXes(File, List, boolean)}).
+	 */
 	@FXML
 	private void onClickExportContinuations() {
 		if (selectedEntry != null) {
@@ -1514,9 +1816,17 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Writes one trace per given prefix (named "Prefix <i>"): the events its plan added and, if includePrefixEvents, the prefix events it replayed,
-	//restricted to the models' alphabet (see isExportedPlanStep). Categorical attributes are written as strings and numeric ones as floats, e.g.
-	//<string key="categorical" value="c2"/> and <float key="integer" value="8"/>; each event's time is its plan time.
+	/**
+	 * Writes one trace per given prefix (named {@code Prefix <i>}) to an XES log: the events its plan added and, if
+	 * {@code includePrefixEvents}, the prefix events it replayed, restricted to the models' alphabet (see
+	 * {@link #isExportedPlanStep(String[], boolean)}). Categorical attributes are written as strings and numeric ones as floats, e.g.
+	 * {@code <string key="categorical" value="c2"/>} and {@code <float key="integer" value="8"/>}. Each event's time is its plan time.
+	 *
+	 * @param file the XES file to write
+	 * @param prefixIndices the (0-based) indices of the prefixes to export; each must have a continuation from the data-aware planner
+	 * @param includePrefixEvents whether to include the prefix events (complete traces), not only the added events
+	 * @throws IOException if the file can't be written
+	 */
 	private void writeContinuationsAsXes(File file, List<Integer> prefixIndices, boolean includePrefixEvents) throws IOException {
 		Set<String> categoricalAttributes = getCategoricalAttributes(new ArrayList<AbstractModel>(ModelRegistry.getInstance().getModels()));
 
@@ -1554,7 +1864,12 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Inverse of extractAttributeValueString: the XES attribute type (element name) matching how the value was typed in
+	/**
+	 * Determines the XES attribute type matching how a value was typed in; the inverse of {@link #extractAttributeValueString(XAttribute)}.
+	 *
+	 * @param value the attribute value
+	 * @return the XES attribute type (element name): {@code int}, {@code float}, {@code boolean} or {@code string}
+	 */
 	private static String getXesAttributeType(String value) {
 		if (value.matches("[-+]?\\d+")) {
 			return "int";
@@ -1566,24 +1881,41 @@ public class DataAwareController extends AbstractController {
 		return "string";
 	}
 
-	//A collapsed TitledPane should only take up its title bar's height; only an expanded pane should compete for the column's leftover growable space
+	/**
+	 * Lets the given pane compete for the column's leftover space only while it is expanded, so that a collapsed pane only takes up its title
+	 * bar's height.
+	 *
+	 * @param pane the pane
+	 */
 	private void bindPaneGrowToExpanded(TitledPane pane) {
 		VBox.setVgrow(pane, pane.isExpanded() ? Priority.ALWAYS : Priority.NEVER);
 		pane.expandedProperty().addListener((observable, oldValue, expanded) -> VBox.setVgrow(pane, expanded ? Priority.ALWAYS : Priority.NEVER));
 	}
 
-	//Expands the specification panes on the left and every row within them (models, activities, their groups, attributes)
+	/**
+	 * Handles the Expand All button: expands the specification panes on the left and every row within them (models, activities, their
+	 * groups, attributes).
+	 */
 	@FXML
 	private void onClickExpandAll() {
 		setSpecificationPanesExpanded(true);
 	}
 
-	//Collapses the specification panes on the left and every row within them, so they stay collapsed when the panes are opened again
+	/**
+	 * Handles the Collapse All button: collapses the specification panes on the left and every row within them, so that the rows stay
+	 * collapsed when the panes are expanded again.
+	 */
 	@FXML
 	private void onClickCollapseAll() {
 		setSpecificationPanesExpanded(false);
 	}
 
+	/**
+	 * Expands or collapses the specification panes on the left (Process Specifications, Constraints, Activities, Attributes) and every row
+	 * within them.
+	 *
+	 * @param expanded {@code true} to expand, {@code false} to collapse
+	 */
 	private void setSpecificationPanesExpanded(boolean expanded) {
 		for (TitledPane pane : new TitledPane[] {modelRegistryPane, constraintsPane, activitiesAttributesPane, attributesPane}) {
 			pane.setExpanded(expanded);
@@ -1593,7 +1925,13 @@ public class DataAwareController extends AbstractController {
 		setRowsExpanded(attributesTreeView.getRoot(), expanded);
 	}
 
-	//The (hidden) root itself stays expanded, otherwise none of its rows would be shown at all
+	/**
+	 * Expands or collapses every row below the given root that has children, recursively. The (hidden) root itself stays expanded, otherwise
+	 * none of its rows would be shown at all.
+	 *
+	 * @param root the tree's root, may be {@code null}
+	 * @param expanded {@code true} to expand, {@code false} to collapse
+	 */
 	private static void setRowsExpanded(TreeItem<?> root, boolean expanded) {
 		if (root == null) {
 			return;
@@ -1606,6 +1944,13 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	/**
+	 * Returns whether the given process specification is checked in the Process Specifications pane, as the property its checkbox is bound
+	 * to. It is created unchecked on first access; checking or unchecking it refreshes the specification panes.
+	 *
+	 * @param model the process specification
+	 * @return the model's selection state
+	 */
 	private BooleanProperty getModelSelectedProperty(AbstractModel model) {
 		return modelSelectionState.computeIfAbsent(model, m -> {
 			BooleanProperty selected = new SimpleBooleanProperty(false);
@@ -1614,8 +1959,11 @@ public class DataAwareController extends AbstractController {
 		});
 	}
 
-	//Refreshes the Activities panel with the unique (case-insensitive) activities of the currently selected process specifications: each with its cost,
-	//its bound attributes (Declare models only) and the models containing it
+	/**
+	 * Refreshes the Activities pane with the unique (case-insensitive) activities of the selected process specifications: each with its cost,
+	 * its bound attributes (Declare models only) and the models containing it. Also refreshes {@link #activityToAttributes}, whether the
+	 * attribute editor shows a timestamp field, and the Constraints and Attributes panes.
+	 */
 	private void updateActivitiesListView() {
 		activityToAttributes.clear();
 		Map<String, List<AbstractModel>> activityToModels = new HashMap<String, List<AbstractModel>>();
@@ -1668,8 +2016,10 @@ public class DataAwareController extends AbstractController {
 		updateAttributesTreeView();
 	}
 
-	//Refreshes the Constraints panel with the constraints of the currently selected process specifications: one collapsible row per model (in model
-	//order), holding its constraints in file order - or, for a Petri net, a single row for the net itself
+	/**
+	 * Refreshes the Constraints pane with the constraints of the selected process specifications: one collapsible row per model (in model
+	 * order), holding its constraints in file order or, for a Petri net, a single row for the net itself.
+	 */
 	private void updateConstraintsTableView() {
 		TreeItem<ConstraintEntry> constraintsRoot = new TreeItem<ConstraintEntry>();
 		for (AbstractModel model : getSelectedModels()) {
@@ -1694,8 +2044,17 @@ public class DataAwareController extends AbstractController {
 		constraintsTreeTableView.setRoot(constraintsRoot); //An empty root shows the placeholder
 	}
 
-	//Makes costColumn show and edit the cost of each row that has one (costOf returns null for rows without): Enter confirms, and input that
-	//isn't a non-negative number is rejected, showing the previous cost again. Rows isLocked holds for show their cost greyed out and can't be edited
+	/**
+	 * Makes the given column show and edit the cost of each row that has one. Enter confirms an edit; input that isn't a non-negative number
+	 * is rejected, and the previous cost is shown again. Rows for which {@code isLocked} holds show their cost greyed out, and it can't be
+	 * edited.
+	 *
+	 * @param <T> the type of the tree's rows
+	 * @param treeTableView the tree the column belongs to
+	 * @param costColumn the column
+	 * @param costOf the cost of a row, or {@code null} for rows without one
+	 * @param isLocked whether a row's cost is locked
+	 */
 	private static <T> void setupCostColumn(TreeTableView<T> treeTableView, TreeTableColumn<T, Double> costColumn, Function<T, DoubleProperty> costOf, Predicate<T> isLocked) {
 		costColumn.setCellValueFactory(data -> {
 			DoubleProperty cost = data.getValue().getValue() == null ? null : costOf.apply(data.getValue().getValue());
@@ -1729,7 +2088,9 @@ public class DataAwareController extends AbstractController {
 		});
 	}
 
-	//Makes the Hard column show a checkbox for each constraint (and Petri net), but none for the model rows
+	/**
+	 * Makes the Hard column of the Constraints pane show a checkbox for each constraint (and Petri net), but none for the model rows.
+	 */
 	private void setupHardColumn() {
 		constraintHardColumn.setCellValueFactory(data -> {
 			BooleanProperty hard = data.getValue().getValue() == null ? null : data.getValue().getValue().hard;
@@ -1746,7 +2107,11 @@ public class DataAwareController extends AbstractController {
 		});
 	}
 
-	//Adds context menu entries to mark the selected constraints as hard or soft at once (a selected model row stands for all of its constraints)
+	/**
+	 * Adds context menu entries to the Constraints pane that mark the selected constraints as hard or soft at once (a selected model row
+	 * stands for all of its constraints). Must be called after {@link #setupBulkCostEditing(TreeTableView, Function, String, String)},
+	 * which creates the context menu.
+	 */
 	private void setupBulkHardEditing() {
 		MenuItem markHardItem = new MenuItem("Mark Selected Constraints as Hard");
 		markHardItem.setOnAction(event -> getRowProperties(constraintsTreeTableView, entry -> entry.hard, true).forEach(hard -> hard.set(true)));
@@ -1757,19 +2122,33 @@ public class DataAwareController extends AbstractController {
 		constraintsTreeTableView.getContextMenu().getItems().addAll(new SeparatorMenuItem(), markHardItem, markSoftItem);
 	}
 
-	//Sets the cost of the selected constraints, or of all constraints if none are selected (hard constraints excluded)
+	/**
+	 * Handles the Set Cost... button of the Constraints pane: sets the cost of the selected constraints, or of all constraints if none are
+	 * selected (hard constraints excluded).
+	 */
 	@FXML
 	private void onClickSetConstraintCosts() {
 		promptCostsOfSelectionOrAll(constraintsTreeTableView, ConstraintEntry::getEditableViolationCost, "constraint", "constraints");
 	}
 
-	//Sets the cost of the selected activities, or of all activities if none are selected
+	/**
+	 * Handles the Set Cost... button of the Activities pane: sets the cost of the selected activities, or of all activities if none are
+	 * selected.
+	 */
 	@FXML
 	private void onClickSetActivityCosts() {
 		promptCostsOfSelectionOrAll(activitiesTreeTableView, entry -> entry.cost, "activity", "activities");
 	}
 
-	//Lets several rows of the tree be selected, and adds a context menu to set the cost of the selected / all items (e.g. "constraints") at once
+	/**
+	 * Lets several rows of the given tree be selected, and adds a context menu to set the cost of the selected items, or of all items, at once.
+	 *
+	 * @param <T> the type of the tree's rows
+	 * @param treeTableView the tree
+	 * @param costOf the editable cost of a row, or {@code null} for rows without one
+	 * @param itemName the name of one item in the menu and dialog, e.g. "constraint"
+	 * @param itemsName the name of several items, e.g. "constraints"
+	 */
 	private <T> void setupBulkCostEditing(TreeTableView<T> treeTableView, Function<T, DoubleProperty> costOf, String itemName, String itemsName) {
 		treeTableView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
 		String capitalizedItems = Character.toUpperCase(itemsName.charAt(0)) + itemsName.substring(1);
@@ -1782,7 +2161,16 @@ public class DataAwareController extends AbstractController {
 		treeTableView.setContextMenu(contextMenu);
 	}
 
-	//Decided by the selected rows rather than their costs, so that selecting only rows without an editable cost (hard constraints) doesn't fall back to all
+	/**
+	 * Asks for a cost and sets it for the selected rows, or for all rows if none are selected. This is decided by the selected rows rather
+	 * than by their costs, so that selecting only rows without an editable cost (hard constraints) doesn't fall back to all rows.
+	 *
+	 * @param <T> the type of the tree's rows
+	 * @param treeTableView the tree
+	 * @param costOf the editable cost of a row, or {@code null} for rows without one
+	 * @param itemName the name of one item in the dialog, e.g. "constraint"
+	 * @param itemsName the name of several items, e.g. "constraints"
+	 */
 	private <T> void promptCostsOfSelectionOrAll(TreeTableView<T> treeTableView, Function<T, DoubleProperty> costOf, String itemName, String itemsName) {
 		if (treeTableView.getSelectionModel().getSelectedItems().isEmpty()) {
 			promptCosts(treeTableView, getRowProperties(treeTableView, costOf, false), "all", itemName, itemsName);
@@ -1791,8 +2179,18 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//The properties (e.g. costs) of the selected rows (or of all rows), each once. A row without one of its own stands for the nearest ancestor that has one
-	//(e.g. an activity's attribute/model rows) or, failing that, for all descendants that have one (e.g. a model row for its constraints)
+	/**
+	 * Collects the properties (e.g. costs) of the selected rows, or of all rows, each once. A row without one of its own stands for the
+	 * nearest ancestor that has one (e.g. an activity's attribute and model rows) or, failing that, for all descendants that have one (e.g. a
+	 * model row for its constraints).
+	 *
+	 * @param <T> the type of the tree's rows
+	 * @param <P> the type of the properties
+	 * @param treeTableView the tree
+	 * @param propertyOf the property of a row, or {@code null} for rows without one
+	 * @param selectedOnly {@code true} for the selected rows, {@code false} for all rows
+	 * @return the properties, in row order, without duplicates
+	 */
 	private static <T, P> List<P> getRowProperties(TreeTableView<T> treeTableView, Function<T, P> propertyOf, boolean selectedOnly) {
 		List<TreeItem<T>> rows = new ArrayList<TreeItem<T>>();
 		if (selectedOnly) {
@@ -1815,6 +2213,16 @@ public class DataAwareController extends AbstractController {
 		return new ArrayList<P>(properties);
 	}
 
+	/**
+	 * Adds the properties of the given row's descendants to {@code properties}: each child's own property or, for a child without one, its
+	 * descendants' properties.
+	 *
+	 * @param <T> the type of the tree's rows
+	 * @param <P> the type of the properties
+	 * @param item the row
+	 * @param propertyOf the property of a row, or {@code null} for rows without one
+	 * @param properties the properties collected so far
+	 */
 	private static <T, P> void addDescendantProperties(TreeItem<T> item, Function<T, P> propertyOf, Set<P> properties) {
 		for (TreeItem<T> child : item.getChildren()) {
 			P property = child.getValue() == null ? null : propertyOf.apply(child.getValue());
@@ -1826,7 +2234,16 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Asks for a cost (pre-filled if the given costs are currently equal) and sets all of them to it; scope (e.g. "the selected"/"all") is only used in the prompt
+	/**
+	 * Asks for a cost, pre-filled if the given costs are currently equal, and sets all of them to it. Shows a warning instead if there are no
+	 * costs to set.
+	 *
+	 * @param treeTableView the tree whose costs are set, refreshed afterwards
+	 * @param costs the costs to set
+	 * @param scope the scope shown in the prompt, e.g. "the selected" or "all"
+	 * @param itemName the name of one item, e.g. "constraint"
+	 * @param itemsName the name of several items, e.g. "constraints"
+	 */
 	private void promptCosts(TreeTableView<?> treeTableView, List<DoubleProperty> costs, String scope, String itemName, String itemsName) {
 		if (costs.isEmpty()) {
 			boolean noRows = treeTableView.getRoot() == null || treeTableView.getRoot().getChildren().isEmpty();
@@ -1853,9 +2270,14 @@ public class DataAwareController extends AbstractController {
 		});
 	}
 
-	//The cost model handed to the PDDL generator: one "<ActivityName> <activityCost> 0" line per activity of the Activities pane (i.e. of the selected
-	//process specifications), spelled as in the model files, since the generator matches activity names case-sensitively. Every activity costs 0
-	//unless Activity Cost is an optimization target (the costs set in the Activities pane are kept, for when it is again)
+	/**
+	 * Builds the cost model handed to the PDDL generator: one {@code <ActivityName> <activityCost> 0} line per activity of the Activities
+	 * pane (i.e. of the selected process specifications), spelled as in the model files, since the generator matches activity names
+	 * case-sensitively. Every activity costs 0 unless Activity Cost is an optimization target; the costs set in the Activities pane are kept
+	 * for when it is one again.
+	 *
+	 * @return the cost model's lines
+	 */
 	private List<String> buildCostModelLines() {
 		boolean activityCostOptimized = optimizationTargets.contains(OptimizationTarget.ACTIVITY_COST);
 		List<String> lines = new ArrayList<String>();
@@ -1865,8 +2287,14 @@ public class DataAwareController extends AbstractController {
 		return lines;
 	}
 
-	//The violation costs handed to the PDDL generator, from the Constraints pane: "<model file>|<constraint name> <cost>" per Declare constraint
-	//(named as the generator names it, see getPlannerConstraintNames) and "<model file> <cost>" per Petri net, with HARD_CONSTRAINT_COST as the cost of hard ones
+	/**
+	 * Builds the violation costs handed to the PDDL generator, from the Constraints pane: {@code <model file>|<constraint name> <cost>} per
+	 * Declare constraint (named as the generator names it, see {@link #getPlannerConstraintNames(List)}) and {@code <model file> <cost>} per
+	 * Petri net, with {@link #HARD_CONSTRAINT_COST} as the cost of hard ones.
+	 *
+	 * @param plannedModels the models handed to the generator, in the order they are passed to it
+	 * @return the lines of the violation cost file
+	 */
 	private List<String> buildViolationCostLines(List<AbstractModel> plannedModels) {
 		Map<DeclareConstraint, String> constraintNames = getPlannerConstraintNames(plannedModels);
 		List<String> lines = new ArrayList<String>();
@@ -1883,8 +2311,13 @@ public class DataAwareController extends AbstractController {
 		return lines;
 	}
 
-	//The violation cost of each soft Declare constraint and Petri net of the given models (as buildViolationCostLines hands them to the planner),
-	//keyed by the DeclareConstraint / PnModel itself; hard ones are left out, as they have no cost
+	/**
+	 * Collects the violation cost of each soft Declare constraint and Petri net of the given models, as
+	 * {@link #buildViolationCostLines(List)} hands them to the planner. Hard ones are left out, as they have no cost.
+	 *
+	 * @param models the models
+	 * @return the costs, keyed by the {@link DeclareConstraint} or {@link PnModel} itself (identity-keyed)
+	 */
 	private Map<Object, BigDecimal> getSoftViolationCosts(List<AbstractModel> models) {
 		List<Object> constraintsAndPetriNets = new ArrayList<Object>();
 		for (AbstractModel model : models) {
@@ -1903,9 +2336,14 @@ public class DataAwareController extends AbstractController {
 		return costs;
 	}
 
-	//The given prefix's plan cost split into its violation, activity and waiting cost (shown as the plan cost's tooltip); null for a plan that
-	//wasn't loaded from the data-aware planner. Must be called right after the models were replayed against the plan (see updateTrace), as the
-	//violation cost of a Discard plan is taken from that replay
+	/**
+	 * Describes the given prefix's plan cost split into its violation, activity and waiting cost, shown as the plan cost's tooltip. Must be
+	 * called right after the models were replayed against the plan (see {@link #updateTrace(Integer)}), since the violation cost of a
+	 * Discard plan is taken from that replay.
+	 *
+	 * @param entry the prefix
+	 * @return the description, or {@code null} for a plan that wasn't loaded from the data-aware planner
+	 */
 	private String describePlanCost(PrefixEntry entry) {
 		EnhspPlanParser.ParsedPlan plan = entry.parsedPlan;
 		if (plan == null) {
@@ -1925,9 +2363,14 @@ public class DataAwareController extends AbstractController {
 				+ System.lineSeparator() + "Waiting cost: " + EnhspPlanParser.formatCost(plan.getWaitingCost());
 	}
 
-	//Sum of the planner-given violation costs (planViolationCosts) of what the last replay of the models left violated at the end of the trace:
-	//Declare constraints whose final monitoring state is VIOL, and Petri nets in which some activity occurred while its transition wasn't enabled.
-	//Under Discard each constraint / net is charged once, however often it is violated
+	/**
+	 * Sums the violation costs the planner was given ({@link #planViolationCosts}) of what the last replay of the models left violated at the
+	 * end of the trace: Declare constraints whose final monitoring state is {@link MonitoringState#VIOL}, and Petri nets in which some
+	 * activity occurred while its transition wasn't enabled. Under the Discard recovery strategy, each constraint or net is charged once,
+	 * however often it is violated.
+	 *
+	 * @return the violation cost of the replayed trace
+	 */
 	private BigDecimal getReplayedViolationCost() {
 		BigDecimal violationCost = BigDecimal.ZERO;
 		for (AbstractModel model : ModelRegistry.getInstance().getModels()) {
@@ -1942,16 +2385,33 @@ public class DataAwareController extends AbstractController {
 		return violationCost;
 	}
 
+	/**
+	 * Returns the violation cost of a Declare constraint or Petri net as written to the violation cost file.
+	 *
+	 * @param constraintOrPetriNet a {@link DeclareConstraint}, or the {@link PnModel} of a Petri net
+	 * @return the cost, or {@link #HARD_CONSTRAINT_COST} for a hard constraint
+	 */
 	private String getViolationCostString(Object constraintOrPetriNet) {
 		return getHardProperty(constraintOrPetriNet).get() ? HARD_CONSTRAINT_COST : COST_CONVERTER.toString(getViolationCost(constraintOrPetriNet).get());
 	}
 
-	//Cost of an activity (case-insensitive); DEFAULT_ACTIVITY_COST until edited in the Activities pane
+	/**
+	 * Returns the cost of an activity, which is {@link #DEFAULT_ACTIVITY_COST} until edited in the Activities pane.
+	 *
+	 * @param activity the activity, in any casing (costs are kept case-insensitively)
+	 * @return the activity's cost, as the property the Activities pane edits
+	 */
 	private DoubleProperty getActivityCost(String activity) {
 		return activityCosts.computeIfAbsent(activity.toLowerCase(), key -> new SimpleDoubleProperty(DEFAULT_ACTIVITY_COST));
 	}
 
-	//Restores whether the user had collapsed the row with the given key, and keeps track of it from now on
+	/**
+	 * Restores whether the user had collapsed the given row, and keeps track of it from now on, so that it survives the tree being rebuilt.
+	 *
+	 * @param item the row
+	 * @param collapsedKeys the keys of the collapsed rows, updated whenever the row is expanded or collapsed
+	 * @param key the row's key
+	 */
 	private static void keepExpansionState(TreeItem<?> item, Set<String> collapsedKeys, String key) {
 		item.setExpanded(!collapsedKeys.contains(key));
 		item.expandedProperty().addListener((observable, oldValue, expanded) -> {
@@ -1963,12 +2423,24 @@ public class DataAwareController extends AbstractController {
 		});
 	}
 
-	//Violation cost of a Declare constraint, or of a Petri net (keyed by its model); DEFAULT_VIOLATION_COST until edited in the Constraints pane
+	/**
+	 * Returns the violation cost of a Declare constraint or Petri net, which is {@link #DEFAULT_VIOLATION_COST} until edited in the
+	 * Constraints pane.
+	 *
+	 * @param constraintOrPetriNet a {@link DeclareConstraint}, or the {@link PnModel} of a Petri net
+	 * @return the violation cost, as the property the Constraints pane edits
+	 */
 	private DoubleProperty getViolationCost(Object constraintOrPetriNet) {
 		return violationCosts.computeIfAbsent(constraintOrPetriNet, key -> new SimpleDoubleProperty(DEFAULT_VIOLATION_COST));
 	}
 
-	//Whether a Declare constraint, or a Petri net (keyed by its model), is hard; soft until marked in the Constraints pane
+	/**
+	 * Returns whether a Declare constraint or Petri net is hard, i.e. may not be violated. It is soft until marked as hard in the Constraints
+	 * pane.
+	 *
+	 * @param constraintOrPetriNet a {@link DeclareConstraint}, or the {@link PnModel} of a Petri net
+	 * @return the hard flag, as the property the Constraints pane edits
+	 */
 	private BooleanProperty getHardProperty(Object constraintOrPetriNet) {
 		return hardConstraints.computeIfAbsent(constraintOrPetriNet, key -> {
 			BooleanProperty hard = new SimpleBooleanProperty(false);
@@ -1997,7 +2469,10 @@ public class DataAwareController extends AbstractController {
 		}
 	};
 
-	//Refreshes the Attributes panel with the declared value range/set of each attribute, merged (widest range / union of values) across the currently selected Declare models
+	/**
+	 * Refreshes the Attributes pane with the declared value range or value set of each attribute, merged across the selected Declare models
+	 * (widest range, union of values).
+	 */
 	private void updateAttributesTreeView() {
 		Map<String, AttributeDomain> mergedDomains = new TreeMap<String, AttributeDomain>();
 		for (AbstractModel model : getSelectedModels()) {
@@ -2021,12 +2496,21 @@ public class DataAwareController extends AbstractController {
 		attributesTreeView.setRoot(attributesRoot);
 	}
 
-	//Attribute names bound to the given activity (from the currently selected Declare models), for the planListView attribute editor
+	/**
+	 * Returns the attributes bound to the given activity by the selected Declare models, for the attribute editor of the Prefix pane.
+	 *
+	 * @param activityName the activity, in any casing, may be {@code null}
+	 * @return the lowercased attribute names; empty if there are none
+	 */
 	private Set<String> getAttributesForActivity(String activityName) {
 		return activityToAttributes.getOrDefault(activityName == null ? "" : activityName.toLowerCase(), Collections.emptySet());
 	}
 
-	//Process specifications checked in modelTabelView, to be handed to the data-aware planner
+	/**
+	 * Returns the process specifications checked in the Process Specifications pane, which are handed to the data-aware planner.
+	 *
+	 * @return the selected models, in {@link ModelRegistry} order
+	 */
 	public List<AbstractModel> getSelectedModels() {
 		List<AbstractModel> selectedModels = new ArrayList<AbstractModel>();
 		for (AbstractModel model : ModelRegistry.getInstance().getModels()) {
@@ -2037,7 +2521,12 @@ public class DataAwareController extends AbstractController {
 		return selectedModels;
 	}
 
-	//Discards the selected prefix's continuation if it has one (making the prefix editable again), otherwise clears the prefix itself
+	/**
+	 * Handles the Reset button: discards the selected prefix's continuation if it has one, which makes the prefix editable again; otherwise
+	 * clears the prefix itself.
+	 *
+	 * @param event the button's action event (unused)
+	 */
 	@FXML
 	void onClickPrefix(ActionEvent event) {
 		if (PlannerSession.getInstance().isPlanPresent()) {
@@ -2056,20 +2545,34 @@ public class DataAwareController extends AbstractController {
 		updateSelectedModelVisualizations();
 	}
 
-	//Removes a single event from the manually-built prefix (only reachable while no plan is present)
+	/**
+	 * Removes a single event from the selected prefix, from the Prefix pane's event editor. Only reachable while no plan is present.
+	 *
+	 * @param eventNumber the (1-based) number of the event to remove
+	 */
 	private void deletePrefixEvent(int eventNumber) {
 		PlannerSession.getInstance().removePrefixEvent(eventNumber);
 		updateTrace(null);
 		updateSelectedModelVisualizations();
 	}
 
-	//Re-replays the trace after an attribute value is confirmed in planListView's attribute editor popup, since the
-	//constraint automata need to be re-run with the new value rather than waiting for the next prefix event to trigger a replay
+	/**
+	 * Replays the trace again once an attribute value is confirmed in the Prefix pane's attribute editor popup. The constraint automata need
+	 * to be re-run with the new value right away, rather than waiting for the next prefix event to trigger a replay.
+	 *
+	 * @param eventNumber the number of the event whose attribute value changed (unused, the whole trace is replayed)
+	 */
 	private void onAttributeValueChanged(int eventNumber) {
 		updateTrace(currentEventIndex.get());
 	}
 
-	//Called from JavaScript when the user clicks on a graph element, extends the manually-built prefix
+	/**
+	 * Appends the clicked activity to the selected prefix, spelled as in the model file. Called when the user clicks on an activity or
+	 * transition of a visualized model (see {@link #addGraphClickHandlers(Object)}). Does nothing while a plan is present.
+	 *
+	 * @param modelId the id of the clicked model
+	 * @param activityEncoding the clicked activity's encoding in the model's visualization
+	 */
 	private void addToTracePrefix(String modelId, String activityEncoding) {
 		if (PlannerSession.getInstance().isPlanPresent()) {
 			return;
@@ -2092,8 +2595,14 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Attribute values (attribute name -> value) attached to each event of the given trace, in order: the manually-built prefix's, or the
-	//data-aware plan's (prefix events keep their values, added events carry the planner's); a plan carried over from Data-Agnostic has none
+	/**
+	 * Collects the attribute values attached to each event of the given trace, in order: the selected prefix's while no plan is present,
+	 * otherwise the data-aware plan's (prefix events keep their values, added events carry the planner's). A plan carried over from the
+	 * Data-Agnostic page has none.
+	 *
+	 * @param activeTrace the active trace, i.e. the prefix or its plan
+	 * @return for each event, its attribute values (attribute name to value), empty for none
+	 */
 	private List<Map<String, String>> buildAttributeValuesPerEvent(List<String> activeTrace) {
 		boolean planPresent = PlannerSession.getInstance().isPlanPresent();
 		List<Map<String, String>> planAttributeValues = planPresent && selectedEntry != null ? selectedEntry.planAttributeValues : null;
@@ -2110,8 +2619,14 @@ public class DataAwareController extends AbstractController {
 		return attributeValuesPerEvent;
 	}
 
-	//Resets all models against whatever trace is currently active (plan continuation if present, otherwise the manually-built prefix) and refreshes the plan list / timeline
-	//Declare models replay data conditions against attribute values here (Data-Aware page only); Petri net models have no data conditions to consider
+	/**
+	 * Replays all models against the active trace (the selected prefix's plan if present, otherwise the prefix itself), and refreshes the
+	 * Prefix and Continuation lists, the plan cost and the timeline. Declare models also check their data conditions against the events'
+	 * attribute values; Petri nets have no data conditions. Prefix events without a timestamp get one first (see
+	 * {@link #fillMissingTimestamps(List, Map, ZonedDateTime)}).
+	 *
+	 * @param selectIndex the timeline position to move to afterwards, or {@code null} to stay at the start of the trace
+	 */
 	private void updateTrace(Integer selectIndex) {
 		//A newly added (or carried over / imported, timestamp-less) prefix event gets its timestamp right away, which is then shown and exported as is
 		fillMissingTimestamps(PlannerSession.getInstance().getCurrentPrefix(), PlannerSession.getInstance().getPrefixAttributeValuesMap(), ZonedDateTime.now());
@@ -2143,7 +2658,12 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Clicking or arrowing to an event in a list moves the timeline to that event's replayed position
+	/**
+	 * Makes arrowing up or down to an event in the given list move the timeline to that event's replayed position. Clicking on an event is
+	 * handled by the list's {@link EventCell}s.
+	 *
+	 * @param listView the Prefix or Continuation list
+	 */
 	private void setupTimelineListView(ListView<EventData> listView) {
 		listView.setOnKeyReleased((event) -> {
 			if(event.getCode() == KeyCode.UP || event.getCode() == KeyCode.KP_UP || event.getCode() == KeyCode.DOWN || event.getCode() == KeyCode.KP_DOWN) {
@@ -2155,7 +2675,13 @@ public class DataAwareController extends AbstractController {
 		});
 	}
 
-	//Timeline position of the event with the given event number in the given list (0, the trace start, if it isn't found)
+	/**
+	 * Finds the timeline position of the event with the given number in the given list.
+	 *
+	 * @param listView the Prefix or Continuation list
+	 * @param eventNumber the event's number
+	 * @return the event's timeline position, or 0 (the start of the trace) if it isn't found
+	 */
 	private static int getTimelineIndex(ListView<EventData> listView, int eventNumber) {
 		for (EventData eventData : listView.getItems()) {
 			if (eventData.getEventNumber() == eventNumber) {
@@ -2165,7 +2691,12 @@ public class DataAwareController extends AbstractController {
 		return 0;
 	}
 
-	//Highlights, in both lists, the event replayed at the given timeline position (a prefix event may have no position of its own while a plan is replayed)
+	/**
+	 * Selects, in both the Prefix and the Continuation list, the event replayed at the given timeline position, or clears the list's
+	 * selection if it has no such event (while a plan is replayed, a prefix event may have no position of its own).
+	 *
+	 * @param timelineIndex the timeline position
+	 */
 	private void selectTimelineIndex(int timelineIndex) {
 		for (ListView<EventData> listView : List.of(planListView, continuationListView)) {
 			int listIndex = -1;
@@ -2183,6 +2714,12 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	/**
+	 * Moves the timeline to the given position, e.g. when an event is clicked on in the Prefix or Continuation list, and pauses the
+	 * animation if it is playing.
+	 *
+	 * @param selectedIndex the timeline position; ignored if negative (an event without a position of its own)
+	 */
 	private void handleplanListViewSelection(int selectedIndex) {
 		if (selectedIndex < 0) {
 			return; //An event with no timeline position of its own (e.g. a prefix event a carried-over plan doesn't map back to)
@@ -2200,6 +2737,9 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	/**
+	 * Handles the play/pause button of the timeline: starts or pauses the animation that replays the trace event by event.
+	 */
 	@FXML
 	private void playPause() {
 		if (animationInProgress) {
@@ -2213,6 +2753,9 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	/**
+	 * Handles the step backward button of the timeline: moves one event back, and stops the animation if it is playing.
+	 */
 	@FXML
 	private void stepBackward() {
 		if (animationInProgress)
@@ -2229,6 +2772,9 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	/**
+	 * Handles the step forward button of the timeline: moves one event forward, and stops the animation if it is playing.
+	 */
 	@FXML
 	private void stepForward() {
 		if (animationInProgress)
@@ -2249,6 +2795,19 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	/**
+	 * Loads the visualization page into the given view and sets up its zoom controls: Ctrl + mouse wheel, the zoom slider and the percentage
+	 * field are kept in sync with the view's zoom. Once the page has loaded, this controller is exposed to its JavaScript as {@code app}; the
+	 * Petri net view is only set up after the Declare view has loaded. A visualization requested before the page has loaded is shown once
+	 * it has (see {@link #updateVisualization(WebView, AbstractModel, ModelType)}).
+	 *
+	 * @param visualizationWebView the view
+	 * @param modelType the type of models the view shows
+	 * @param zoomSlider the view's zoom slider
+	 * @param zoomSliderValueObject the zoom slider's value, bound to the view's zoom
+	 * @param zoomValueField the field showing (and editing) the zoom as a percentage
+	 * @param webViewZoomObject the view's zoom
+	 */
 	private void setupWebView(WebView visualizationWebView, ModelType modelType, Slider zoomSlider, ObjectProperty<Double> zoomSliderValueObject, TextField zoomValueField, ObjectProperty<Double> webViewZoomObject) {
 		ChangeListener<Worker.State> initialLoadListener = new ChangeListener<Worker.State>() {
 			@Override
@@ -2322,6 +2881,11 @@ public class DataAwareController extends AbstractController {
 		ValidationUtils.addMandatoryPrecentageBehavior(precentageFormat, zoomSlider.getMax() * 100, zoomValueField);
 	}
 
+	/**
+	 * Sets up the timeline controls below the visualizations: the event slider, and the step buttons, which are disabled at the start and end
+	 * of the trace respectively. Moving to another event updates the visualizations and selects the event in the Prefix and Continuation
+	 * lists.
+	 */
 	private void setupTimelineControls() {
 		currentEventNumber.textProperty().bind(currentEventIndex.asString());
 
@@ -2364,8 +2928,13 @@ public class DataAwareController extends AbstractController {
 		stepBackwardButton.setDisable(true);
 	}
 
-	//Updates the planListView (Prefix pane) to match the prefix. Without a plan, the prefix itself is replayed (and editable); with one, each
-	//prefix event points at (and is labelled with) the plan step that replayed it, and the trace end has no position of its own
+	/**
+	 * Refreshes the Prefix list to match the given prefix. Without a plan, the prefix itself is replayed, and its events and their attribute
+	 * values can be edited. With a plan, each prefix event points at (and is labelled with the action of) the plan step that replayed it, and
+	 * the end of the trace has no position of its own.
+	 *
+	 * @param prefix the selected prefix's events
+	 */
 	private void updateplanListView(List<String> prefix) {
 		boolean planPresent = PlannerSession.getInstance().isPlanPresent();
 		List<Integer> planPrefixSteps = planPresent && selectedEntry != null ? selectedEntry.planPrefixSteps : null;
@@ -2395,7 +2964,10 @@ public class DataAwareController extends AbstractController {
 		planListView.getItems().setAll(eventDataList);
 	}
 
-	//Updates the continuationListView (Continuation pane) to show the selected prefix's plan, one entry per replayed step
+	/**
+	 * Refreshes the Continuation list to show the selected prefix's plan: one entry per replayed step, each described by its action,
+	 * attribute values and time (see {@link #describePlanStep(String, Map)}). The list is empty without a plan.
+	 */
 	private void updateContinuationListView() {
 		List<EventData> eventDataList = new ArrayList<EventData>();
 		if (PlannerSession.getInstance().isPlanPresent()) {
@@ -2413,7 +2985,14 @@ public class DataAwareController extends AbstractController {
 		continuationListView.getItems().setAll(eventDataList);
 	}
 
-	//Reset steps carry the violated constraint's PDDL name (or a Petri net's reset activity), shown as the constraint / net instead
+	/**
+	 * Returns the name a plan step is shown with. Reset steps carry the violated constraint's PDDL name (or a Petri net's reset activity),
+	 * which is shown as the constraint (without its conditions) or the Petri net instead.
+	 *
+	 * @param action the step's action, e.g. {@code add} or {@link DeclareModel#RESET_CONSTRAINT_ACTION}
+	 * @param activity the step's activity
+	 * @return the activity for all but reset steps; for a reset step, the constraint or Petri net it resets
+	 */
 	private String getPlanStepDisplayName(String action, String activity) {
 		if (!action.equals(DeclareModel.RESET_CONSTRAINT_ACTION)) {
 			return activity;
@@ -2429,7 +3008,13 @@ public class DataAwareController extends AbstractController {
 		return activity;
 	}
 
-	//E.g. "add [integer=55, categorical=c3] @ 2023-08-07T12:00:00"
+	/**
+	 * Describes a plan step by its action, attribute values and time, e.g. {@code add [integer=55, categorical=c3] @ 2023-08-07T12:00:00}.
+	 *
+	 * @param action the step's action
+	 * @param attributeValues the step's attribute values, including its {@code timestamp} if it has one
+	 * @return the description
+	 */
 	private static String describePlanStep(String action, Map<String, String> attributeValues) {
 		StringBuilder description = new StringBuilder(action);
 		List<String> values = new ArrayList<String>();
@@ -2447,7 +3032,10 @@ public class DataAwareController extends AbstractController {
 		return description.toString();
 	}
 
-	//Updates the constraint statistics shown for each event in both lists, from the selected Declare model's state at each event's timeline position
+	/**
+	 * Updates the constraint statistics shown for each event in the Prefix and Continuation lists: how many constraints of the visualized
+	 * Declare model are in each monitoring state at the event's timeline position.
+	 */
 	private void refreshListStatistics() {
 		AbstractModel declModel = declModelChoice.getSelectionModel().getSelectedItem();
 		for (ListView<EventData> listView : List.of(planListView, continuationListView)) {
@@ -2460,7 +3048,12 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Updates the TimelineControls to match the trace length and creates a matching slider animation
+	/**
+	 * Resets the timeline controls to the start of a trace of the given length, and creates a matching animation of the event slider
+	 * (1.5 seconds per event).
+	 *
+	 * @param activities the active trace
+	 */
 	private void updateTimelineControls(List<String> activities) {
 		if (animationInProgress) {
 			animationTimeline.stop();
@@ -2487,7 +3080,9 @@ public class DataAwareController extends AbstractController {
 		currentEventIndex.setValue(0);
 	}
 
-	//Convenience method for when both visualizations need to be updated
+	/**
+	 * Updates both the Declare and the Petri net visualization to the current timeline position.
+	 */
 	private void updateSelectedModelVisualizations() {
 		try {
 			updateVisualization(declWebView, declModelChoice.getSelectionModel().getSelectedItem(), ModelType.DECLARE);
@@ -2502,6 +3097,15 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	/**
+	 * Shows the given model in the given view, in its state at the current timeline position, or clears the view if there is no model or
+	 * nothing to show. If the view's page is still loading, the visualization is shown once it has loaded (see
+	 * {@link #setupWebView(WebView, ModelType, Slider, ObjectProperty, TextField, ObjectProperty)}).
+	 *
+	 * @param visualizationWebView the view
+	 * @param abstractModel the model, or {@code null} for none
+	 * @param modelType the type of models the view shows
+	 */
 	private void updateVisualization(WebView visualizationWebView, AbstractModel abstractModel, ModelType modelType) {
 		String visualizationString;
 		String script;
@@ -2532,7 +3136,12 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
-	//Called from JavaScript, adds click listeners to all graph nodes
+	/**
+	 * Called from the visualization page's JavaScript whenever it has rendered a model: makes clicking on an activity (or transition) of the
+	 * graph add it to the selected prefix (see {@link #addToTracePrefix(String, String)}).
+	 *
+	 * @param documentObject the page's DOM {@link Document}
+	 */
 	public void addGraphClickHandlers(Object documentObject) {
 		if (documentObject instanceof Document) {
 			Document document = (Document)documentObject;
@@ -2569,12 +3178,19 @@ public class DataAwareController extends AbstractController {
 		}
 	}
 
+	/**
+	 * Handles the Show Past Violations checkbox: switches whether the visualizations show past violations, and updates them.
+	 */
 	@FXML
 	private void switchViolationStrings() {
 		PlannerSession.getInstance().setDisplayViolations(bttnDisplayViolations.isSelected());
 		updateSelectedModelVisualizations();
 	}
 
+	/**
+	 * Handles the Help button of the Declare viewer: creates its popup (how to extend the prefix, and the colors of the constraint states)
+	 * and makes the button toggle that popup from then on. The popup isn't shown on this first click.
+	 */
 	@FXML
 	private void onClickToolTip() {
 		Popup legendPopup = new Popup();
@@ -2606,6 +3222,13 @@ public class DataAwareController extends AbstractController {
 		});
 	}
 
+	/**
+	 * Creates one entry of a color legend: a colored square followed by its description.
+	 *
+	 * @param color the color
+	 * @param description what the color stands for
+	 * @return the entry
+	 */
 	private HBox createLegendItem(Color color, String description) {
 		Rectangle rect = new Rectangle(20, 20, color);
 		rect.setStroke(Color.BLACK);
@@ -2615,6 +3238,10 @@ public class DataAwareController extends AbstractController {
 		return item;
 	}
 
+	/**
+	 * Handles the Help button of the Petri net viewer: creates its popup (how to extend the prefix, and the colors of the transition states)
+	 * and makes the button toggle that popup from then on. The popup isn't shown on this first click.
+	 */
 	@FXML
 	private void onClickToolTipPN() {
 		Popup legendPopup = new Popup();
@@ -2646,6 +3273,11 @@ public class DataAwareController extends AbstractController {
 		});
 	}
 
+	/**
+	 * Handles the Help button above the Prefix pane: creates its popup (how prefixes are replayed, what the plan's actions mean, and what
+	 * the planner settings and the Reset button do) and makes the button toggle that popup from then on. The popup isn't shown on this first
+	 * click.
+	 */
 	@FXML
 	private void onClickToolTipPlan() {
 		Popup legendPopup = new Popup();

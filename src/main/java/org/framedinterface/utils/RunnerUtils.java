@@ -11,13 +11,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 
+/**
+ * Runs external programs. {@link #runProcess(List, File, File)} runs the Data-Aware page's PDDL generator and ENHSP. The other methods
+ * are older variants for the Data-Agnostic page (running the Framed Autonomy Tool and Fast Downward), which aren't used anywhere: that
+ * page uses {@link org.framedinterface.task.GeneratePDDLTask} and {@link org.framedinterface.task.RunPlannerTask} instead.
+ */
 public class RunnerUtils {
 
 	/**
-	 * Runs the given command to completion from the given working directory, with stdout and stderr both going to
-	 * outputFile (or to this process' console if outputFile is null). If the calling thread is interrupted
-	 * (e.g. a cancelled Task), the external process is destroyed rather than left running in the background.
+	 * Runs the given command to completion from the given working directory, with stdout and stderr both going to {@code outputFile} (or
+	 * to this process' console if {@code outputFile} is {@code null}). If the calling thread is interrupted (e.g. a cancelled Task), the
+	 * external process is destroyed rather than left running in the background. The command is printed to the console first.
+	 *
+	 * @param command the command and its arguments
+	 * @param workingDirectory the folder to run the command from
+	 * @param outputFile the file the command's output replaces the contents of, or {@code null} for this process' console
 	 * @return the exit code of the process
+	 * @throws IOException if the command can't be started
+	 * @throws InterruptedException if the calling thread is interrupted while waiting; the process has been destroyed then
 	 */
 	public static int runProcess(List<String> command, File workingDirectory, File outputFile) throws IOException, InterruptedException {
 		System.out.println(command);
@@ -36,6 +47,17 @@ public class RunnerUtils {
 	}
 
 
+	/**
+	 * Runs the Framed Autonomy Tool and answers its two console questions, as {@link org.framedinterface.task.GeneratePDDLTask} does,
+	 * which this method duplicates. Not used anywhere in FrAIm.
+	 *
+	 * @param commandStrings the command line that runs the tool
+	 * @param finMarking the Petri net's final marking, given when the tool asks for it
+	 * @param reset the answer to the tool's question whether constraints are reset after a violation
+	 * @return the tool's exit code
+	 * @throws IOException if the tool can't be started, or reading its output or answering its questions fails
+	 * @throws InterruptedException if the thread is interrupted while waiting for the tool to exit; the tool's process isn't stopped then
+	 */
     public static int generatePDDL(ArrayList<String> commandStrings, String finMarking, boolean reset) throws IOException, InterruptedException{
         String domain = "n";
         if (reset) {
@@ -95,12 +117,16 @@ public class RunnerUtils {
     }
 
 	/**
-	 * This function executes the locally installed version of Fast-Downward on the newly generated PDDL instances.
-	 * @param currentPath The path the current directory(of the JAR file)
-	 * @param domainReset A boolean flag indicating which Domain (.pddl) should be used when invoking Fast-Downward-
-	 * @return 
-	 * @throws InterruptedException
-	 * @throws IOException
+	 * Runs the locally installed Fast Downward ({@code fast-downward/fast-downward.py}, with {@code python.exe}) on the newly generated
+	 * {@code problem.pddl}, with A* search and the blind heuristic, and writes its output to {@code results.txt}. Not used anywhere in
+	 * FrAIm; {@link org.framedinterface.task.RunPlannerTask} does this for the Data-Agnostic page.
+	 *
+	 * @param currentPath the current directory (of the JAR file), which holds Fast Downward, the problem and the domains, and receives
+	 *        {@code results.txt}
+	 * @param domainReset {@code true} to plan with {@code domain_with_reset.pddl}, {@code false} with {@code domain_no_reset.pddl}
+	 * @return Fast Downward's exit code
+	 * @throws InterruptedException if the thread is interrupted while waiting for Fast Downward to exit; it isn't stopped then
+	 * @throws IOException if Fast Downward can't be started
 	 */
 
     public static int runPlanner(String currentPath, boolean domainReset) throws InterruptedException, IOException{
@@ -136,6 +162,17 @@ public class RunnerUtils {
 			return processPlanner.waitFor();
     }
 
+	/**
+	 * Runs Fast Downward from its Apptainer image ({@code fast-downward.sif}, through WSL on Windows) on {@code problem.pddl}, like
+	 * {@link #runPlanner(String, boolean)}. The image, the problem and the domains are looked for relative to FrAIm's working directory.
+	 * Not used anywhere in FrAIm; {@link org.framedinterface.task.RunPlannerTask} does this for the Data-Agnostic page.
+	 *
+	 * @param currentPath the folder that receives {@code results.txt}
+	 * @param domainReset {@code true} to plan with {@code domain_with_reset.pddl}, {@code false} with {@code domain_no_reset.pddl}
+	 * @return Fast Downward's exit code
+	 * @throws InterruptedException if the thread is interrupted while waiting for Fast Downward to exit; it isn't stopped then
+	 * @throws IOException if Fast Downward can't be started
+	 */
 	public static int runPlanner2(String currentPath, boolean domainReset) throws InterruptedException, IOException{
 		String os = System.getProperty("os.name");
 
