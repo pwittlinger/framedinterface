@@ -7,8 +7,8 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <main.class>org.framedinterface.Main</main.class>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
     </properties>
     <dependencies>
         
@@ -239,7 +239,9 @@
                             </artifactItem>
                             <artifactItem>
                                 <groupId>org.example</groupId>
-                                <artifactId>pddl_gen</artifactId>
+                                <artifactId>
+                                
+                                pddl_gen</artifactId>
                                 <version>1.0-SNAPSHOT</version>
                                 <classifier>launcher</classifier>
                                 <destFileName>pddl_gen-1.0-SNAPSHOT-launcher.jar</destFileName>

@@ -11,11 +11,13 @@ This facilitates different kind of analyses in regards to the Prefix or the proc
 ### Prerequisits
 Download the following software to get started.
 
-- Java 17 or 21
+- Download [Java 21](https://www.oracle.com/java/technologies/javase/jdk21-archive-downloads.html) and add it to the system PATH.
 - Fast Downward Planning System
     - Apptainer (recommended)
     - python3 (compile it yourself) 
 - ENHSP (Numeric planning System)
+    - maven
+    - git
 
 The tool is known to work with Java 17 and 21.
 
@@ -23,7 +25,10 @@ The tool is known to work with Java 17 and 21.
 
 **Multi-Perspective**
 
-Download the JAR for the multi-perspective framed autonomy tool [here](https://github.com/pwittlinger/data-framed-autonomy/blob/resource-alloc/pddl_gen-1.0-SNAPSHOT-launcher.jar) (opens GitHub). Put the Jar file into the same directory as the launcher project. If you run it from this project, you can simply add it to the root folder. Also copy the PDDL domain files to the folder ./dependencies:
+You can find the source code of the multi-perspective framed autonomy tool [here](https://github.com/pwittlinger/data-framed-autonomy/blob/resource-alloc/pddl_gen-1.0-SNAPSHOT-launcher.jar) (opens GitHub).
+
+For your convenience, the jar is included under the folder "dependencies".
+
 
 
 ## Building with Maven (Data-Aware page)
