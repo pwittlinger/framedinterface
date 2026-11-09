@@ -59,6 +59,17 @@
           </transformers>
           <shadedArtifactAttached>true</shadedArtifactAttached>
           <shadedClassifierName>launcher</shadedClassifierName>
+          <filters>
+            <filter>
+              <artifact>*:*</artifact>
+              <excludes>
+                <exclude>module-info.class</exclude>
+                <exclude>META-INF/*.SF</exclude>
+                <exclude>META-INF/*.DSA</exclude>
+                <exclude>META-INF/*.RSA</exclude>
+              </excludes>
+            </filter>
+          </filters>
         </configuration>
       </plugin>
       <plugin>
@@ -85,7 +96,7 @@
           <execution>
             <id>default-cli</id>
             <configuration>
-              <mainClass>org.framedinterface.App</mainClass>
+              <mainClass>${main.class}</mainClass>
               <options>
                 <option>--add-exports=javafx.graphics/com.sun.javafx.sg.prism=ALL-UNNAMED</option>
                 <option>--add-opens=javafx.controls/javafx.scene.control.skin=ALL-UNNAMED</option>
@@ -263,5 +274,6 @@
     <main.class>org.framedinterface.Main</main.class>
     <maven.compiler.source>21</maven.compiler.source>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <javafx.version>15.0.1</javafx.version>
   </properties>
 </project>
