@@ -24,28 +24,6 @@ The tool is known to work with Java 17 and 21.
 **Multi-Perspective**
 
 Download the JAR for the multi-perspective framed autonomy tool [here](https://github.com/pwittlinger/data-framed-autonomy/blob/resource-alloc/pddl_gen-1.0-SNAPSHOT-launcher.jar) (opens GitHub). Put the Jar file into the same directory as the launcher project. If you run it from this project, you can simply add it to the root folder. Also copy the PDDL domain files to the folder ./dependencies:
-- 
-- 
-- 
--
-
-In order to run the Planner, please download [ENHSP](https://github.com/hstairs/enhsp) and follow the instructions to compile the jar file. Please add the following files and folders to ./dependencies:
-- enhsp.jar
-- libs/*
-
-
-
-
-
-**Data-Agnostic**
-
-Download the JAR of the (data-agnostic) Framed Autonomy Tool [here] (https://github.com/giacomo1096/FramedAutonomyTool/blob/79dcaaa88d8f51f28e64723c8650e8d166f6ff9e/tool/FramedAutonomyTool.jar) and put it into the same directory as the launcher project. If you run it from this project, you can simply add it to the root folder.
-
-Additionally copy the two PDDL Domain files [domain_no_reset.pddl](https://github.com/giacomo1096/FramedAutonomyTool/blob/79dcaaa88d8f51f28e64723c8650e8d166f6ff9e/tool/domain_no_reset.pddl) and [domain_with_reset.pddl](https://github.com/giacomo1096/FramedAutonomyTool/blob/79dcaaa88d8f51f28e64723c8650e8d166f6ff9e/tool/domain_with_reset.pddl) into the same directory as the launcher.
-
-The Fast Downward Planner ([here](https://www.fast-downward.org/latest/)) can be installed by executing the file "setup_planner" (Windows: setup_Planner.bat; Linux: setup_planner.sh). For Windows this requires 'WSL' (Windows Subsystem for Linux), which should come pre-installed with Windows 10 or newer. If you have not used it before, install it (requires a restart of the machine).
-
-Alternatively, you can compile Fast Downward yourself. Compile it into a directory called "fast-downward". A full description on how to install the Fast Downward can be found [here](https://github.com/aibasel/downward/blob/main/BUILD.md). This is a little bit more involved for Windows Users, as it involves installing [Visual Studio](https://visualstudio.microsoft.com/de/vs/older-downloads/), [Python](https://www.python.org/downloads/windows/) (make sure it is set in your PATH variables!) and [CMake](http://www.cmake.org/download/). 
 
 
 ## Building with Maven (Data-Aware page)

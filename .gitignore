@@ -17,3 +17,6 @@ dependencies/libs/**
 /output
 */prefixes/**
 /planner/target
+
+site/
+.venv/

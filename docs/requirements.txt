@@ -1,0 +1,2 @@
+zensical==0.1.0
+zensical-ui==0.0.41

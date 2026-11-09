@@ -1,0 +1,51 @@
+site_name: YOUR-PROJECT
+site_description: User and developer documentation for YOUR-PROJECT
+site_url: https://YOUR-PROJECT.readthedocs.io/
+repo_url: https://github.com/pwittlinger/framedinterface/tree/multi-perspective
+edit_uri: edit/multi-perspective/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - User Guide:
+      - Getting started: user-guide/getting-started.md
+      - Main window: user-guide/main-window.md
+      - Settings: user-guide/settings.md
+  - Developer Guide:
+      - Contributing: developer/contributing.md
+      - Architecture: developer/architecture.md
+      - API reference (Javadoc): developer/javadoc.md
