@@ -7,6 +7,39 @@
   <build>
     <plugins>
       <plugin>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.8.1</version>
+        <executions>
+          <execution>
+            <id>copy-planner-and-generator</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.basedir}/dependencies</outputDirectory>
+              <overWriteReleases>true</overWriteReleases>
+              <overWriteSnapshots>true</overWriteSnapshots>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>it.unibs.enhsp</groupId>
+                  <artifactId>enhsp-planner</artifactId>
+                  <version>20-bb0415c</version>
+                  <destFileName>enhsp.jar</destFileName>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.example</groupId>
+                  <artifactId>pddl_gen</artifactId>
+                  <version>1.0-SNAPSHOT</version>
+                  <classifier>launcher</classifier>
+                  <destFileName>pddl_gen-1.0-SNAPSHOT-launcher.jar</destFileName>
+                </artifactItem>
+              </artifactItems>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
         <artifactId>maven-shade-plugin</artifactId>
         <version>3.5.1</version>
         <executions>
@@ -34,6 +67,14 @@
         <configuration>
           <source>17</source>
           <target>17</target>
+        </configuration>
+      </plugin>
+      <plugin>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.11.2</version>
+        <configuration>
+          <show>private</show>
+          <doclint>all,-missing</doclint>
         </configuration>
       </plugin>
       <plugin>
@@ -218,9 +259,9 @@
     </repository>
   </repositories>
   <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.target>17</maven.compiler.target>
     <main.class>org.framedinterface.Main</main.class>
     <maven.compiler.source>17</maven.compiler.source>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 </project>

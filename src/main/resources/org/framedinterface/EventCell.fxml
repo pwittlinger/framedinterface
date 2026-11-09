@@ -1,12 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <VBox fx:id="rootRegion" alignment="TOP_CENTER" styleClass="event-cell" xmlns="http://javafx.com/javafx/16" xmlns:fx="http://javafx.com/fxml/1">
    <children>
-      <Label fx:id="activityNameLabel" styleClass="event-title" text="Activity Name" />
+      <HBox alignment="CENTER" spacing="4.0">
+         <children>
+            <Button fx:id="deleteButton" managed="false" mnemonicParsing="false" onAction="#onClickDelete" styleClass="small-button" visible="false">
+               <graphic>
+                  <FontIcon iconLiteral="fa-trash" styleClass="small-button__icon" />
+               </graphic>
+            </Button>
+            <Label fx:id="activityNameLabel" alignment="CENTER" maxWidth="1.7976931348623157E308" styleClass="event-title" text="Activity Name" HBox.hgrow="ALWAYS" />
+            <Button fx:id="extendButton" managed="false" mnemonicParsing="false" onAction="#onClickExtend" styleClass="small-button" text="+" visible="false" />
+         </children>
+      </HBox>
       <VBox alignment="TOP_CENTER" styleClass="event-payload-box">
          <children>
             <Label fx:id="actionLabel" styleClass="event-action" text="Action" VBox.vgrow="ALWAYS" />

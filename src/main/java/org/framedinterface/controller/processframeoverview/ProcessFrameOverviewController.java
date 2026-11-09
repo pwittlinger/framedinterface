@@ -1,0 +1,440 @@
+package org.framedinterface.controller.processframeoverview;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.framedinterface.controller.common.AbstractController;
+import org.framedinterface.model.AbstractModel;
+import org.framedinterface.model.DeclareModel;
+import org.framedinterface.model.ModelRegistry;
+import org.framedinterface.model.ModelType;
+import org.framedinterface.model.PlannerSession;
+import org.framedinterface.model.PnModel;
+import org.framedinterface.utils.FileUtils;
+import org.framedinterface.utils.ModelUtils;
+import org.framedinterface.utils.ValidationUtils;
+import org.controlsfx.control.ToggleSwitch;
+import org.kordamp.ikonli.javafx.FontIcon;
+import org.processmining.datapetrinets.io.DPNIOException;
+
+import javafx.beans.InvalidationListener;
+import javafx.beans.Observable;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
+import javafx.collections.transformation.FilteredList;
+import javafx.concurrent.Worker;
+import javafx.event.ActionEvent;
+import javafx.fxml.FXML;
+import javafx.geometry.Bounds;
+import javafx.scene.control.Button;
+import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.Label;
+import javafx.scene.control.Slider;
+import javafx.scene.control.TableCell;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.control.cell.TextFieldTableCell;
+import javafx.scene.input.ScrollEvent;
+import javafx.scene.layout.VBox;
+import javafx.scene.web.WebView;
+import javafx.stage.Popup;
+import javafx.util.StringConverter;
+
+/**
+ * Controller of the Process Frame Overview page, on which the process specifications (Declare models and Petri nets) are loaded and viewed.
+ * <p>
+ * Models are loaded with the "Select..." button and listed in the Process Specifications table. The table shows the
+ * {@link ModelRegistry} that all pages share, so a model removed there is removed from all pages. Selecting a model shows it in the
+ * Declare or Petri net viewer. The viewers always show a model's structure only, with no timeline and no violations: this page is for
+ * viewing and selecting models, not for monitoring.
+ */
+public class ProcessFrameOverviewController extends AbstractController {
+
+	@FXML
+	private TableView<AbstractModel> modelTabelView;
+	@FXML
+	private TableColumn<AbstractModel, String> modelNameColumn;
+	@FXML
+	private TableColumn<AbstractModel, String> modelTypeColumn;
+	@FXML
+	private TableColumn<AbstractModel, AbstractModel> modelRemoveColumn;
+	@FXML
+	private Button uploadModel;
+
+	@FXML
+	private ChoiceBox<AbstractModel> declModelChoice;
+	@FXML
+	private WebView declWebView;
+	@FXML
+	private Slider declZoomSlider;
+	@FXML
+	private TextField declZoomValueField;
+	@FXML
+	private Button toolTipButton;
+	@FXML
+	private ToggleSwitch dataConditionsToggle;
+
+	@FXML
+	private ChoiceBox<AbstractModel> pnModelChoice;
+	@FXML
+	private WebView pnWebView;
+	@FXML
+	private Slider pnZoomSlider;
+	@FXML
+	private TextField pnZoomValueField;
+	@FXML
+	private Label labelFinalMarking;
+	@FXML
+	private Button toolTipButtonPN;
+
+	private static String precentageFormat = "%.1f";
+	private String initialDeclWebViewScript;
+	private String initialPnWebViewScript;
+
+	private ObjectProperty<Double> declZoomSliderValueObject;
+	private ObjectProperty<Double> pnZoomSliderValueObject;
+	private ObjectProperty<Double> declWebViewZoomObject;
+	private ObjectProperty<Double> pnWebViewZoomObject;
+
+	private boolean showDataConditions = false;
+
+	/**
+	 * Initializes the page once its FXML has been loaded. Sets up the Process Specifications table (with a remove button per model), the
+	 * Declare and Petri net viewers with their model choice boxes and zoom controls, and the Data conditions switch. The Petri net viewer
+	 * is only loaded once the Declare viewer has loaded, since loading both at once leaves the Petri net viewer empty when this is the first
+	 * page opened.
+	 */
+	@FXML
+	private void initialize() {
+
+		modelTabelView.setItems(ModelRegistry.getInstance().getModels());
+		modelTabelView.setPlaceholder(new Label("No process specifications selected"));
+		modelNameColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+		modelNameColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelName()));
+		modelTypeColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+		modelTypeColumn.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getModelType().toString()));
+
+		modelRemoveColumn.setCellValueFactory(
+				param -> new ReadOnlyObjectWrapper<AbstractModel>(param.getValue())
+				);
+		modelRemoveColumn.setCellFactory(param -> new TableCell<AbstractModel, AbstractModel>() {
+			private final Button removeButton = new Button();
+			private FontIcon deleteFontIcon = new FontIcon("fa-trash");
+
+			@Override
+			protected void updateItem(AbstractModel item, boolean empty) {
+				super.updateItem(item, empty);
+
+				if (item == null) {
+					setGraphic(null);
+					return;
+				}
+
+				if (!removeButton.getStyleClass().contains("action-cell__button")) {
+					removeButton.getStyleClass().add("action-cell__button");
+					deleteFontIcon.getStyleClass().add("action-cell__delete-icon");
+					removeButton.setGraphic(deleteFontIcon);
+				}
+
+				setGraphic(removeButton);
+				removeButton.setOnAction(
+						event -> getTableView().getItems().remove(item)
+						);
+			}
+		});
+
+		//Switch visualized model by selecting it in modelTabelView
+		modelTabelView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+			if (newValue != null) {
+				if (newValue.getModelType() == ModelType.DECLARE) {
+					declModelChoice.getSelectionModel().select(newValue);
+				} else if (newValue.getModelType() == ModelType.PN) {
+					pnModelChoice.getSelectionModel().select(newValue);
+					PnModel p_ = (PnModel) newValue;
+					labelFinalMarking.setText(p_.finalMarking);
+				}
+			}
+		});
+
+		//Setting up model ChoiceBoxes
+		declModelChoice.setItems(new FilteredList<AbstractModel>(ModelRegistry.getInstance().getModels(), item -> item.getModelType()==ModelType.DECLARE));
+		pnModelChoice.setItems(new FilteredList<AbstractModel>(ModelRegistry.getInstance().getModels(), item -> item.getModelType()==ModelType.PN));
+		StringConverter<AbstractModel> modelStringConverter = new StringConverter<AbstractModel>() {
+			@Override
+			public String toString(AbstractModel abstractModel) {
+				return abstractModel==null ? "" : abstractModel.getModelName();
+			}
+			@Override
+			public AbstractModel fromString(String string) {
+				return null;
+			}
+		};
+		declModelChoice.setConverter(modelStringConverter);
+		pnModelChoice.setConverter(modelStringConverter);
+		declModelChoice.getItems().addListener(new InvalidationListener() {
+			@Override
+			public void invalidated(Observable observable) {
+				if (!declModelChoice.getItems().isEmpty() && (declModelChoice.getSelectionModel().getSelectedIndex()==-1 || !declModelChoice.getItems().contains(declModelChoice.getSelectionModel().getSelectedItem()))) {
+					declModelChoice.getSelectionModel().selectFirst();
+				}
+			}
+		});
+		pnModelChoice.getItems().addListener(new InvalidationListener() {
+			@Override
+			public void invalidated(Observable observable) {
+				if (!pnModelChoice.getItems().isEmpty() && (pnModelChoice.getSelectionModel().getSelectedIndex()==-1 || !pnModelChoice.getItems().contains(pnModelChoice.getSelectionModel().getSelectedItem()))) {
+					pnModelChoice.getSelectionModel().selectFirst();
+				}
+			}
+		});
+
+		//Setting up WebViews and zoom functionality
+		declZoomSliderValueObject = declZoomSlider.valueProperty().asObject();
+		pnZoomSliderValueObject = pnZoomSlider.valueProperty().asObject();
+		declWebViewZoomObject = declWebView.zoomProperty().asObject();
+		pnWebViewZoomObject = pnWebView.zoomProperty().asObject();
+		setupWebView(declWebView, ModelType.DECLARE, declZoomSlider, declZoomSliderValueObject, declZoomValueField, declWebViewZoomObject);
+		//Loading both WebViews at once leaves pnWebView empty when this is the first page opened, so (same as Data-Agnostic and Data-Aware)
+		//pnWebView is only loaded after declWebView is already loaded. A PN visualization requested before then is kept in initialPnWebViewScript
+		declWebView.getEngine().getLoadWorker().stateProperty().addListener(new ChangeListener<Worker.State>() {
+			@Override
+			public void changed(ObservableValue<? extends Worker.State> observable, Worker.State oldValue, Worker.State newValue) {
+				if (newValue == Worker.State.SUCCEEDED) {
+					setupWebView(pnWebView, ModelType.PN, pnZoomSlider, pnZoomSliderValueObject, pnZoomValueField, pnWebViewZoomObject);
+					observable.removeListener(this);
+				}
+			}
+		});
+
+		//Triggering visualization update when the model selection is changed
+		declModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+			updateVisualization(declWebView, newValue, ModelType.DECLARE);
+		});
+		pnModelChoice.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+			if (newValue != null) {
+				PnModel p_ = (PnModel) newValue;
+				labelFinalMarking.setText(p_.finalMarking);
+			}
+			updateVisualization(pnWebView, newValue, ModelType.PN);
+		});
+
+		dataConditionsToggle.selectedProperty().addListener((observable, oldValue, newValue) -> {
+			showDataConditions = newValue;
+			updateVisualization(declWebView, declModelChoice.getSelectionModel().getSelectedItem(), ModelType.DECLARE);
+		});
+	}
+
+	/**
+	 * Handles the "Select..." button: loads the Declare models ({@code .decl}) and Petri nets ({@code .pnml}) the user picks, and adds them
+	 * to the {@link ModelRegistry}. Before that, the new models are replayed against the trace currently active in {@link PlannerSession}
+	 * (the prefix, or its plan). Files that can't be loaded, or have another extension, are skipped; the reason is only printed to the
+	 * console.
+	 *
+	 * @param event the button's action event (unused)
+	 */
+	@FXML
+	void onButtonClickedUploadModel(ActionEvent event) {
+		List<File> modelFiles = FileUtils.showModelOpenDialog(getStage());
+		if (modelFiles != null) {
+			List<AbstractModel> abstractModels = new ArrayList<AbstractModel>();
+			for (File modelFile : modelFiles) {
+				String modelName = modelFile.getName();
+				try {
+					String modelExtension = modelName.substring(modelName.lastIndexOf(".")+1);
+					if ("decl".equalsIgnoreCase(modelExtension)) {
+						abstractModels.add(ModelUtils.loadDeclareModel(modelFile.toPath(), ModelRegistry.getInstance().nextModelId(), modelName));
+					} else if ("pnml".equalsIgnoreCase(modelExtension)) {
+						// PnModel's constructor already computes finalMarking from the parsed DPN
+						abstractModels.add(ModelUtils.loadDpnModel(modelFile.toPath(), ModelRegistry.getInstance().nextModelId(), modelName));
+					} else {
+						System.err.println("Skipping model of unknown type: " + modelExtension);
+					}
+				} catch (DPNIOException | IOException | IndexOutOfBoundsException e) {
+					System.err.println("Unable to load model: " + modelFile.getAbsolutePath());
+					e.printStackTrace();
+				}
+			}
+
+			//Evaluate newly added models against whatever prefix/plan is currently active on Data-Agnostic
+			abstractModels.forEach(abstractModel -> abstractModel.updateMonitoringStates(
+					PlannerSession.getInstance().getActiveTrace(), PlannerSession.getInstance().isDisplayViolations()));
+			ModelRegistry.getInstance().getModels().addAll(abstractModels);
+		}
+	}
+
+	/**
+	 * Loads the visualization page into the given view and sets up its zoom controls: Ctrl + mouse wheel, the zoom slider and the
+	 * percentage field are kept in sync with the view's zoom. A visualization requested before the page has loaded is shown once it has
+	 * (see {@link #updateVisualization(WebView, AbstractModel, ModelType)}). Unlike on the Data-Aware page, clicking on the graph does
+	 * nothing here, as this controller isn't made available to the page's JavaScript.
+	 *
+	 * @param visualizationWebView the view
+	 * @param modelType the type of models the view shows
+	 * @param zoomSlider the view's zoom slider
+	 * @param zoomSliderValueObject the zoom slider's value, bound to the view's zoom
+	 * @param zoomValueField the field showing (and editing) the zoom as a percentage
+	 * @param webViewZoomObject the view's zoom
+	 */
+	private void setupWebView(WebView visualizationWebView, ModelType modelType, Slider zoomSlider, ObjectProperty<Double> zoomSliderValueObject, TextField zoomValueField, ObjectProperty<Double> webViewZoomObject) {
+		visualizationWebView.getEngine().load((getClass().getClassLoader().getResource("visPage.html")).toString());
+		visualizationWebView.setContextMenuEnabled(false);
+
+		if (modelType == ModelType.DECLARE) {
+			visualizationWebView.getEngine().getLoadWorker().stateProperty().addListener((observable, oldValue, newValue) -> {
+				if(newValue == Worker.State.SUCCEEDED && initialDeclWebViewScript != null) {
+					if (initialDeclWebViewScript.equals("")) {visualizationWebView.getEngine().executeScript("clearModel()");}
+					else {visualizationWebView.getEngine().executeScript(initialDeclWebViewScript);}
+					initialDeclWebViewScript = null;
+				}
+			});
+		} else if (modelType == ModelType.PN) {
+			visualizationWebView.getEngine().getLoadWorker().stateProperty().addListener((observable, oldValue, newValue) -> {
+				if(newValue == Worker.State.SUCCEEDED && initialPnWebViewScript != null) {
+					if (initialPnWebViewScript.equals("")) {visualizationWebView.getEngine().executeScript("clearModel()");}
+					else {visualizationWebView.getEngine().executeScript(initialPnWebViewScript);}
+					initialPnWebViewScript = null;
+				}
+			});
+		}
+
+		visualizationWebView.addEventFilter(ScrollEvent.SCROLL, e -> {
+			if (e.isControlDown()) {
+				double deltaY = e.getDeltaY();
+				if (deltaY > 0) {
+					zoomSlider.setValue(zoomSlider.getValue() + 0.1d);
+				} else if (deltaY < 0) {
+					zoomSlider.setValue(zoomSlider.getValue() - 0.1d);
+				}
+				e.consume();
+			}
+		});
+
+		Bindings.bindBidirectional(zoomValueField.textProperty(), zoomSliderValueObject, new StringConverter<Double>() {
+			@Override
+			public String toString(Double object) {
+				return String.format(precentageFormat, object.doubleValue() * 100);
+			}
+			@Override
+			public Double fromString(String string) {
+				try {
+					double value = Double.parseDouble(string) / 100;
+					if (value > zoomSlider.getMax()) {
+						return zoomSlider.getMax();
+					} else {
+						return value;
+					}
+				} catch (NumberFormatException e) {
+					return 1d;
+				}
+			}
+		});
+
+		Bindings.bindBidirectional(zoomSliderValueObject, webViewZoomObject);
+		ValidationUtils.addMandatoryPrecentageBehavior(precentageFormat, zoomSlider.getMax() * 100, zoomValueField);
+	}
+
+	/**
+	 * Shows the given model in the given view, or clears the view if there is no model or nothing to show. It's always the model's static
+	 * structure (no timeline, no violations): this page is for viewing and selecting models, not for monitoring. Declare models show their
+	 * data conditions while the Data conditions switch is on. If the view's page is still loading, the model is shown once it has loaded.
+	 *
+	 * @param visualizationWebView the view
+	 * @param abstractModel the model, or {@code null} for none
+	 * @param modelType the type of models the view shows
+	 */
+	private void updateVisualization(WebView visualizationWebView, AbstractModel abstractModel, ModelType modelType) {
+		String visualizationString;
+		String script;
+
+		if (abstractModel == null) {
+			if (modelType == ModelType.DECLARE) {initialDeclWebViewScript = "";}
+			if (modelType == ModelType.PN) {initialPnWebViewScript = "";}
+			visualizationWebView.getEngine().executeScript("clearModel()");
+		} else {
+			visualizationString = abstractModel instanceof DeclareModel
+					? ((DeclareModel) abstractModel).getVisualisationString(0, false, showDataConditions)
+					: abstractModel.getVisualisationString(0, false);
+			if (visualizationString != null) {
+				script = "setModel('" + visualizationString + "')";
+				if (visualizationWebView.getEngine().getLoadWorker().stateProperty().get() == Worker.State.SUCCEEDED) {
+					visualizationWebView.getEngine().executeScript(script);
+					if (abstractModel.getModelType() == ModelType.DECLARE) {initialDeclWebViewScript = null;}
+					if (abstractModel.getModelType() == ModelType.PN) {initialPnWebViewScript = null;}
+				} else {
+					if (abstractModel.getModelType() == ModelType.DECLARE) {initialDeclWebViewScript = script;}
+					if (abstractModel.getModelType() == ModelType.PN) {initialPnWebViewScript = script;}
+				}
+			} else {
+				if (abstractModel.getModelType() == ModelType.DECLARE) {initialDeclWebViewScript = "";}
+				if (abstractModel.getModelType() == ModelType.PN) {initialPnWebViewScript = "";}
+				visualizationWebView.getEngine().executeScript("clearModel()");
+			}
+		}
+	}
+
+	/**
+	 * Handles the Help button of the Declare viewer: creates its popup (what the viewer shows, and how to pick the model to show) and makes
+	 * the button toggle that popup from then on. The popup isn't shown on this first click.
+	 */
+	@FXML
+	private void onClickToolTip() {
+		Popup legendPopup = new Popup();
+
+		VBox legendBox = new VBox(10);
+		legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
+
+		legendBox.getChildren().addAll(
+			new Label("Shows the structure of the selected Declare model."),
+			new Label("Select a model in the table or the choice box above to view it.")
+		);
+
+		legendPopup.getContent().add(legendBox);
+		legendPopup.setAutoHide(true);
+
+		toolTipButton.setOnAction(e -> {
+			if (!legendPopup.isShowing()) {
+				Bounds screenBounds = toolTipButton.localToScreen(toolTipButton.getBoundsInLocal());
+				legendPopup.show(toolTipButton, screenBounds.getMinX(), screenBounds.getMinY() + toolTipButton.getHeight());
+			} else {
+				legendPopup.hide();
+			}
+		});
+	}
+
+	/**
+	 * Handles the Help button of the Petri net viewer: creates its popup (what the viewer shows, and how to pick the model to show) and
+	 * makes the button toggle that popup from then on. The popup isn't shown on this first click.
+	 */
+	@FXML
+	private void onClickToolTipPN() {
+		Popup legendPopup = new Popup();
+
+		VBox legendBox = new VBox(10);
+		legendBox.setStyle("-fx-background-color: white; -fx-padding: 10; -fx-border-color: black;");
+
+		legendBox.getChildren().addAll(
+			new Label("Shows the structure of the selected Petri net model."),
+			new Label("Select a model in the table or the choice box above to view it.")
+		);
+
+		legendPopup.getContent().add(legendBox);
+		legendPopup.setAutoHide(true);
+
+		toolTipButtonPN.setOnAction(e -> {
+			if (!legendPopup.isShowing()) {
+				Bounds screenBounds = toolTipButtonPN.localToScreen(toolTipButtonPN.getBoundsInLocal());
+				legendPopup.show(toolTipButtonPN, screenBounds.getMinX(), screenBounds.getMinY() + toolTipButtonPN.getHeight());
+			} else {
+				legendPopup.hide();
+			}
+		});
+	}
+
+}

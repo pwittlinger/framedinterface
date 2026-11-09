@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Builds the ENHSP planner (https://github.com/hstairs/enhsp, branch enhsp-20) as a single runnable jar,
+  so nobody has to clone and compile it by hand anymore. ENHSP isn't on Maven Central and has no release
+  jars, so we download the source of a fixed commit, compile it and put it in one jar together with its
+  libraries. Then "mvn install" here, and the FrAIm build copies it into dependencies/enhsp.jar.
+
+  The download is kept in ~/.cache/enhsp, so it only happens once (also after a mvn clean).
+  ENHSP is GPL-3.0, see its repository.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>it.unibs.enhsp</groupId>
+    <artifactId>enhsp-planner</artifactId>
+    <version>20-bb0415c</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- The commit we build. If you change it, also change the version above so the cache keys change -->
+        <enhsp.commit>bb0415c77f924fede7cddcbd27034f2b7ca70521</enhsp.commit>
+        <enhsp.cache>${user.home}/.cache/enhsp</enhsp.cache>
+        <enhsp.src>${project.build.directory}/enhsp-${enhsp.commit}</enhsp.src>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>build-enhsp</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <!-- 1. get the source (only if we don't have it yet) -->
+                                <mkdir dir="${enhsp.cache}"/>
+                                <get src="https://github.com/hstairs/enhsp/archive/${enhsp.commit}.zip"
+                                     dest="${enhsp.cache}/enhsp-${enhsp.commit}.zip" skipexisting="true"/>
+                                <unzip src="${enhsp.cache}/enhsp-${enhsp.commit}.zip" dest="${project.build.directory}"/>
+
+                                <!-- 2. compile it like their "compile" script does -->
+                                <mkdir dir="${project.build.outputDirectory}"/>
+                                <javac srcdir="${enhsp.src}/src" destdir="${project.build.outputDirectory}"
+                                       encoding="utf8" includeantruntime="false" release="17" nowarn="true">
+                                    <classpath>
+                                        <fileset dir="${enhsp.src}/libs" includes="*.jar"/>
+                                    </classpath>
+                                </javac>
+
+                                <!-- 3. put the libraries inside, so the jar runs on its own. Some of them contain
+                                     the same classes in different versions, so we go in the order of ENHSP's own
+                                     manifest classpath and never overwrite: like on a classpath, the first one wins -->
+                                <presetdef name="unpack">
+                                    <unzip dest="${project.build.outputDirectory}" overwrite="false">
+                                        <patternset>
+                                            <exclude name="META-INF/**"/>
+                                            <!-- otherwise the jar tool thinks we're building a module and gives up -->
+                                            <exclude name="**/module-info.class"/>
+                                        </patternset>
+                                    </unzip>
+                                </presetdef>
+                                <unpack src="${enhsp.src}/libs/JPddl_.jar"/>
+                                <unpack src="${enhsp.src}/libs/fastutil-8.3.1.jar"/>
+                                <unpack src="${enhsp.src}/libs/commons-cli-1.4.jar"/>
+                                <unpack src="${enhsp.src}/libs/antlr-3.4-complete.jar"/>
+                                <unpack src="${enhsp.src}/libs/jgrapht-core-1.3.0.jar"/>
+                                <unpack src="${enhsp.src}/libs/guava-26.0-jre.jar"/>
+                                <unpack src="${enhsp.src}/libs/commons-collections4-4.3.jar"/>
+                                <unpack src="${enhsp.src}/libs/commons-lang3-3.8.1.jar"/>
+                                <unpack src="${enhsp.src}/libs/hppc-0.8.0-SNAPSHOT.jar"/>
+                                <unpack src="${enhsp.src}/libs/ia_math.jar"/>
+                                <unpack src="${enhsp.src}/libs/json-simple-1.1.1.jar"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>main</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,56 @@
+c3 ActivityC categorical
+c1 ActivityC categorical
+c2 ActivityC categorical
+
+integer1000 ActivityT integer
+integer50 ActivityT integer
+integer600 ActivityT integer
+integer00 ActivityT integer
+integer150 ActivityT integer
+integer100 ActivityT integer
+integer200 ActivityT integer
+
+c3 ActivityF categorical
+c1 ActivityF categorical
+c2 ActivityF categorical
+
+c3 ActivityO categorical
+c1 ActivityO categorical
+c2 ActivityO categorical
+
+integer1000 ActivityP integer
+integer50 ActivityP integer
+integer600 ActivityP integer
+integer00 ActivityP integer
+integer150 ActivityP integer
+integer100 ActivityP integer
+integer200 ActivityP integer
+
+c3 ActivityB categorical
+c1 ActivityB categorical
+c2 ActivityB categorical
+
+integer1000 ActivityK integer
+integer50 ActivityK integer
+integer600 ActivityK integer
+integer00 ActivityK integer
+integer150 ActivityK integer
+integer100 ActivityK integer
+integer200 ActivityK integer
+
+integer1000 ActivityN integer
+integer50 ActivityN integer
+integer600 ActivityN integer
+integer00 ActivityN integer
+integer150 ActivityN integer
+integer100 ActivityN integer
+integer200 ActivityN integer
+
+integer1000 ActivityG integer
+integer50 ActivityG integer
+integer600 ActivityG integer
+integer00 ActivityG integer
+integer150 ActivityG integer
+integer100 ActivityG integer
+integer200 ActivityG integer
+

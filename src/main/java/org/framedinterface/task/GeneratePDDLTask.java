@@ -9,12 +9,29 @@ import java.util.ArrayList;
 
 import javafx.concurrent.Task;
 
+/**
+ * Generates the PDDL problem for the Data-Agnostic page by running the Framed Autonomy Tool ({@code FramedAutonomyTool.jar}), which
+ * writes {@code problem.pddl} to the working directory for {@link RunPlannerTask} to solve. The tool asks two questions on its console,
+ * which this task answers by watching the tool's output: the Petri net's final marking, and whether constraints are reset after a
+ * violation. The task's value is the tool's exit code.
+ *
+ * @see GenerateDataAwarePDDLTask
+ */
 public class GeneratePDDLTask extends Task<Integer> {
 
 	private ArrayList<String> commandStrings;
 	private String finMarking;
 	private boolean reset;
 
+	/**
+	 * Creates the task; the tool is only run once the task is started.
+	 *
+	 * @param commandStrings the command line that runs the tool, e.g.
+	 *        {@code java -jar FramedAutonomyTool.jar <Declare model> <prefix file> <Petri net>}
+	 * @param finMarking the Petri net's final marking, e.g. {@code [(960,1)]}, given when the tool asks for it
+	 * @param reset the answer to the tool's question whether constraints are reset after a violation: {@code true} for yes, {@code false}
+	 *        for no
+	 */
 	public GeneratePDDLTask(ArrayList<String> commandStrings, String finMarking, boolean reset) {
 		this.commandStrings = commandStrings;
 		this.finMarking = finMarking;
@@ -23,6 +40,17 @@ public class GeneratePDDLTask extends Task<Integer> {
 
 
 
+	/**
+	 * Runs the tool and waits for it to finish. While the tool runs, its output is echoed to FrAIm's console and watched for its two
+	 * questions, which are answered with the final marking and with {@code y} or {@code n}. The output is read character by character,
+	 * since the questions don't end with a line break. Reading stops once the output contains "finished" (in any case). The tool's error
+	 * output goes straight to FrAIm's console.
+	 *
+	 * @return the tool's exit code, which is always 0 (any other exit code fails the task)
+	 * @throws java.io.IOException if the tool can't be started, or reading its output or answering its questions fails
+	 * @throws InterruptedException if the thread is interrupted while waiting for the tool to exit; the tool's process isn't stopped then
+	 * @throws Exception if the tool exits with an error
+	 */
 	@Override
 	protected Integer call() throws Exception {
 		String domain = "n";

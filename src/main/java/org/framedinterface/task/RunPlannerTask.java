@@ -75,6 +75,13 @@ public class RunPlannerTask extends Task<Integer> {
 
 	private Integer runWithDownload() throws Exception {
 		String os = System.getProperty("os.name");
+		boolean useWsl = os.contains("Windows");
+
+		// wsl.exe re-parses its arguments through a Linux shell, where '\' is an escape
+		// character (it silently eats backslashes) and Windows-style "C:\..." paths aren't
+		// meaningful inside WSL anyway. Translate to the DrvFs form ("/mnt/c/...") before
+		// building the command line that gets handed to WSL.
+		String effectivePath = useWsl ? toWslPath(currentPath) : currentPath;
 
 		ArrayList<String> commandFastDownward = new ArrayList<String>();
 		String domainPath;
@@ -83,18 +90,18 @@ public class RunPlannerTask extends Task<Integer> {
 		//String problemPath = currentPath+"/problem.pddl";
 		String problemPath = "problem.pddl";
 		if (domainReset){
-			domainPath = currentPath+"/domain_with_reset.pddl";
+			domainPath = effectivePath+"/domain_with_reset.pddl";
 		}
 		else if (domainViolated){
-			domainPath = currentPath +"/domain_violated.pddl";
-			problemPath = currentPath+"/problem_violated.pddl";
+			domainPath = effectivePath +"/domain_violated.pddl";
+			problemPath = effectivePath+"/problem_violated.pddl";
 		}
 		else{
-			domainPath = currentPath+"/domain_no_reset.pddl";
+			domainPath = effectivePath+"/domain_no_reset.pddl";
 		}
 
 		//commandFastDownward.add(pythonPath);
-		if (os.contains("Windows")) {
+		if (useWsl) {
 			commandFastDownward.add("wsl");
 		}
 		commandFastDownward.add("apptainer/bin/apptainer");
@@ -114,5 +121,19 @@ public class RunPlannerTask extends Task<Integer> {
 
 		Process processPlanner = pbPlanner.start();
 		return processPlanner.waitFor();
+	}
+
+	/**
+	 * Converts an absolute Windows path (e.g. "C:\Users\paulw\Desktop\framedinterface")
+	 * into the equivalent WSL/DrvFs path (e.g. "/mnt/c/Users/paulw/Desktop/framedinterface")
+	 * so it can be passed as an argument to a process launched via "wsl".
+	 */
+	private static String toWslPath(String windowsPath) {
+		String path = windowsPath.replace('\\', '/');
+		if (path.length() >= 2 && path.charAt(1) == ':') {
+			char driveLetter = Character.toLowerCase(path.charAt(0));
+			path = "/mnt/" + driveLetter + path.substring(2);
+		}
+		return path;
 	}
 }
