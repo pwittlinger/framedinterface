@@ -1,6 +1,6 @@
-site_name: YOUR-PROJECT
-site_description: User and developer documentation for YOUR-PROJECT
-site_url: https://YOUR-PROJECT.readthedocs.io/
+site_name: FrAIm
+site_description: User and developer documentation for FrAIm
+site_url: https://framedinterface.readthedocs.io/
 repo_url: https://github.com/pwittlinger/framedinterface/tree/multi-perspective
 edit_uri: edit/multi-perspective/docs/
 
