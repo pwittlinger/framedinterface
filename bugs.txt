@@ -1048,3 +1048,28 @@ Any one of: point <main.class> in pom.xml (and the javafx-maven-plugin's <mainCl
 org.framedinterface.AppLauncher; add the same Locale.setDefault(Locale.UK) line to Main.main(); or move
 the line in App.start() above showDefaultPage(), which covers every entry point. Alternatively, format
 the zoom with an explicit locale (String.format(Locale.UK, ...)).
+
+
+---------------------------------------------------------------------------------------------------
+BUG-036  pom.xml lists web pages as Maven repositories, which causes "Could not transfer metadata"
+         warnings
+---------------------------------------------------------------------------------------------------
+Status:   Open
+Severity: Low (warnings on every build, and extra lookups; the build itself works)
+Found:    2026-11-09, while looking into the output of "mvn javadoc:javadoc"
+
+Where: pom.xml, <repositories>: the entries guava, ikonlicore, ikonlifont and ikonlijavafx
+
+What happens:
+Their URLs are mvnrepository.com artifact pages (a search website), not Maven repositories. Guava and
+ikonli are on Maven Central, which Maven uses anyway, so these entries never provide anything. For
+the pddl_gen SNAPSHOT, Maven checks every listed repository for a newer version; the guava entry is
+plain http, which Maven 3.8+ blocks, so every build prints:
+  Could not transfer metadata org.example:pddl_gen:1.0-SNAPSHOT/maven-metadata.xml from/to
+  maven-default-http-blocker (http://0.0.0.0/): Blocked mirror for repositories: [guava (...)]
+The locally installed pddl_gen is used regardless. Running Maven with -nsu (no snapshot updates)
+silences the warning (checked).
+
+Suggested fix:
+Remove the four mvnrepository.com entries; keep deckfour (it hosts openxes).
+
