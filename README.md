@@ -1,33 +1,43 @@
 # About
 This repository provides a graphical user interface for the Framed Autonomy Tool described by [Acitelli et al. (2025)](https://doi.org/10.1016/j.is.2025.102573) and [Wittlinger et al. (2026)](https://arxiv.org/abs/2607.16738)
-It takes process models in ".pnml" and ".decl" format, and returns an optimal continuation for the given Prefix.
-This facilitates different kind of analyses in regards to the Prefix or the process models.
-
-# Getting Started
-
-
-## Preliminiaries
+It takes procedural process models in ".pnml" (Petri nets) and declarative process specifications in ".decl" format (Multi-Perspective DECLARE), and returns an optimal continuation for a given (possibly empty) prefix.
+This facilitates different kind of analyses in regards to the prefix or the porcess frame.
 
 ### Prerequisits
-Download the following software to get started.
+We have tested the tool on Windows (10 and 11), and Linux.
+
+In either case, you will need Java 21 installed and added to your system PATH.
 
 - Download [Java 21](https://www.oracle.com/java/technologies/javase/jdk21-archive-downloads.html) and add it to the system PATH.
-- Fast Downward Planning System
-    - Apptainer (recommended)
-    - python3 (compile it yourself) 
-- ENHSP (Numeric planning System)
-    - maven
-    - git
+- Install [ENHSP](https://github.com/hstairs/enhsp) (Numeric planning System) and add it to the "dependencies" folder. For your convenience, we provide to ways to simplify the installation.
 
-The tool is known to work with Java 17 and 21.
+    - *git*: If you have git installed, you can simply execute ```setup_planner.bat``` (Windows) or ```setup_planner.sh``` (Linux)
+    - *maven*: If you prefer maven, you can execute ```mvn install``` in the folder "./planner" to download and install the planner.
 
 ### Running FrAIm
 
+Once you have everything installed, you can run FrAIm by either (i) double clicking on the launcher ``framedinterface-1.0-launcher.jar`` or (ii) executing ``java -jar framedinterface-1.0-launcher.jar`` from the root directory.
+
+This will launch the main overview page of FrAIm. Here you can upload process models.
+
+![The overview page that is launched when FrAIm first starts up.](docs\images\screenshots\fraim-overview-page.png "Main page")
+
+
+Under the tab ``Optimization'' you can modify various cost models (Constraint Violation/Satisfaction, Activity Cost) and build a prefix by clicking on the Activities shown in the process viewers. You can change the cost of the constraints or activities by either selecting them and right-clicking, or by editing the cost cell directly. 
+
+When you want to find a continuation, click the button `Run Planner' in the bottom right.
+By default, the recovery strategy "Reset" is used. If you want to try another one (no-recovery, discard, skip), you can select it by clicking the cog wheel immediately left of the "Run Planner" button.
+
+![The main optimization page of FrAIm.](docs\images\screenshots\mp-fraim-page.png "Optimization page")
+
+
+
+
 **Multi-Perspective**
 
-You can find the source code of the multi-perspective framed autonomy tool [here](https://github.com/pwittlinger/data-framed-autonomy/blob/resource-alloc/pddl_gen-1.0-SNAPSHOT-launcher.jar) (opens GitHub).
+You can find the source code of the backend of FrAIm [here](https://github.com/pwittlinger/data-framed-autonomy/blob/resource-alloc/pddl_gen-1.0-SNAPSHOT-launcher.jar) (opens GitHub). The multi-perspective framed autonomy tool implements the automata-theoretic techniques described by Acitelli et al.
 
-For your convenience, the jar is included under the folder "dependencies".
+For your convenience, the jar is included in this project under the folder "dependencies".
 
 
 
@@ -46,8 +56,7 @@ Solved problems are cached in `~/.fraim/plan-cache`, so planning the same prefix
 Delete that folder to clear the cache.
 
 ## Good to know
-- The planner currently supported is Fast-Downward, with A* and a fully blind heuristic for data-agnostic process frames.
-- Multi-perspective process frames (data- or temporal guards) are solved using the Expressive Numeric Heuristic Search Planner [ENHSP](https://sites.google.com/view/enhsp/), with A* and a fully blind heuristic.
+- Multi-perspective process frames (including either data- or temporal guards) are solved using the Expressive Numeric Heuristic Search Planner [ENHSP](https://sites.google.com/view/enhsp/), with A* and a fully blind heuristic. You can change the heuristic in the settings.
 - The names of the different transition should be unique within a single process model (i.e. no duplicate labels within a single process model)
 - Silent transitions are not natively supported.
 - Preferably, the activity labels are alphanumeric. We did not (extensively) test activity labels with the following characters:

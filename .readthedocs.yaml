@@ -13,6 +13,7 @@ build:
     build:
       html:
         - zensical build --clean
+        - mvn -B install:install-file -Dfile=dependencies/pddl_gen-1.0-SNAPSHOT.jar -DgroupId=org.example -DartifactId=pddl_gen -Dversion=1.0-SNAPSHOT -Dpackaging=jar
         - mvn -B -DskipTests javadoc:javadoc
     post_build:
       - mkdir -p $READTHEDOCS_OUTPUT/html/
