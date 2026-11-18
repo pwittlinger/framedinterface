@@ -1,0 +1,15 @@
+activity activityf
+activity activityd
+activity activitya
+activity activityc
+activity activityb
+activity activityn
+activity activitye
+activity activitym
+Not Co-Existence[activityd, activitye] | | | |
+Absence[activityc] | | | |
+Existence[activitya] | | | |
+Exclusive Choice[activityf, activityb] | | | | 
+Response[activitym, activityn] | | | |
+Precedence[activityd, activitya] | | | |
+Choice[activityc, activityf] | | | |

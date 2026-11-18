@@ -1,35 +1,39 @@
 # About
 This repository provides a graphical user interface for the Framed Autonomy Tool described by [Acitelli et al. (2025)](https://doi.org/10.1016/j.is.2025.102573) and [Wittlinger et al. (2026)](https://arxiv.org/abs/2607.16738)
 It takes procedural process models in ".pnml" (Petri nets) and declarative process specifications in ".decl" format (Multi-Perspective DECLARE), and returns an optimal continuation for a given (possibly empty) prefix.
-This facilitates different kind of analyses in regards to the prefix or the porcess frame.
+This facilitates different kind of analyses in regards to the prefix or a (modified) process frame.
 
-### Prerequisits
-We have tested the tool on Windows (10 and 11), and Linux.
-
+### Prerequisites
+We have tested the tool on Windows (10 and 11), and Linux (Mint).
 In either case, you will need Java 21 installed and added to your system PATH.
 
 - Download [Java 21](https://www.oracle.com/java/technologies/javase/jdk21-archive-downloads.html) and add it to the system PATH.
 - Install [ENHSP](https://github.com/hstairs/enhsp) (Numeric planning System) and add it to the "dependencies" folder. For your convenience, we provide to ways to simplify the installation.
 
-    - *git*: If you have git installed, you can simply execute ```setup_planner.bat``` (Windows) or ```setup_planner.sh``` (Linux)
-    - *maven*: If you prefer maven, you can execute ```mvn install``` in the folder "./planner" to download and install the planner.
+    - *git*: If you have git installed, you can simply execute ```setup_planner.bat``` (Windows) or ```setup_planner.sh``` (Linux). This will download the repository from GitHub, build the jar, and copy it to the "dependencies" folder. 
+    - *maven*: If you prefer maven, you can execute ```mvn install``` in the folder `./planner` to download and install the planner.
 
 ### Running FrAIm
 
 Once you have everything installed, you can run FrAIm by either (i) double clicking on the launcher ``framedinterface-1.0-launcher.jar`` or (ii) executing ``java -jar framedinterface-1.0-launcher.jar`` from the root directory.
 
-This will launch the main overview page of FrAIm. Here you can upload process models.
+This will launch the main overview page of FrAIm. Here you can upload and inspect your selected process models (in .decl or .pnml format).
 
 ![The overview page that is launched when FrAIm first starts up.](docs\images\screenshots\fraim-overview-page.png "Main page")
 
 
-Under the tab ``Optimization'' you can modify various cost models (Constraint Violation/Satisfaction, Activity Cost) and build a prefix by clicking on the Activities shown in the process viewers. You can change the cost of the constraints or activities by either selecting them and right-clicking, or by editing the cost cell directly. 
+On the page `Optimization` you can modify various cost models (Constraint Violation/Satisfaction, Activity Cost) and build a prefix by clicking on the Activities (rectangles) shown in the process viewers. The prefix is displayed on the right-hand side. You can change the cost of the constraints or activities by either selecting them and right-clicking, or by editing the cost cell directly. 
 
 When you want to find a continuation, click the button `Run Planner' in the bottom right.
 By default, the recovery strategy "Reset" is used. If you want to try another one (no-recovery, discard, skip), you can select it by clicking the cog wheel immediately left of the "Run Planner" button.
 
 ![The main optimization page of FrAIm.](docs\images\screenshots\mp-fraim-page.png "Optimization page")
 
+
+On the `Help` you can find a guided tour of the functionalities of the Optimization page.
+
+
+![The Help page of FrAIm.](docs\images\screenshots\help.png "Help page")
 
 
 

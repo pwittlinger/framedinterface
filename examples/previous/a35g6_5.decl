@@ -1,0 +1,27 @@
+activity ActivityB
+bind ActivityB: categorical 
+activity ActivityAP
+bind ActivityAP: integer 
+activity ActivityF
+bind ActivityF: categorical 
+activity ActivityAR
+bind ActivityAR: categorical 
+activity ActivityV
+bind ActivityV: categorical 
+activity ActivityG
+bind ActivityG: integer 
+activity ActivityL
+activity ActivityAT
+bind ActivityAT: integer 
+activity ActivityAU
+bind ActivityAU: integer 
+activity ActivityK
+bind ActivityK: integer 
+integer: integer between 0 and 100 
+categorical: c1, c2, c3
+Response[ActivityG, ActivityAP] |A.integer > 10 |T.integer < 10 |
+Precedence[ActivityF, ActivityV] |A.categorical is c2 |T.categorical is c1 |
+Absence[ActivityK] |A.integer < 20 |
+Existence[ActivityB] |A.categorical is c2 |
+Response[ActivityAT, ActivityAU] |A.integer > 10 |T.integer > 10 |
+Exclusive Choice[ActivityAR, ActivityL] | | | |
